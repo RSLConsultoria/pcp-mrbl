@@ -1,4 +1,4 @@
-// ===== Code node "Montar Board" =====
+// ===== Code node "Selecionar Envio" =====
 // GERADO por n8n/scripts/gerar-code-nodes.js. Nao edite no n8n.
 // Para mudar a logica, edite n8n/src/ e rode: npm run build
 
@@ -757,13 +757,6 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   };
 }
 
-// ===== adaptador: Montar Board =====
-var estado = $getWorkflowStaticData('global');
-var faltantes = $('Ler FALTANTES').all().map(function (i) { return i.json; });
-var ganhas = $('Ler CAIXAS GANHAS').all().map(function (i) { return i.json; });
-var extras = {
-  caixasPcp: $('Ler CAIXAS_PCP').all().map(function (i) { return i.json; }),
-  historico: $('Ler HISTORICO_APP').all().map(function (i) { return i.json; }),
-  usuarios: $('Ler USUARIOS Board').all().map(function (i) { return i.json; })
-};
-return [{ json: montarRespostaBoard(estado, faltantes, ganhas, Date.now(), extras) }];
+// ===== adaptador: Selecionar Envio =====
+var rows = $input.all().map(function (i) { return i.json; });
+return selecionarPendentes(rows).map(function (l) { return { json: { linha: l } }; });

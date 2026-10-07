@@ -9,7 +9,14 @@ const raiz = path.join(__dirname, '..');
 const NODES = {
   'processar-login': 'Processar Login',
   'validar-pedido': 'Validar Pedido',
-  'montar-board': 'Montar Board'
+  'montar-board': 'Montar Board',
+  'processar-acao': 'Processar Acao',
+  'preparar-gravacao': 'Preparar Gravacao',
+  'preparar-historico': 'Preparar Historico',
+  'selecionar-envio': 'Selecionar Envio',
+  'invalidas-envio': 'Marcar Invalidas',
+  'montar-registro': 'Montar Registro',
+  'resultado-envio': 'Resultado Envio'
 };
 
 const corpo = ARQUIVOS

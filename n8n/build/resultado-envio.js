@@ -1,4 +1,4 @@
-// ===== Code node "Montar Board" =====
+// ===== Code node "Resultado Envio" =====
 // GERADO por n8n/scripts/gerar-code-nodes.js. Nao edite no n8n.
 // Para mudar a logica, edite n8n/src/ e rode: npm run build
 
@@ -757,13 +757,15 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   };
 }
 
-// ===== adaptador: Montar Board =====
-var estado = $getWorkflowStaticData('global');
-var faltantes = $('Ler FALTANTES').all().map(function (i) { return i.json; });
-var ganhas = $('Ler CAIXAS GANHAS').all().map(function (i) { return i.json; });
-var extras = {
-  caixasPcp: $('Ler CAIXAS_PCP').all().map(function (i) { return i.json; }),
-  historico: $('Ler HISTORICO_APP').all().map(function (i) { return i.json; }),
-  usuarios: $('Ler USUARIOS Board').all().map(function (i) { return i.json; })
-};
-return [{ json: montarRespostaBoard(estado, faltantes, ganhas, Date.now(), extras) }];
+// ===== adaptador: Resultado Envio =====
+var base = $('Montar Registro').all();
+var resp = $input.all();
+var saida = [];
+for (var i = 0; i < base.length; i++) {
+  var linha = base[i].json.linha;
+  var r = (resp[i] && resp[i].json) || {};
+  var res = resultadoEnvio(linha, { status: r.statusCode, body: r.body, statusText: r.statusMessage });
+  if (res && res.parar) break;
+  saida.push({ json: res });
+}
+return saida;

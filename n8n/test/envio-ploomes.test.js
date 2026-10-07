@@ -54,3 +54,25 @@ test('resultadoEnvio: erro soma tentativa e vira ERRO na quinta', () => {
   assert.strictEqual(r0.tentativas, 1);
   assert.strictEqual(r0.erro, 'Bad Gateway');
 });
+
+test('selecionarPendentes ignora deal_id invalido; linhasInvalidas as marca ERRO', () => {
+  const linhas = [
+    L('ok', '2026-10-07T12:00:00Z'),
+    L('v', '2026-10-07T12:01:00Z', { deal_id: '' }),
+    L('x', '2026-10-07T12:02:00Z', { deal_id: 'abc', tentativas: 2 }),
+    L('z', '2026-10-07T12:03:00Z', { deal_id: '0' }),
+    L('e', '2026-10-07T12:04:00Z', { deal_id: '', ploomes_status: 'ENVIADO' }),
+  ];
+  assert.deepStrictEqual(limpo(c.selecionarPendentes(linhas)).map((x) => x.id), ['ok']);
+  assert.deepStrictEqual(limpo(c.linhasInvalidas(linhas)), [
+    { id: 'v', ploomes_status: 'ERRO', tentativas: 0, erro: 'deal_id inválido' },
+    { id: 'x', ploomes_status: 'ERRO', tentativas: 2, erro: 'deal_id inválido' },
+    { id: 'z', ploomes_status: 'ERRO', tentativas: 0, erro: 'deal_id inválido' },
+  ]);
+});
+
+test('montarRegistro: ContactId so quando numerico positivo', () => {
+  const l = L('a', 'q');
+  assert.strictEqual(limpo(c.montarRegistro(l, '12')).ContactId, 12);
+  for (const ruim of ['abc', -3, NaN]) assert.ok(!('ContactId' in limpo(c.montarRegistro(l, ruim))));
+});

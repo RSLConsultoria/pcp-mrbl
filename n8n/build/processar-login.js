@@ -535,10 +535,23 @@ function tentativasDe(linha) {
   return n === null || isNaN(n) ? 0 : n;
 }
 
+function dealIdValido(linha) {
+  var n = numero(linha && linha.deal_id);
+  return n !== null && isFinite(n) && n > 0 && Math.floor(n) === n;
+}
+
+function linhasInvalidas(linhas) {
+  return (linhas || []).filter(function (l) {
+    return l && texto(l.ploomes_status) === 'PENDENTE' && !dealIdValido(l);
+  }).map(function (l) {
+    return { id: l.id, ploomes_status: 'ERRO', tentativas: tentativasDe(l), erro: 'deal_id inválido' };
+  });
+}
+
 function selecionarPendentes(linhas, max) {
   var limite = max === undefined ? 20 : max;
   var lista = (linhas || []).filter(function (l) {
-    return l && texto(l.ploomes_status) === 'PENDENTE' && tentativasDe(l) < MAX_TENTATIVAS_PLOOMES;
+    return l && texto(l.ploomes_status) === 'PENDENTE' && tentativasDe(l) < MAX_TENTATIVAS_PLOOMES && dealIdValido(l);
   });
   lista.sort(function (a, b) {
     var x = texto(a.quando);
@@ -549,10 +562,9 @@ function selecionarPendentes(linhas, max) {
 }
 
 function montarRegistro(linha, contactId) {
-  var reg = { DealId: Number(linha.deal_id) };
-  if (contactId !== null && contactId !== undefined && contactId !== '' && Number(contactId) !== 0) {
-    reg.ContactId = Number(contactId);
-  }
+  var reg = { DealId: numero(linha.deal_id) };
+  var cid = numero(contactId);
+  if (cid !== null && isFinite(cid) && cid > 0) reg.ContactId = cid;
   reg.Content = '[PCP · OS ' + texto(linha.os) + '] ' + texto(linha.texto);
   reg.Date = linha.quando;
   return reg;
