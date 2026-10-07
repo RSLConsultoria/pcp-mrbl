@@ -55,7 +55,8 @@ test('agrupa as linhas de um negocio numa caixa so', () => {
   assert.equal(c.itens.length, 2);
   assert.deepEqual(c.itens[0], {
     id: 'a', nome: 'ZIPER METAL MEDIO', cor: 'preto', un: 'UN', necessaria: 52, separada: 0,
-    falta: 52, faltaG: null, status: 'ABERTO', obs: '', previsao: '', resolvidoEm: ''
+    falta: 52, faltaG: null, status: 'ABERTO', baixada: 0, resta: 52, restaG: null,
+    obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '', versao: '', editavel: true
   });
   assert.equal(c.itens[1].cor, '');
 });
@@ -70,7 +71,8 @@ test('item: cor cai no codigo, obs junta as duas colunas, previsao e gramas', ()
   assert.equal(c.responsavel, 'Maria');
   const i = c.itens[0];
   assert.equal(i.cor, '00002');
-  assert.equal(i.obs, 'fornecedor atrasou · cobrar sexta');
+  assert.equal(i.obsAlmox, 'fornecedor atrasou');
+  assert.equal(i.obsPcp, 'cobrar sexta');
   assert.equal(i.previsao, '2026-10-09');
   assert.equal(i.faltaG, 100);
 });
@@ -180,6 +182,7 @@ test('caixa so em GANHAS com falta e sem itens detalhados ganha item generico ab
   assert.deepEqual(r.caixas[0].itens, [{
     id: '700009|ganha|0', nome: 'Itens não detalhados na planilha', cor: '', un: '',
     necessaria: null, separada: null, falta: null, faltaG: null, status: 'ABERTO',
-    obs: '', previsao: '', resolvidoEm: ''
+    baixada: 0, resta: null, restaG: null, obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '',
+    versao: '', editavel: false
   }]);
 });

@@ -21,16 +21,70 @@ function tipoDaSecao(v) {
 }
 
 function itemEstaAberto(it) {
-  return !!STATUS_ABERTOS[it.status] && (it.falta === null || it.falta > 0);
+  return !!STATUS_ABERTOS[it.status] && (it.resta === null || it.resta > 0);
+}
+
+// resta = falta - baixada (null quando a falta nao foi registrada);
+// restaG = gramas restantes, proporcional a resta (null sem faltaG).
+function restaDe(falta, baixada) {
+  return falta === null ? null : arredondar(Math.max(0, falta - baixada));
+}
+function restaGDe(falta, faltaG, resta) {
+  if (faltaG === null || resta === null || falta === null) return null;
+  if (falta <= 0) return 0;
+  return arredondar(resta * faltaG / falta);
+}
+
+// 'aaaa-mm-dd hh:mm' (Brasilia, sem fuso) ou ISO com fuso -> ms; NaN se nao reconhece.
+function msDaData(v) {
+  var t = texto(v);
+  var m = t.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2})(?::(\d{2}))?)?$/);
+  if (m) return Date.parse(m[1] + 'T' + (m[2] || '00:00') + ':' + (m[3] || '00') + '-03:00');
+  return Date.parse(t);
+}
+
+// A coluna manual vale ate algum item da caixa ser atualizado depois dela.
+function colunaManualDe(cp, linhas) {
+  if (!cp) return null;
+  var col = texto(cp.coluna_manual);
+  if (!NOMES_COLUNA.hasOwnProperty(col)) return null;
+  var desde = Date.parse(texto(cp.coluna_manual_em));
+  if (isNaN(desde)) return col;
+  var mexeu = (linhas || []).some(function (l) {
+    var a = texto(l.atualizado_em_app) === '' ? NaN : Date.parse(texto(l.atualizado_em_app));
+    var d = texto(l.data_atualizacao) === '' ? NaN : msDaData(l.data_atualizacao);
+    return (!isNaN(a) && a > desde) || (!isNaN(d) && d > desde);
+  });
+  return mexeu ? null : col;
+}
+
+function historicoDoDeal(historico, dealId) {
+  return (historico || []).filter(function (h) { return h && texto(h.deal_id) === dealId; })
+    .sort(function (a, b) {
+      var x = texto(a.quando);
+      var y = texto(b.quando);
+      return x < y ? 1 : x > y ? -1 : 0;
+    })
+    .slice(0, 30)
+    .map(function (h) {
+      return {
+        quando: texto(h.quando),
+        usuario: texto(h.usuario),
+        texto: texto(h.texto),
+        ploomes: texto(h.ploomes_status).toUpperCase() || 'PENDENTE'
+      };
+    });
 }
 
 function itemDaLinha(l, ano) {
-  var obs = [texto(l.obs_almoxarifado), texto(l.observacao_pcp)]
-    .filter(function (s) { return s !== ''; }).join(' · ');
   var nec = numero(l.qtd_necessaria);
   var sep = numero(l.qtd_separada);
   var falta = numero(l.qtd_falta);
   var faltaG = numero(l.qtd_falta_g);
+  var bx = numero(l.qtd_baixada);
+  var baixada = bx === null || isNaN(bx) ? 0 : bx;
+  faltaG = faltaG === null || isNaN(faltaG) ? null : faltaG;
+  var resta = restaDe(falta, baixada);
   return {
     id: texto(l.id),
     nome: texto(l.descricao_item),
@@ -39,11 +93,17 @@ function itemDaLinha(l, ano) {
     necessaria: isNaN(nec) ? null : nec,
     separada: isNaN(sep) ? null : sep,
     falta: falta,
-    faltaG: faltaG === null || isNaN(faltaG) ? null : faltaG,
+    faltaG: faltaG,
     status: semAcento(l.status),
-    obs: obs,
+    baixada: baixada,
+    resta: resta,
+    restaG: restaGDe(falta, faltaG, resta),
+    obsAlmox: texto(l.obs_almoxarifado),
+    obsPcp: texto(l.observacao_pcp),
     previsao: dataISO(l.previsao, ano),
-    resolvidoEm: dataISO(l.data_resolucao, ano)
+    resolvidoEm: dataISO(l.data_resolucao, ano),
+    versao: texto(l.atualizado_em_app),
+    editavel: true
   };
 }
 
@@ -63,9 +123,15 @@ function itensDoTexto(dealId, txt) {
         falta: m ? Number(m[2]) : null,
         faltaG: null,
         status: 'ABERTO',
-        obs: '',
+        baixada: 0,
+        resta: m ? Number(m[2]) : null,
+        restaG: null,
+        obsAlmox: '',
+        obsPcp: '',
         previsao: '',
-        resolvidoEm: ''
+        resolvidoEm: '',
+        versao: '',
+        editavel: false
       };
     });
 }
@@ -74,7 +140,13 @@ function menorData(datas) {
   return datas.filter(function (d) { return d !== ''; }).sort()[0] || '';
 }
 
-function montarCaixas(faltantes, ganhas, hoje) {
+function montarCaixas(faltantes, ganhas, hoje, extras) {
+  extras = extras || {};
+  var cpPorDeal = {};
+  (extras.caixasPcp || []).forEach(function (c) {
+    var id = texto(c && c.deal_id);
+    if (id) cpPorDeal[id] = c;
+  });
   var ano = hoje.getFullYear();
   var avisos = [];
   var grupos = {};
@@ -104,6 +176,17 @@ function montarCaixas(faltantes, ganhas, hoje) {
     if (id) ganhasPorDeal[id] = g;
   });
 
+  function marcarExtras(caixa, linhas) {
+    var cp = cpPorDeal[caixa.dealId];
+    caixa.previsao = cp ? dataISO(cp.previsao, ano) : '';
+    caixa.observacao = cp ? texto(cp.observacao) : '';
+    caixa.colunaManual = colunaManualDe(cp, linhas);
+    caixa.versao = cp ? texto(cp.atualizado_em) : '';
+    if (cp && texto(cp.responsavel) !== '') caixa.responsavel = texto(cp.responsavel);
+    caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);
+    return caixa;
+  }
+
   function marcarSaida(caixa, g) {
     caixa.saiu = !!g;
     caixa.saiuComFalta = !!g && semAcento(g.saiu_com_falta) === 'SIM';
@@ -123,7 +206,7 @@ function montarCaixas(faltantes, ganhas, hoje) {
     var p = linhas[0];
     var resp = '';
     linhas.forEach(function (l) { if (!resp) resp = texto(l.responsavel); });
-    return marcarSaida({
+    return marcarSaida(marcarExtras({
       id: dealId,
       dealId: dealId,
       os: texto(p.os),
@@ -135,7 +218,7 @@ function montarCaixas(faltantes, ganhas, hoje) {
       responsavel: resp,
       registradoEm: menorData(linhas.map(function (l) { return dataISO(l.data_separacao, ano); })),
       itens: itens
-    }, ganhasPorDeal[dealId]);
+    }, linhas), ganhasPorDeal[dealId]);
   });
 
   Object.keys(ganhasPorDeal).forEach(function (dealId) {
@@ -147,10 +230,11 @@ function montarCaixas(faltantes, ganhas, hoje) {
       itensGanha.push({
         id: dealId + '|ganha|0', nome: 'Itens não detalhados na planilha', cor: '', un: '',
         necessaria: null, separada: null, falta: null, faltaG: null, status: 'ABERTO',
-        obs: '', previsao: '', resolvidoEm: ''
+        baixada: 0, resta: null, restaG: null, obsAlmox: '', obsPcp: '', previsao: '',
+        resolvidoEm: '', versao: '', editavel: false
       });
     }
-    caixas.push(marcarSaida({
+    caixas.push(marcarSaida(marcarExtras({
       id: dealId,
       dealId: dealId,
       os: texto(g.os),
@@ -162,7 +246,7 @@ function montarCaixas(faltantes, ganhas, hoje) {
       responsavel: '',
       registradoEm: dataISO(g.data_ganho, ano),
       itens: itensGanha
-    }, g));
+    }, []), g));
   });
 
   caixas.sort(function (a, b) {

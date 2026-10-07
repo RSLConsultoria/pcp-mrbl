@@ -80,9 +80,69 @@ function validarPedidoBoard(estado, cabecalho, agora) {
   return { ler: true };
 }
 
-function montarRespostaBoard(estado, faltantes, ganhas, agora) {
-  var r = montarCaixas(faltantes, ganhas, new Date(agora));
-  var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos };
+function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
+  extras = extras || {};
+  var r = montarCaixas(faltantes, ganhas, new Date(agora), extras);
+  var usuarios = (extras.usuarios || [])
+    .filter(function (u) { return u && !!VALORES_ATIVO[semAcento(u.ativo)] && texto(u.nome) !== ''; })
+    .map(function (u) { return texto(u.nome); })
+    .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+  var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
+}
+
+// POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas? } (linhas da planilha).
+// Em sucesso devolve tambem "gravacao" e "historico" para os nodes de
+// escrita do workflow; o corpo da resposta ao front fica em "body".
+function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
+  var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
+
+  var v = validarAcao(corpo, sessao.perfil);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var acao = v.acao;
+  linhas = linhas || {};
+  var faltantes = (linhas.faltantes || []).filter(function (l) { return l && texto(l.deal_id) === acao.dealId; });
+  var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === acao.dealId; })[0] || null;
+
+  var ehItem = TIPOS_ITEM.indexOf(acao.tipo) >= 0;
+  var alvo = cpRow;
+  var linhaItem = null;
+  if (ehItem) {
+    linhaItem = faltantes.filter(function (l) { return texto(l.id) === acao.itemId; })[0] || null;
+    if (!linhaItem) return { status: 404, body: { erro: 'Item não encontrado.' } };
+    alvo = linhaItem;
+  }
+
+  var os = faltantes.length ? texto(faltantes[0].os) : '';
+  if (!os && cpRow) os = texto(cpRow.os);
+  if (!os) {
+    var g = (linhas.ganhas || []).filter(function (x) { return x && texto(x.deal_id) === acao.dealId; })[0];
+    if (g) os = texto(g.os);
+  }
+
+  var r = aplicarAcao(acao, alvo, {
+    usuario: sessao.nome,
+    email: sessao.email,
+    agora: new Date(agora).toISOString(),
+    os: os,
+    nomeItem: linhaItem ? texto(linhaItem.descricao_item) : '',
+    un: linhaItem ? texto(linhaItem.unidade) : '',
+    gerarId: gerarId
+  });
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+
+  delete estado.board;
+  var campos = r.gravacao.campos;
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      versao: campos.atualizado_em_app || campos.atualizado_em,
+      historico: { quando: r.historico.quando, usuario: r.historico.usuario, texto: r.historico.texto, ploomes: 'PENDENTE' }
+    },
+    gravacao: r.gravacao,
+    historico: r.historico
+  };
 }
