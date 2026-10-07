@@ -40,6 +40,17 @@ function respostaOk(status) {
   return n >= 200 && n < 300;
 }
 
+// Decide o que fazer com a resposta do Buscar Contato: 429/5xx (ou sem resposta)
+// pula o item (segue PENDENTE); qualquer outro nao-2xx segue sem ContactId.
+function decidirContato(resposta) {
+  var st = resposta ? Number(resposta.statusCode) : 0;
+  if (!resposta || st === 429 || st >= 500) return { pular: true, contactId: null };
+  if (!respostaOk(st)) return { pular: false, contactId: null };
+  var v = resposta.body && resposta.body.value;
+  var cid = v && v[0] ? v[0].ContactId : null;
+  return { pular: false, contactId: cid === undefined ? null : cid };
+}
+
 function montarRegistro(linha, contactId) {
   var reg = { DealId: numero(linha.deal_id) };
   var cid = numero(contactId);

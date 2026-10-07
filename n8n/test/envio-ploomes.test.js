@@ -87,3 +87,11 @@ test('resultadoEnvio: 429 so sinaliza a propria linha; as outras seguem', () => 
   assert.deepStrictEqual(limpo(c.resultadoEnvio(l, { status: 429, body: {} })), { parar: true });
   assert.strictEqual(limpo(c.resultadoEnvio(l, { status: 201, body: { Id: 1 } })).ploomes_status, 'ENVIADO');
 });
+
+test('decidirContato: pula so em 429/5xx; outros nao-2xx seguem sem ContactId', () => {
+  for (const s of [429, 500, 503, '502']) assert.deepStrictEqual(limpo(c.decidirContato({ statusCode: s })), { pular: true, contactId: null });
+  assert.deepStrictEqual(limpo(c.decidirContato(undefined)), { pular: true, contactId: null });
+  for (const s of [404, 400, 401]) assert.deepStrictEqual(limpo(c.decidirContato({ statusCode: s })), { pular: false, contactId: null });
+  assert.deepStrictEqual(limpo(c.decidirContato({ statusCode: 200, body: { value: [{ ContactId: 12 }] } })), { pular: false, contactId: 12 });
+  assert.deepStrictEqual(limpo(c.decidirContato({ statusCode: 200, body: { value: [] } })), { pular: false, contactId: null });
+});

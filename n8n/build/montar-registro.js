@@ -573,6 +573,17 @@ function respostaOk(status) {
   return n >= 200 && n < 300;
 }
 
+// Decide o que fazer com a resposta do Buscar Contato: 429/5xx (ou sem resposta)
+// pula o item (segue PENDENTE); qualquer outro nao-2xx segue sem ContactId.
+function decidirContato(resposta) {
+  var st = resposta ? Number(resposta.statusCode) : 0;
+  if (!resposta || st === 429 || st >= 500) return { pular: true, contactId: null };
+  if (!respostaOk(st)) return { pular: false, contactId: null };
+  var v = resposta.body && resposta.body.value;
+  var cid = v && v[0] ? v[0].ContactId : null;
+  return { pular: false, contactId: cid === undefined ? null : cid };
+}
+
 function montarRegistro(linha, contactId) {
   var reg = { DealId: numero(linha.deal_id) };
   var cid = numero(contactId);
@@ -770,17 +781,16 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 }
 
 // ===== adaptador: Montar Registro =====
-// Buscar Contato fora de 2xx (inclusive 429): descarta o item, ele segue PENDENTE
-// e entra na proxima rodada. Resultado Envio le a mesma lista ($('Montar Registro').all()).
+// Buscar Contato: 429/5xx descarta o item (segue PENDENTE, proxima rodada);
+// outro nao-2xx (ex. 404) mantem o item e monta o registro sem ContactId.
+// Resultado Envio le a mesma lista ($('Montar Registro').all()).
 var linhas = $('Selecionar Envio').all();
 var resp = $input.all();
 var saida = [];
 for (var i = 0; i < linhas.length; i++) {
   var linha = linhas[i].json.linha;
-  var r = resp[i] && resp[i].json;
-  if (!r || !respostaOk(r.statusCode)) continue;
-  var v = r.body && r.body.value;
-  var contactId = v && v[0] ? v[0].ContactId : null;
-  saida.push({ json: { linha: linha, registro: montarRegistro(linha, contactId) } });
+  var d = decidirContato(resp[i] && resp[i].json);
+  if (d.pular) continue;
+  saida.push({ json: { linha: linha, registro: montarRegistro(linha, d.contactId) } });
 }
 return saida;
