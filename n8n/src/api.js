@@ -107,6 +107,10 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === acao.dealId; })[0] || null;
 
   var ehItem = TIPOS_ITEM.indexOf(acao.tipo) >= 0;
+  if (!ehItem && !faltantes.length) {
+    var naGanhas = (linhas.ganhas || []).some(function (x) { return x && texto(x.deal_id) === acao.dealId; });
+    if (!naGanhas) return { status: 404, body: { erro: 'Caixa não encontrada.' } };
+  }
   var alvo = cpRow;
   var linhaItem = null;
   if (ehItem) {
@@ -122,7 +126,11 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
     if (g) os = texto(g.os);
   }
 
+  var responsavelAtual = '';
+  faltantes.forEach(function (l) { if (!responsavelAtual) responsavelAtual = texto(l.responsavel); });
+
   var r = aplicarAcao(acao, alvo, {
+    responsavelAtual: responsavelAtual,
     usuario: sessao.nome,
     email: sessao.email,
     agora: new Date(agora).toISOString(),

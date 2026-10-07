@@ -182,7 +182,7 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     caixa.observacao = cp ? texto(cp.observacao) : '';
     caixa.colunaManual = colunaManualDe(cp, linhas);
     caixa.versao = cp ? texto(cp.atualizado_em) : '';
-    if (cp && texto(cp.responsavel) !== '') caixa.responsavel = texto(cp.responsavel);
+    if (cp) caixa.responsavel = texto(cp.responsavel);
     caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);
     return caixa;
   }

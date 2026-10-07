@@ -149,6 +149,7 @@ function aplicarAcao(acao, alvo, contexto) {
   } else {
     campos.deal_id = acao.dealId;
     campos.os = contexto.os;
+    if (!alvo && acao.tipo !== 'responsavel') campos.responsavel = texto(contexto.responsavelAtual);
     if (acao.tipo === 'responsavel') campos.responsavel = acao.valor;
     else if (acao.tipo === 'previsao_caixa') campos.previsao = acao.valor;
     else if (acao.tipo === 'obs_caixa') campos.observacao = acao.valor;

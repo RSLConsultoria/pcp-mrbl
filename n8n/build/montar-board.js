@@ -263,7 +263,7 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     caixa.observacao = cp ? texto(cp.observacao) : '';
     caixa.colunaManual = colunaManualDe(cp, linhas);
     caixa.versao = cp ? texto(cp.atualizado_em) : '';
-    if (cp && texto(cp.responsavel) !== '') caixa.responsavel = texto(cp.responsavel);
+    if (cp) caixa.responsavel = texto(cp.responsavel);
     caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);
     return caixa;
   }
@@ -489,6 +489,7 @@ function aplicarAcao(acao, alvo, contexto) {
   } else {
     campos.deal_id = acao.dealId;
     campos.os = contexto.os;
+    if (!alvo && acao.tipo !== 'responsavel') campos.responsavel = texto(contexto.responsavelAtual);
     if (acao.tipo === 'responsavel') campos.responsavel = acao.valor;
     else if (acao.tipo === 'previsao_caixa') campos.previsao = acao.valor;
     else if (acao.tipo === 'obs_caixa') campos.observacao = acao.valor;
@@ -632,6 +633,10 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === acao.dealId; })[0] || null;
 
   var ehItem = TIPOS_ITEM.indexOf(acao.tipo) >= 0;
+  if (!ehItem && !faltantes.length) {
+    var naGanhas = (linhas.ganhas || []).some(function (x) { return x && texto(x.deal_id) === acao.dealId; });
+    if (!naGanhas) return { status: 404, body: { erro: 'Caixa não encontrada.' } };
+  }
   var alvo = cpRow;
   var linhaItem = null;
   if (ehItem) {
@@ -647,7 +652,11 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
     if (g) os = texto(g.os);
   }
 
+  var responsavelAtual = '';
+  faltantes.forEach(function (l) { if (!responsavelAtual) responsavelAtual = texto(l.responsavel); });
+
   var r = aplicarAcao(acao, alvo, {
+    responsavelAtual: responsavelAtual,
     usuario: sessao.nome,
     email: sessao.email,
     agora: new Date(agora).toISOString(),

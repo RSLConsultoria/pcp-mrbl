@@ -168,3 +168,39 @@ test('processarAcao: caixa sem linha na CAIXAS_PCP; perfil nao ADM exige justifi
     { faltantes: FALT, caixasPcp: [cp({ atualizado_em: 'C1' })] }, T0, gerarId));
   assert.equal(r3.status, 409);
 });
+
+// ---- responsavel limpo e caixa inexistente ----
+test('responsavel: CAIXAS_PCP e autoritativo mesmo vazio; sem linha cai na FALTANTES', () => {
+  const limpa = montar([linha({ responsavel: 'Maria' })], { caixasPcp: [cp({ responsavel: '' })] }).caixas[0];
+  assert.equal(limpa.responsavel, '');
+  const semCp = montar([linha({ responsavel: 'Maria' })], { caixasPcp: [] }).caixas[0];
+  assert.equal(semCp.responsavel, 'Maria');
+  const seed = montar([linha({ responsavel: 'Maria' })], { caixasPcp: [cp({ deal_id: '0', responsavel: '' })] }).caixas[0];
+  assert.equal(seed.responsavel, 'Maria');
+});
+
+test('processarAcao: acao de caixa que cria a linha herda o responsavel atual da FALTANTES', () => {
+  const e = {}; const cab = sessao(e, 'ana@x.com');
+  const lin = { faltantes: [linha({ responsavel: '' }), linha({ id: 'b', responsavel: 'Maria' })], caixasPcp: [] };
+  const r = limpo(ctx.processarAcao(e, cab, { tipo: 'previsao_caixa', dealId: '600001', valor: '2026-10-12', versao: '' }, lin, T0, gerarId));
+  assert.equal(r.status, 200);
+  assert.equal(r.gravacao.campos.responsavel, 'Maria');
+  const linha2 = Object.assign({}, r.gravacao.campos);
+  const b = montar(lin.faltantes, { caixasPcp: [cp(linha2)] }).caixas[0];
+  assert.equal(b.responsavel, 'Maria');
+  // limpar o responsavel nao e desfeito pela FALTANTES
+  const e2 = {}; const cab2 = sessao(e2, 'ana@x.com');
+  const r2 = limpo(ctx.processarAcao(e2, cab2, { tipo: 'responsavel', dealId: '600001', valor: '', versao: '' }, lin, T0, gerarId));
+  assert.equal(r2.gravacao.campos.responsavel, '');
+  assert.equal(montar(lin.faltantes, { caixasPcp: [cp(r2.gravacao.campos)] }).caixas[0].responsavel, '');
+});
+
+test('processarAcao: acao de caixa sem linhas na FALTANTES da 404, exceto se esta na GANHAS', () => {
+  const e = {}; const cab = sessao(e, 'ana@x.com');
+  const corpo = { tipo: 'obs_caixa', dealId: '777', valor: 'x', versao: '' };
+  const r = limpo(ctx.processarAcao(e, cab, corpo, { faltantes: FALT, caixasPcp: [] }, T0, gerarId));
+  assert.deepEqual(r, { status: 404, body: { erro: 'Caixa não encontrada.' } });
+  const r2 = limpo(ctx.processarAcao(e, cab, corpo, { faltantes: FALT, caixasPcp: [], ganhas: [{ deal_id: '777', os: '91' }] }, T0, gerarId));
+  assert.equal(r2.status, 200);
+  assert.equal(r2.gravacao.campos.os, '91');
+});
