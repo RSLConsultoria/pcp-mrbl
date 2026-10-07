@@ -35,6 +35,11 @@ function selecionarPendentes(linhas, max) {
   return lista.slice(0, limite);
 }
 
+function respostaOk(status) {
+  var n = Number(status);
+  return n >= 200 && n < 300;
+}
+
 function montarRegistro(linha, contactId) {
   var reg = { DealId: numero(linha.deal_id) };
   var cid = numero(contactId);
@@ -56,7 +61,7 @@ function mensagemErroPloomes(resposta) {
 
 function resultadoEnvio(linha, resposta) {
   var status = resposta ? Number(resposta.status) : 0;
-  if (status === 429) return { parar: true };
+  if (status === 429) return { parar: true }; // so esta linha: fica PENDENTE
   var tentativas = tentativasDe(linha);
   if (status >= 200 && status < 300) {
     var b = resposta.body;

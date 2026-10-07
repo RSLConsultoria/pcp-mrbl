@@ -49,6 +49,7 @@ const http = (varName, nome, metodo, url, comCorpo) => `const ${varName} = node(
         batching: { batch: { batchSize: 1, batchInterval: 700 } }
       }
     },
+    credentials: { httpHeaderAuth: { id: 'QfXOyNly69oAqwH2', name: 'Header Auth account' } },
     position: [0, 0]
   },
   output: [{ statusCode: 200, body: {} }]
@@ -203,7 +204,7 @@ export default workflow('pcp-mrbl-api', 'PCP MRBL - API', {
   .to(processarAcao)
   .to(acaoOk
     .onTrue(prepararGravacao.to(eItem
-      .onTrue(gravarItem.to(prepararHistorico.to(gravarHistorico).to(responderAcao)))
+      .onTrue(gravarItem.to(prepararHistorico.to(gravarHistorico.to(responderAcao))))
       .onFalse(gravarCaixa.to(prepararHistorico))))
     .onFalse(responderAcao));
 `;

@@ -30,3 +30,10 @@ Code nodes gerados a partir de `n8n/build/`:
 O static data guarda as sessões, as tentativas e o cache. Se ele for perdido (reinício, reimportação), o efeito é só que as pessoas precisam entrar de novo.
 
 Execuções não são salvas (`saveData*: none`), porque o corpo do login traz a senha.
+
+## F2: acao, envio ao Ploomes e allowlist
+
+- **Webhook `/webhook/pcp-acao`** (POST, workflow "PCP MRBL - API"): processa baixa/previsao/obs/coluna manual; grava em FALTANTES (por `id`) ou CAIXAS_PCP (por `deal_id`) e registra no HISTORICO_APP (um unico "Preparar Historico" alimentado por Gravar Item e Gravar Caixa, depois Gravar Historico e Responder Acao).
+- **Workflow "PCP MRBL - Enviar ao Ploomes"** (`pcp-envio.sdk.js`): a cada 2 min le o HISTORICO_APP e cria InteractionRecords no Ploomes. 429 deixa so aquela linha PENDENTE; falha em Buscar Contato descarta o item ate a proxima rodada.
+- **`DEALS_PERMITIDOS`** em `adaptadores/selecionar-envio.js`: lista vazia = todos os deals; no primeiro teste, preencha com o deal_id do card de teste (strings).
+- **Credenciais**: apos criar a partir do SDK, religue as credenciais (Google Sheets - MRBL e Header Auth do Ploomes) com `update_workflow`; o SDK nao as grava de forma confiavel.

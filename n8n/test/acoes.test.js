@@ -229,3 +229,10 @@ test('aplicarAcao: 409 em caixa com atualizado_em desatualizado', () => {
   assert.strictEqual(r.ok, false);
   assert.strictEqual(r.status, 409);
 });
+
+test('linhaDeGravacao: inclui a coluna-chave quando ausente', () => {
+  const { carregar, limpo } = require('./carregar');
+  const c = carregar();
+  assert.deepStrictEqual(limpo(c.linhaDeGravacao({ aba: 'FALTANTES', chave: { coluna: 'id', valor: 'x1' }, campos: { baixa: 5 } })), { baixa: 5, id: 'x1' });
+  assert.deepStrictEqual(limpo(c.linhaDeGravacao({ aba: 'CAIXAS_PCP', chave: { coluna: 'deal_id', valor: 9 }, campos: { deal_id: 9, obs: 'a' } })), { deal_id: 9, obs: 'a' });
+});

@@ -354,6 +354,13 @@ var NOMES_COLUNA = {
   saiu_sem: 'Saiu sem faltas'
 };
 
+function linhaDeGravacao(gravacao) {
+  var linha = Object.assign({}, gravacao.campos);
+  var ch = gravacao.chave;
+  if (ch && linha[ch.coluna] === undefined) linha[ch.coluna] = ch.valor;
+  return linha;
+}
+
 function erroAcao(status, erro) {
   return { ok: false, status: status, erro: erro };
 }
@@ -561,6 +568,11 @@ function selecionarPendentes(linhas, max) {
   return lista.slice(0, limite);
 }
 
+function respostaOk(status) {
+  var n = Number(status);
+  return n >= 200 && n < 300;
+}
+
 function montarRegistro(linha, contactId) {
   var reg = { DealId: numero(linha.deal_id) };
   var cid = numero(contactId);
@@ -582,7 +594,7 @@ function mensagemErroPloomes(resposta) {
 
 function resultadoEnvio(linha, resposta) {
   var status = resposta ? Number(resposta.status) : 0;
-  if (status === 429) return { parar: true };
+  if (status === 429) return { parar: true }; // so esta linha: fica PENDENTE
   var tentativas = tentativasDe(linha);
   if (status >= 200 && status < 300) {
     var b = resposta.body;
@@ -758,6 +770,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 }
 
 // ===== adaptador: Resultado Envio =====
+// Linha a linha: so a que recebeu 429 e pulada (fica PENDENTE); as demais gravam.
 var base = $('Montar Registro').all();
 var resp = $input.all();
 var saida = [];
@@ -765,7 +778,7 @@ for (var i = 0; i < base.length; i++) {
   var linha = base[i].json.linha;
   var r = (resp[i] && resp[i].json) || {};
   var res = resultadoEnvio(linha, { status: r.statusCode, body: r.body, statusText: r.statusMessage });
-  if (res && res.parar) break;
+  if (res && res.parar) continue;
   saida.push({ json: res });
 }
 return saida;

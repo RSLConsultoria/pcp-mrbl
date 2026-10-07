@@ -76,3 +76,14 @@ test('montarRegistro: ContactId so quando numerico positivo', () => {
   assert.strictEqual(limpo(c.montarRegistro(l, '12')).ContactId, 12);
   for (const ruim of ['abc', -3, NaN]) assert.ok(!('ContactId' in limpo(c.montarRegistro(l, ruim))));
 });
+
+test('respostaOk: so 2xx', () => {
+  for (const s of [200, 201, 299, '204']) assert.ok(c.respostaOk(s));
+  for (const s of [199, 300, 404, 429, 500, undefined, null]) assert.ok(!c.respostaOk(s));
+});
+
+test('resultadoEnvio: 429 so sinaliza a propria linha; as outras seguem', () => {
+  const l = L('a', 'q');
+  assert.deepStrictEqual(limpo(c.resultadoEnvio(l, { status: 429, body: {} })), { parar: true });
+  assert.strictEqual(limpo(c.resultadoEnvio(l, { status: 201, body: { Id: 1 } })).ploomes_status, 'ENVIADO');
+});

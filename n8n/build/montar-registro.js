@@ -354,6 +354,13 @@ var NOMES_COLUNA = {
   saiu_sem: 'Saiu sem faltas'
 };
 
+function linhaDeGravacao(gravacao) {
+  var linha = Object.assign({}, gravacao.campos);
+  var ch = gravacao.chave;
+  if (ch && linha[ch.coluna] === undefined) linha[ch.coluna] = ch.valor;
+  return linha;
+}
+
 function erroAcao(status, erro) {
   return { ok: false, status: status, erro: erro };
 }
@@ -561,6 +568,11 @@ function selecionarPendentes(linhas, max) {
   return lista.slice(0, limite);
 }
 
+function respostaOk(status) {
+  var n = Number(status);
+  return n >= 200 && n < 300;
+}
+
 function montarRegistro(linha, contactId) {
   var reg = { DealId: numero(linha.deal_id) };
   var cid = numero(contactId);
@@ -582,7 +594,7 @@ function mensagemErroPloomes(resposta) {
 
 function resultadoEnvio(linha, resposta) {
   var status = resposta ? Number(resposta.status) : 0;
-  if (status === 429) return { parar: true };
+  if (status === 429) return { parar: true }; // so esta linha: fica PENDENTE
   var tentativas = tentativasDe(linha);
   if (status >= 200 && status < 300) {
     var b = resposta.body;
@@ -758,13 +770,16 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 }
 
 // ===== adaptador: Montar Registro =====
+// Buscar Contato fora de 2xx (inclusive 429): descarta o item, ele segue PENDENTE
+// e entra na proxima rodada. Resultado Envio le a mesma lista ($('Montar Registro').all()).
 var linhas = $('Selecionar Envio').all();
 var resp = $input.all();
 var saida = [];
 for (var i = 0; i < linhas.length; i++) {
   var linha = linhas[i].json.linha;
   var r = resp[i] && resp[i].json;
-  var v = r && r.body && r.body.value;
+  if (!r || !respostaOk(r.statusCode)) continue;
+  var v = r.body && r.body.value;
   var contactId = v && v[0] ? v[0].ContactId : null;
   saida.push({ json: { linha: linha, registro: montarRegistro(linha, contactId) } });
 }

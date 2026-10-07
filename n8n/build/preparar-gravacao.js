@@ -354,6 +354,13 @@ var NOMES_COLUNA = {
   saiu_sem: 'Saiu sem faltas'
 };
 
+function linhaDeGravacao(gravacao) {
+  var linha = Object.assign({}, gravacao.campos);
+  var ch = gravacao.chave;
+  if (ch && linha[ch.coluna] === undefined) linha[ch.coluna] = ch.valor;
+  return linha;
+}
+
 function erroAcao(status, erro) {
   return { ok: false, status: status, erro: erro };
 }
@@ -561,6 +568,11 @@ function selecionarPendentes(linhas, max) {
   return lista.slice(0, limite);
 }
 
+function respostaOk(status) {
+  var n = Number(status);
+  return n >= 200 && n < 300;
+}
+
 function montarRegistro(linha, contactId) {
   var reg = { DealId: numero(linha.deal_id) };
   var cid = numero(contactId);
@@ -582,7 +594,7 @@ function mensagemErroPloomes(resposta) {
 
 function resultadoEnvio(linha, resposta) {
   var status = resposta ? Number(resposta.status) : 0;
-  if (status === 429) return { parar: true };
+  if (status === 429) return { parar: true }; // so esta linha: fica PENDENTE
   var tentativas = tentativasDe(linha);
   if (status >= 200 && status < 300) {
     var b = resposta.body;
@@ -758,7 +770,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 }
 
 // ===== adaptador: Preparar Gravacao =====
-// Apenas os campos da linha (colunas da planilha); a aba vem de
+// Colunas da linha + a coluna-chave do casamento (id / deal_id); a aba vem de
 // $('Processar Acao').first().json.gravacao.aba no IF "E Item?".
 var g = $input.first().json.gravacao;
-return [{ json: Object.assign({}, g.campos) }];
+return [{ json: linhaDeGravacao(g) }];

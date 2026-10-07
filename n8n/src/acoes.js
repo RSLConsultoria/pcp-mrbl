@@ -14,6 +14,13 @@ var NOMES_COLUNA = {
   saiu_sem: 'Saiu sem faltas'
 };
 
+function linhaDeGravacao(gravacao) {
+  var linha = Object.assign({}, gravacao.campos);
+  var ch = gravacao.chave;
+  if (ch && linha[ch.coluna] === undefined) linha[ch.coluna] = ch.valor;
+  return linha;
+}
+
 function erroAcao(status, erro) {
   return { ok: false, status: status, erro: erro };
 }
