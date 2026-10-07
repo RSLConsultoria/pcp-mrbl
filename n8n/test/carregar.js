@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const ARQUIVOS = ['util.js', 'auth.js', 'montarCaixas.js', 'acoes.js', 'api.js'];
+const ARQUIVOS = ['util.js', 'auth.js', 'montarCaixas.js', 'acoes.js', 'envioPloomes.js', 'api.js'];
 
 function carregar() {
   const ctx = vm.createContext({});

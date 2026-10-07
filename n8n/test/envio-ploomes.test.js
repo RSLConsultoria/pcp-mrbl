@@ -1,0 +1,56 @@
+const test = require('node:test');
+const assert = require('node:assert');
+const { carregar, limpo } = require('./carregar');
+
+const c = carregar();
+const L = (id, quando, extra) => Object.assign({
+  id, quando, deal_id: '9001', os: '90001', texto: 'Baixa de 20 UN',
+  ploomes_status: 'PENDENTE', ploomes_id: '', tentativas: 0, erro: '',
+}, extra || {});
+
+test('selecionarPendentes: so PENDENTE com menos de 5 tentativas, mais antiga primeiro', () => {
+  const linhas = [
+    { id: 'inicio', quando: '2026-01-01T00:00:00Z', ploomes_status: 'ENVIADO' },
+    L('c', '2026-10-07T12:03:00Z'),
+    L('a', '2026-10-07T12:01:00Z', { tentativas: '2' }),
+    L('b', '2026-10-07T12:02:00Z', { ploomes_status: 'ERRO' }),
+    L('d', '2026-10-07T12:00:00Z', { tentativas: 5 }),
+    L('e', '2026-10-07T12:00:30Z', { tentativas: '' }),
+  ];
+  assert.deepStrictEqual(limpo(c.selecionarPendentes(linhas)).map((x) => x.id), ['e', 'a', 'c']);
+  assert.deepStrictEqual(limpo(c.selecionarPendentes(linhas, 2)).map((x) => x.id), ['e', 'a']);
+  assert.strictEqual(c.MAX_TENTATIVAS_PLOOMES, 5);
+});
+
+test('montarRegistro', () => {
+  const l = L('a', '2026-10-07T12:01:00Z');
+  assert.deepStrictEqual(limpo(c.montarRegistro(l, 77)), {
+    DealId: 9001, ContactId: 77, Content: '[PCP · OS 90001] Baixa de 20 UN', Date: '2026-10-07T12:01:00Z',
+  });
+  for (const vazio of [null, undefined, '', 0]) {
+    assert.ok(!('ContactId' in limpo(c.montarRegistro(l, vazio))));
+  }
+});
+
+test('resultadoEnvio: sucesso com Id em body.Id ou body.value[0].Id', () => {
+  const l = L('a', 'q', { tentativas: '1' });
+  assert.deepStrictEqual(limpo(c.resultadoEnvio(l, { status: 201, body: { Id: 555 } })),
+    { id: 'a', ploomes_status: 'ENVIADO', ploomes_id: '555', tentativas: 1, erro: '' });
+  assert.strictEqual(limpo(c.resultadoEnvio(l, { status: 200, body: { value: [{ Id: 9 }] } })).ploomes_id, '9');
+});
+
+test('resultadoEnvio: 429 para a rodada', () => {
+  assert.deepStrictEqual(limpo(c.resultadoEnvio(L('a', 'q'), { status: 429, body: {} })), { parar: true });
+});
+
+test('resultadoEnvio: erro soma tentativa e vira ERRO na quinta', () => {
+  const r1 = limpo(c.resultadoEnvio(L('a', 'q', { tentativas: 1 }), { status: 400, body: { error: { message: 'ruim' } } }));
+  assert.deepStrictEqual(r1, { id: 'a', ploomes_status: 'PENDENTE', tentativas: 2, erro: 'ruim' });
+  const r5 = limpo(c.resultadoEnvio(L('a', 'q', { tentativas: '4' }), { status: 500, body: { message: 'x'.repeat(400) } }));
+  assert.strictEqual(r5.ploomes_status, 'ERRO');
+  assert.strictEqual(r5.tentativas, 5);
+  assert.strictEqual(r5.erro.length, 300);
+  const r0 = limpo(c.resultadoEnvio(L('a', 'q', { tentativas: '' }), { status: 502, body: null, statusText: 'Bad Gateway' }));
+  assert.strictEqual(r0.tentativas, 1);
+  assert.strictEqual(r0.erro, 'Bad Gateway');
+});
