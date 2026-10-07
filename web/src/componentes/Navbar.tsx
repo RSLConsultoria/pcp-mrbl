@@ -45,7 +45,6 @@ export function Navbar({ nome, geradoEm, onSair }: { nome: string; geradoEm?: st
             aria-current={g.ativa ? 'page' : undefined} title={g.ativa ? undefined : 'Em breve'}>
             <Icone nome={g.icone} />
             <span>{g.nome}</span>
-            {!g.ativa && <span className="em-breve">em breve</span>}
           </button>
         ))}
       </nav>

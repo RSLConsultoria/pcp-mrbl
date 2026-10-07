@@ -9,20 +9,20 @@ const URL_PLOOMES = 'https://app10.ploomes.com/deal/';
 
 function ItemDoPainel({ item }: { item: Item }) {
   const aberto = itemAberto(item);
+  const detalhes = [
+    item.previsao && `previsão ${ddmm(item.previsao)}`,
+    item.resolvidoEm && `resolvido em ${ddmm(item.resolvidoEm)}`
+  ].filter(Boolean).join(' · ');
   return (
-    <div className="item">
+    <li className={aberto ? 'item' : 'item item--resolvido'}>
       <div className="item__topo">
-        <div className="item__nomes">
-          <span className="item__nome">{item.nome}</span>
-          <span className="item__cor">{[item.cor, item.un].filter(Boolean).join(' · ')}</span>
-        </div>
+        <span className="item__nome">{item.nome}{item.cor && <span className="item__cor"> {item.cor}</span>}</span>
         <span className={aberto ? 'tag tag--falta' : 'tag tag--ok'}>{aberto ? item.status.toLowerCase() : 'resolvido'}</span>
       </div>
       <span className="item__conta">{contaDoItem(item)}</span>
-      {item.previsao && <span className="item__prev">previsão {ddmm(item.previsao)}</span>}
+      {detalhes && <span className="item__detalhe">{detalhes}</span>}
       {item.obs && <span className="item__obs">{item.obs}</span>}
-      {item.resolvidoEm && <span className="item__resolvido">resolvido em {ddmm(item.resolvidoEm)}</span>}
-    </div>
+    </li>
   );
 }
 
@@ -41,24 +41,24 @@ export function PainelCaixa({ caixa, hoje, onFechar }: { caixa: Caixa; hoje: Dat
     <aside className="painel" aria-label={`Caixa da OS ${caixa.os}`}>
       <div className="painel__cabecalho">
         <div className="painel__linha">
-          <span className="tipo"><span className="tipo__ponto" style={{ background: corDoTipo(caixa.tipo) }} />{nomeDoTipo(caixa.tipo)} · {caixa.cliente || '—'}</span>
+          <span className="tipo"><span className="tipo__ponto" style={{ background: corDoTipo(caixa.tipo) }} />{nomeDoTipo(caixa.tipo)}</span>
           <button type="button" className="painel__fechar" title="Fechar" aria-label="Fechar" onClick={onFechar}>×</button>
         </div>
         <div className="painel__os">{caixa.os}</div>
         <div className="painel__peca">{caixa.peca}</div>
-        {caixa.referencia && <div className="painel__ref">{caixa.referencia}</div>}
+        <div className="painel__meta">{[caixa.cliente, caixa.referencia].filter(Boolean).join(' · ')}</div>
         <a className="painel__link" href={URL_PLOOMES + caixa.dealId} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
       </div>
       <div className="painel__corpo">
         <dl className="leitura">
+          <div><dt>Etapa</dt><dd>{coluna.nome}</dd></div>
           <div><dt>Responsável</dt><dd>{caixa.responsavel || '—'}</dd></div>
-          <div><dt>Etapa atual</dt><dd>{coluna.nome}</dd></div>
           <div><dt>Registro</dt><dd>{caixa.registradoEm ? `${ddmm(caixa.registradoEm)} · ${textoDias(dias)}` : '—'}</dd></div>
           {caixa.saiu && <div><dt>Saiu do almoxarifado</dt><dd>{caixa.saiuEm ? ddmm(caixa.saiuEm) : 'sim'}</dd></div>}
         </dl>
         <section className="secao">
-          <h3 className="eyebrow">Itens</h3>
-          {itens.map((i) => <ItemDoPainel key={i.id} item={i} />)}
+          <h3 className="secao__titulo">Itens <span>{itens.length}</span></h3>
+          <ul className="itens">{itens.map((i) => <ItemDoPainel key={i.id} item={i} />)}</ul>
           {itens.length === 0 && <p className="vazio">Nenhum item registrado nesta caixa.</p>}
         </section>
         <p className="painel__nota">Baixa, previsão e responsável passam a ser editáveis aqui na próxima fase.</p>
