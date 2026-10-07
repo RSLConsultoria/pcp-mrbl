@@ -90,12 +90,16 @@ test('aplicarAcao: baixa no limite e acima', () => {
   assert.strictEqual(acima.gravacao, undefined);
 });
 
-test('aplicarAcao: baixa com qtd_baixada vazia e qtd_falta vazia', () => {
-  const alvo = { id: 'a', qtd_falta: '', qtd_baixada: '', atualizado_em_app: '' };
-  const acao = ok({ ...base, tipo: 'baixa', itemId: 'a', valor: 5 }).acao;
-  const r = limpo(c.aplicarAcao(acao, alvo, ctx()));
-  assert.strictEqual(r.ok, true);
-  assert.strictEqual(r.gravacao.campos.qtd_baixada, 5);
+test('aplicarAcao: baixa com qtd_falta vazia ou invalida e rejeitada', () => {
+  for (const f of ['', 'abc', null, undefined]) {
+    const alvo = { id: 'a', qtd_falta: f, qtd_baixada: '', atualizado_em_app: '' };
+    const acao = ok({ ...base, tipo: 'baixa', itemId: 'a', valor: 5 }).acao;
+    const r = limpo(c.aplicarAcao(acao, alvo, ctx()));
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.erro, 'Item sem quantidade faltante registrada.');
+    assert.strictEqual(r.gravacao, undefined);
+  }
 });
 
 test('aplicarAcao: 409 por versao', () => {
@@ -164,4 +168,64 @@ test('aplicarAcao: caixa sem linha previa cria a linha', () => {
   assert.strictEqual(r.gravacao.campos.responsavel, 'Maria');
   const velha = ok({ ...base, tipo: 'responsavel', valor: 'Maria', versao: 'x' }).acao;
   assert.strictEqual(limpo(c.aplicarAcao(velha, null, ctx())).status, 409);
+});
+
+test('validarAcao: datas impossiveis', () => {
+  const prev = (v) => ok({ ...base, tipo: 'previsao_caixa', valor: v });
+  assert.strictEqual(prev('2026-02-31').status, 400);
+  assert.strictEqual(prev('2026-04-31').status, 400);
+  assert.strictEqual(prev('2027-02-29').ok, false);
+  assert.strictEqual(prev('2028-02-29').ok, true);
+});
+
+test('validarAcao: limites de responsavel e justificativa', () => {
+  const r1 = ok({ ...base, tipo: 'responsavel', valor: 'a'.repeat(101) });
+  assert.strictEqual(r1.status, 400);
+  assert.strictEqual(r1.erro, 'Nome do responsável muito longo.');
+  assert.strictEqual(ok({ ...base, tipo: 'responsavel', valor: '  ' + 'a'.repeat(100) + '  ' }).ok, true);
+  const r2 = ok({ ...base, tipo: 'mover', valor: 'saiu_com', justificativa: 'a'.repeat(501) });
+  assert.strictEqual(r2.status, 400);
+  assert.strictEqual(r2.erro, 'Justificativa muito longa (máximo 500 caracteres).');
+  assert.strictEqual(ok({ ...base, tipo: 'mover', valor: 'saiu_com', justificativa: 'a'.repeat(500) }, 'PCP').ok, true);
+});
+
+test('validarAcao: obs normaliza quebras de linha', () => {
+  for (const tipo of ['obs_item', 'obs_caixa']) {
+    const r = ok({ ...base, tipo, itemId: 'a', valor: '  linha1\r\n\nlinha2\rlinha3  ' });
+    assert.strictEqual(r.acao.valor, 'linha1 linha2 linha3');
+  }
+  const alvo = { id: 'a', atualizado_em_app: '' };
+  const acao = ok({ ...base, tipo: 'obs_item', itemId: 'a', valor: 'a\nb' }).acao;
+  const r = limpo(c.aplicarAcao(acao, alvo, ctx()));
+  assert.strictEqual(r.gravacao.campos.observacao_pcp, 'a b');
+  assert.strictEqual(r.historico.texto, 'Lucca anotou em ZÍPER METAL: "a b"');
+  assert.strictEqual(ok({ ...base, tipo: 'obs_caixa', valor: 'a'.repeat(501) }).ok, false);
+});
+
+test('validarAcao: baixa arredonda e rejeita zero', () => {
+  assert.strictEqual(ok({ ...base, tipo: 'baixa', itemId: 'a', valor: 0.0004 }).erro, 'Informe uma quantidade maior que zero');
+  assert.strictEqual(ok({ ...base, tipo: 'baixa', itemId: 'a', valor: '0,0001' }).status, 400);
+  assert.strictEqual(ok({ ...base, tipo: 'baixa', itemId: 'a', valor: 1.00049 }).acao.valor, 1);
+});
+
+test('aplicarAcao: baixa com texto em pt-BR', () => {
+  const alvo = { id: 'a', qtd_falta: 15, qtd_baixada: 2, atualizado_em_app: '' };
+  const acao = ok({ ...base, tipo: 'baixa', itemId: 'a', valor: '2,5' }).acao;
+  const r = limpo(c.aplicarAcao(acao, alvo, ctx({ nomeItem: 'VIÉS', un: 'MT' })));
+  assert.strictEqual(r.historico.texto, 'Lucca deu baixa: 2,5 MT de VIÉS (resta 10,5 MT)');
+});
+
+test('aplicarAcao: responsavel vazio remove', () => {
+  const acao = ok({ ...base, tipo: 'responsavel', valor: '   ' }).acao;
+  const r = limpo(c.aplicarAcao(acao, { deal_id: '9001', atualizado_em: '' }, ctx()));
+  assert.strictEqual(r.gravacao.campos.responsavel, '');
+  assert.strictEqual(r.historico.texto, 'Lucca removeu o responsável');
+});
+
+test('aplicarAcao: 409 em caixa com atualizado_em desatualizado', () => {
+  const alvo = { deal_id: '9001', atualizado_em: 'c2' };
+  const acao = ok({ ...base, tipo: 'obs_caixa', valor: 'x', versao: 'c1' }).acao;
+  const r = limpo(c.aplicarAcao(acao, alvo, ctx()));
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.status, 409);
 });

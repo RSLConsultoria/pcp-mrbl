@@ -21,9 +21,11 @@ function erroAcao(status, erro) {
 function dataValida(v) {
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
   if (!m) return false;
+  var a = Number(m[1]);
   var mes = Number(m[2]);
   var dia = Number(m[3]);
-  return mes >= 1 && mes <= 12 && dia >= 1 && dia <= 31;
+  var d = new Date(Date.UTC(a, mes - 1, dia));
+  return d.getUTCFullYear() === a && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
 }
 
 function validarAcao(corpo, perfil) {
@@ -39,6 +41,7 @@ function validarAcao(corpo, perfil) {
   var justificativa = '';
   if (tipo === 'baixa') {
     var n = typeof valor === 'number' ? valor : numero(valor);
+    if (n !== null && isFinite(n)) n = arredondar(n);
     if (n === null || !isFinite(n) || n <= 0) return erroAcao(400, 'Informe uma quantidade maior que zero');
     valor = n;
   } else if (tipo === 'previsao_item' || tipo === 'previsao_caixa') {
@@ -46,13 +49,16 @@ function validarAcao(corpo, perfil) {
     if (valor !== '' && !dataValida(valor)) return erroAcao(400, 'Data inválida.');
   } else if (tipo === 'obs_item' || tipo === 'obs_caixa') {
     if (typeof valor !== 'string') return erroAcao(400, 'Texto inválido.');
+    valor = valor.trim().replace(/(\r\n|\n|\r)+/g, ' ');
     if (valor.length > 500) return erroAcao(400, 'Texto com no máximo 500 caracteres.');
   } else if (tipo === 'responsavel') {
     if (typeof valor !== 'string') return erroAcao(400, 'Responsável inválido.');
     valor = valor.trim();
+    if (valor.length > 100) return erroAcao(400, 'Nome do responsável muito longo.');
   } else if (tipo === 'mover') {
     if (typeof valor !== 'string' || !NOMES_COLUNA.hasOwnProperty(valor)) return erroAcao(400, 'Coluna inválida.');
     justificativa = texto(corpo.justificativa);
+    if (justificativa.length > 500) return erroAcao(400, 'Justificativa muito longa (máximo 500 caracteres).');
     if (perfil !== 'ADM' && justificativa.length < 15) {
       return erroAcao(400, 'Justificativa precisa de pelo menos 15 caracteres.');
     }
@@ -73,13 +79,17 @@ function arredondar(n) {
   return Math.round(n * 1000) / 1000;
 }
 
+function formatarQtd(n) {
+  return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
 function textoDaAcao(acao, ctx) {
   var u = ctx.usuario;
   var item = ctx.nomeItem;
   switch (acao.tipo) {
     case 'baixa':
-      return u + ' deu baixa: ' + acao.valor + ' ' + ctx.un + ' de ' + item +
-        ' (resta ' + ctx.resta + ' ' + ctx.un + ')';
+      return u + ' deu baixa: ' + formatarQtd(acao.valor) + ' ' + ctx.un + ' de ' + item +
+        ' (resta ' + formatarQtd(ctx.resta) + ' ' + ctx.un + ')';
     case 'previsao_item':
       return acao.valor === ''
         ? u + ' removeu a previsão de ' + item
@@ -87,7 +97,9 @@ function textoDaAcao(acao, ctx) {
     case 'obs_item':
       return u + ' anotou em ' + item + ': "' + acao.valor + '"';
     case 'responsavel':
-      return u + ' definiu responsável: ' + acao.valor;
+      return acao.valor === ''
+        ? u + ' removeu o responsável'
+        : u + ' definiu responsável: ' + acao.valor;
     case 'previsao_caixa':
       return acao.valor === ''
         ? u + ' removeu a previsão geral da caixa'
@@ -120,13 +132,12 @@ function aplicarAcao(acao, alvo, contexto) {
     var falta = numero(alvo.qtd_falta);
     var baixada = numero(alvo.qtd_baixada);
     if (baixada === null || isNaN(baixada)) baixada = 0;
-    if (falta !== null && !isNaN(falta)) {
-      var resta = arredondar(Math.max(0, falta - baixada));
-      if (acao.valor > resta) return erroAcao(400, 'Falta só ' + resta + ' ' + contexto.un);
-      ctxTexto.resta = arredondar(resta - acao.valor);
-    } else {
-      ctxTexto.resta = 0;
+    if (falta === null || !isFinite(falta)) {
+      return erroAcao(400, 'Item sem quantidade faltante registrada.');
     }
+    var resta = arredondar(Math.max(0, falta - baixada));
+    if (acao.valor > resta) return erroAcao(400, 'Falta só ' + formatarQtd(resta) + ' ' + contexto.un);
+    ctxTexto.resta = arredondar(resta - acao.valor);
     campos.qtd_baixada = arredondar(baixada + acao.valor);
     campos.atualizado_em_app = agora;
   } else if (acao.tipo === 'previsao_item') {
