@@ -1,0 +1,18 @@
+/* O protótipo quase não anima: o único loading é a marca girando, e o resto são
+   transições curtas de cor. Sem bounce, sem entrada de conteúdo. */
+:root {
+  --ease: ease;            /* @kind other */
+  --dur-hover: 140ms;      /* @kind other */
+  --dur-toast: 250ms;      /* @kind other */
+  --dur-boot: 2600ms;      /* @kind other */
+  --dur-route: 900ms;      /* @kind other */
+}
+
+@keyframes soc-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-boot: 0ms;       /* @kind other */
+    --dur-route: 0ms;      /* @kind other */
+  }
+}

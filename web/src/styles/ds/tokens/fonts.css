@@ -1,0 +1,11 @@
+/* Fontes Soccius — Hanken Grotesk (texto/UI), Space Grotesk (display), Space Mono (IDs,
+   eyebrows, valores). O produto as carrega pelo next/font (Google Fonts); aqui pelo CSS do
+   Google, que entrega os mesmos arquivos. Nenhum binário é versionado no repositório fonte. */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --font-sans: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-display-alt: 'Space Grotesk', 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}

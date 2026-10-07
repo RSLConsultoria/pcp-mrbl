@@ -1,0 +1,29 @@
+// Monta o texto de cada Code node: todos os arquivos de src/ (mesma ordem do
+// carregador de testes) + o adaptador do node. Saida em build/<node>.js,
+// que e o texto colado no n8n.
+const fs = require('fs');
+const path = require('path');
+const { ARQUIVOS } = require('../test/carregar');
+
+const raiz = path.join(__dirname, '..');
+const NODES = {
+  'processar-login': 'Processar Login',
+  'validar-pedido': 'Validar Pedido',
+  'montar-board': 'Montar Board'
+};
+
+const corpo = ARQUIVOS
+  .map((f) => '// ----- src/' + f + ' -----\n' + fs.readFileSync(path.join(raiz, 'src', f), 'utf8'))
+  .join('\n');
+
+fs.mkdirSync(path.join(raiz, 'build'), { recursive: true });
+for (const [arq, nome] of Object.entries(NODES)) {
+  const adaptador = fs.readFileSync(path.join(raiz, 'adaptadores', arq + '.js'), 'utf8');
+  const txt =
+    '// ===== Code node "' + nome + '" =====\n' +
+    '// GERADO por n8n/scripts/gerar-code-nodes.js. Nao edite no n8n.\n' +
+    '// Para mudar a logica, edite n8n/src/ e rode: npm run build\n\n' +
+    corpo + '\n' + adaptador;
+  fs.writeFileSync(path.join(raiz, 'build', arq + '.js'), txt);
+  console.log('build/' + arq + '.js');
+}

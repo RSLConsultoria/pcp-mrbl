@@ -1,0 +1,9 @@
+{
+  "name": "pcp-mrbl-n8n",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build": "node scripts/gerar-code-nodes.js && node scripts/gerar-workflow-sdk.js",
+    "hash-senha": "node scripts/hash-senha.js"
+  }
+}

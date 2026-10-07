@@ -1,0 +1,32 @@
+{
+  "geradoEm": "2026-10-07T10:58:00.000Z",
+  "avisos": [],
+  "caixas": [
+    {
+      "id": "700001", "dealId": "700001", "os": "90001", "ciclo": "PEDIDO", "tipo": "ACABAMENTO",
+      "referencia": "REF-01", "peca": "CALÇA TESTE AÇAI", "cliente": "CLIENTE BETA", "responsavel": "Maria",
+      "registradoEm": "2026-10-01", "saiu": false, "saiuComFalta": false, "saiuEm": "",
+      "itens": [
+        { "id": "a1", "nome": "LINHA 120 RESISTENTE 335", "cor": "amora", "un": "cones", "necessaria": 4, "separada": 2, "falta": 2, "faltaG": 100, "status": "PARCIAL", "obs": "", "previsao": "2026-10-09", "resolvidoEm": "" },
+        { "id": "a2", "nome": "TAG CUIDADOS PADRÃO", "cor": "", "un": "UN", "necessaria": 26, "separada": 0, "falta": 26, "faltaG": null, "status": "ABERTO", "obs": "fornecedor confirmou envio", "previsao": "", "resolvidoEm": "" },
+        { "id": "a3", "nome": "ETIQUETA COMPOSIÇÃO", "cor": "", "un": "UN", "necessaria": 26, "separada": 26, "falta": 0, "faltaG": null, "status": "RESOLVIDO", "obs": "", "previsao": "", "resolvidoEm": "2026-10-03" }
+      ]
+    },
+    {
+      "id": "700002", "dealId": "700002", "os": "90002", "ciclo": "PEDIDO", "tipo": "COSTURA",
+      "referencia": "REF-02", "peca": "PECA TESTE A", "cliente": "CLIENTE ALFA", "responsavel": "Lucca",
+      "registradoEm": "2026-10-03", "saiu": false, "saiuComFalta": false, "saiuEm": "",
+      "itens": [
+        { "id": "b1", "nome": "ZÍPER METAL MÉDIO FIXO CA 18CM", "cor": "", "un": "UN", "necessaria": 52, "separada": 0, "falta": 52, "faltaG": null, "status": "ABERTO", "obs": "", "previsao": "", "resolvidoEm": "" }
+      ]
+    },
+    {
+      "id": "700003", "dealId": "700003", "os": "90003", "ciclo": "CORTE", "tipo": "COSTURA",
+      "referencia": "REF-03", "peca": "PECA TESTE B", "cliente": "CLIENTE BETA", "responsavel": "",
+      "registradoEm": "2026-09-16", "saiu": true, "saiuComFalta": true, "saiuEm": "2026-09-18",
+      "itens": [
+        { "id": "c1", "nome": "VIES LINEAR 6 CM", "cor": "cobra", "un": "MT", "necessaria": null, "separada": null, "falta": 450, "faltaG": null, "status": "ABERTO", "obs": "", "previsao": "", "resolvidoEm": "" }
+      ]
+    }
+  ]
+}

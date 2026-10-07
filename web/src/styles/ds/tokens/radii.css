@@ -1,0 +1,9 @@
+/* O sistema é reto: nada acima de 5px e sem pílulas. Elemento aninhado nunca tem raio
+   maior que o pai. Proibido 999px/9999px. */
+:root {
+  --radius-track: 2px;   /* barra de progresso, trilho */
+  --radius-tag: 3px;     /* tag, badge, chip, contador, card do kanban, modal */
+  --radius-field: 4px;   /* input, select, textarea, botão, item de lista */
+  --radius-card: 5px;    /* card, painel, gaveta, popover, menu */
+  --radius-round: 50%;   /* avatar, dot, knob */
+}

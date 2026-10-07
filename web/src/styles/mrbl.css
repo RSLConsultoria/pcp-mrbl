@@ -1,0 +1,24 @@
+/* Sobrescritas MRBL sobre o Soccius DS (README do handoff, "Design Tokens"). */
+:root {
+  --ink: #0E1B4F; --ink-2: #13277A; --ink-3: #172C82; --graphite: #2D3F8F;
+  --slate: #56607A; --mist: #AEB7D6;
+  --signal: #D4A21C; --signal-hi: #E6BD4C; --signal-lo: #A97F0E;
+  --signal-tint: rgba(212,162,28,.14); --signal-ring: rgba(212,162,28,.24);
+  --ember: #D9731F; --warn: #D9731F; --link: #13277A; --link-hover: #0E1B4F;
+  --mod-crm: #D4A21C; --stage-default: #13277A; --focus-ring: 0 0 0 3px rgba(212,162,28,.24);
+  --paper: #fafafb; --paper-2: #efeee7; --paper-3: #e5e3d9; --line: #d8d5c8; --fog: #8a8676;
+
+  --navy: #13277A;
+  --navy-tint: rgba(19,39,122,.08);
+  --falta: #B4531A; --falta-bg: rgba(217,115,31,.12);
+  --ok-text: #1b8f73; --ok-bg: rgba(63,182,139,.13);
+  --erro-text: #A3282B; --erro-bg: rgba(216,93,85,.13);
+  --tipo-acabamento: #2F55D4; --tipo-costura: #14161C;
+  --shadow-panel: 0 1px 0 rgba(0,0,0,.04), 0 1px 2px rgba(10,14,20,.05);
+  --shadow-card: 0 1px 2px rgba(10,14,20,.04), 0 8px 18px -14px rgba(10,14,20,.16);
+  --shadow-popover: 0 16px 38px -16px rgba(10,14,20,.34);
+}
+html, body, #root { height: 100%; }
+body { font-size: 13.5px; }
+a { color: var(--navy); }
+a:hover { color: var(--ink); text-decoration: underline; }

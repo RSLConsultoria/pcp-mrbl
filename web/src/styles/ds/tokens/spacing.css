@@ -1,0 +1,35 @@
+/* Espaçamento e medidas fixas do shell e das tabelas. As medidas do shell são
+   invariantes: nenhuma tela desenha o próprio topo. */
+:root {
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 18px;
+  --space-8: 20px;
+  --space-9: 26px;
+  --space-10: 34px;
+
+  --gap-form: 12px;         /* grade de formulário: 12–14px */
+  --gap-modal-section: 26px;
+  --pad-panel: 18px;        /* padding de painel: 16–20px */
+
+  --h-navbar: 58px;
+  --h-subnav: 52px;
+  --h-button: 34px;
+  --h-button-sm: 30px;
+  --h-modal-button: 30px;
+  --h-field: 32px;
+  --h-table-head: 44px;
+  --h-table-row: 45px;
+  --w-ficha-aside: 384px;
+  --w-ficha-aside-wide: 422px;
+  --w-rail: 214px;
+  --w-kanban-col: 236px;
+  --w-modal-confirm: 440px;
+  --w-modal-form: 560px;
+  --w-modal-wide: 820px;
+  --w-drawer: 640px;
+}

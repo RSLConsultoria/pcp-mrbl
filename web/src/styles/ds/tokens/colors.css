@@ -1,0 +1,68 @@
+/* Paleta Soccius "Premium Tech". Valores efetivos do produto (apps/web/src/app/globals.css),
+   que é a última camada sobre o protótipo — onde o protótipo diverge, o valor dele vai no
+   comentário. Nenhuma tela usa cor fora desta lista. */
+:root {
+  /* Neutros escuros — navbar, subnav, modais escuros, boot */
+  --ink: #0a0e14;
+  --ink-2: #191c22;        /* protótipo: #131922 */
+  --ink-3: #272b30;        /* protótipo: #1C2330 */
+  --graphite: #2a3340;
+  --slate: #5c6675;
+  --mist: #a2acba;
+
+  /* Neutros claros — conteúdo */
+  --paper: #fafafb;        /* protótipo: #F6F5F0 */
+  --paper-2: #efeee7;
+  --paper-3: #e5e3d9;
+  --line: #d8d5c8;
+  --line-2: #c9c5b5;
+  --fog: #8a8676;
+  --white: #ffffff;
+
+  /* Marca e ação */
+  --signal: #1fb6c1;
+  --signal-hi: #5ecad2;    /* protótipo: #3CD3DE */
+  --signal-lo: #188a93;    /* protótipo: #0F8A99 */
+  --signal-tint: rgba(31, 182, 193, 0.14);
+  --signal-ring: rgba(31, 182, 193, 0.18);
+  --ember: #d89464;
+
+  /* Estado */
+  --success: #3fb68b;
+  --success-text: #1b8f73;
+  --warn: #e0a93f;
+  --error: #d85d55;
+  --error-text: #b23b33;
+  --violet: #a47bd9;
+  --blue: #5b8ff9;
+
+  /* Cor do macro-módulo — sublinha o item ativo da navbar e pinta o ícone do cartão */
+  --mod-crm: #1fb6c1;
+  --mod-produtos: #e0a33c;
+  --mod-analytics: #5b8ff9;
+  --mod-desk: #3fb68b;
+  --mod-management: #d86f4a;
+  --mod-finance: #2fa36b;
+
+  /* Aliases semânticos (os mesmos que o produto expõe ao shadcn/ui) */
+  --background: var(--white);
+  --foreground: var(--ink);
+  --surface: #fafafb;
+  --surface-readonly: #f4f5f7;
+  --surface-card: var(--white);
+  --surface-sunken: var(--paper-2);
+  --text-body: var(--ink);
+  --text-muted: var(--slate);
+  --text-faint: var(--fog);
+  --text-on-dark: var(--paper);
+  --text-on-dark-muted: var(--mist);
+  --border-default: var(--line);
+  --border-strong: var(--line-2);
+  --border-dark: var(--graphite);
+  --primary: var(--signal);
+  --primary-foreground: var(--ink);
+  --link: var(--signal-lo);
+  --link-hover: var(--signal);
+  --focus-ring: 0 0 0 3px var(--signal-ring);
+  --stage-default: #1fb6c1;
+}

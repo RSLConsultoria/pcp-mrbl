@@ -1,0 +1,27 @@
+/* Escala tipográfica em uso. Mínimos: nada abaixo de 9px (só eyebrow mono); corpo nunca
+   abaixo de 12px. Rótulo de campo é Sentence case — nunca all-caps. */
+:root {
+  --text-h1: 34px;          --leading-h1: 1.1;   --tracking-h1: -0.03em;
+  --text-h2: 22px;          --tracking-h2: -0.02em;
+  --text-title: 19px;       --tracking-title: -0.015em;
+  --text-panel: 15px;       /* título de painel, 15–16 / 600 */
+  --text-card: 14.5px;
+  --text-body: 13.5px;      --leading-body: 1.55;
+  --text-body-sm: 13px;
+  --text-ui: 12.5px;        /* subnav, botões pequenos, células densas */
+  --text-label: 12px;       /* rótulo de campo, 600, cor slate */
+  --text-label-sm: 11.5px;  /* rótulo de cadastro e botão inline */
+  --text-caption: 11px;
+  --text-eyebrow: 10px;     /* mono, uppercase */
+  --text-micro: 9.5px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-black: 800;
+
+  --tracking-eyebrow: 0.14em;   /* 0.12–0.2em conforme o contexto */
+  --tracking-tight: -0.01em;
+  --tracking-mono: 0.02em;
+}
