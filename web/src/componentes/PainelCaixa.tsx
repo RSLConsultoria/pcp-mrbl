@@ -21,7 +21,7 @@ function ItemDoPainel({ item }: { item: Item }) {
       </div>
       <span className="item__conta">{contaDoItem(item)}</span>
       {detalhes && <span className="item__detalhe">{detalhes}</span>}
-      {item.obs && <span className="item__obs">{item.obs}</span>}
+      {(item.obsAlmox || item.obsPcp) && <span className="item__obs">{[item.obsAlmox, item.obsPcp].filter(Boolean).join(' · ')}</span>}
     </li>
   );
 }

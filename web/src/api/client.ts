@@ -1,4 +1,4 @@
-import type { Board, Sessao } from './tipos';
+import type { Acao, Board, RespostaAcao, Sessao } from './tipos';
 
 export class ApiError extends Error {
   status: number;
@@ -39,4 +39,14 @@ export async function buscarBoard(token: string): Promise<Board> {
   });
   if (!Array.isArray(b.caixas)) throw new ApiError(200, 'Resposta inválida do servidor.');
   return b;
+}
+
+export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAcao> {
+  const r = await pedir<Partial<RespostaAcao>>(import.meta.env.VITE_API_ACAO, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(acao)
+  });
+  if (typeof r.versao !== 'string' || !r.historico) throw new ApiError(200, 'Resposta inválida do servidor.');
+  return { versao: r.versao, historico: r.historico };
 }

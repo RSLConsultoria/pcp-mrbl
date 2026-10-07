@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, buscarBoard, entrar } from './client';
+import { ApiError, buscarBoard, enviarAcao, entrar } from './client';
 
 function resposta(status: number, corpo: unknown) {
   return Promise.resolve(new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }));
@@ -9,6 +9,7 @@ describe('client', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_API_LOGIN', 'http://api.test/pcp-login');
     vi.stubEnv('VITE_API_BOARD', 'http://api.test/pcp-board');
+    vi.stubEnv('VITE_API_ACAO', 'http://api.test/pcp-acao');
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -68,5 +69,32 @@ describe('client', () => {
       status: 500,
       message: 'Erro 500'
     });
+  });
+
+  it('enviarAcao faz POST com token e corpo, e devolve versao e historico', async () => {
+    const h = { quando: '2026-10-07T12:00:00.000Z', usuario: 'Maria', texto: 'Baixa de 3 UN', ploomes: 'PENDENTE' };
+    const f = vi.fn(() => resposta(200, { ok: true, versao: 'v2', historico: h }));
+    vi.stubGlobal('fetch', f);
+    const acao = { tipo: 'baixa', dealId: '700001', itemId: 'a1', valor: 3, versao: 'v1' } as const;
+    const r = await enviarAcao('abc', acao);
+    expect(r).toEqual({ versao: 'v2', historico: h });
+    expect(f).toHaveBeenCalledWith('http://api.test/pcp-acao', expect.objectContaining({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer abc' },
+      body: JSON.stringify(acao)
+    }));
+  });
+
+  it('enviarAcao: 409 vira ApiError(409) com a mensagem do servidor', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => resposta(409, { erro: 'Alguém alterou esta caixa agora há pouco.' })));
+    const e = await enviarAcao('t', { tipo: 'obs_caixa', dealId: '1', valor: 'x', versao: '' }).catch((x) => x);
+    expect(e).toBeInstanceOf(ApiError);
+    expect(e).toMatchObject({ status: 409, message: 'Alguém alterou esta caixa agora há pouco.' });
+  });
+
+  it('enviarAcao: 200 sem versao/historico vira resposta inválida', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => resposta(200, { ok: true })));
+    await expect(enviarAcao('t', { tipo: 'responsavel', dealId: '1', valor: 'Maria', versao: '' }))
+      .rejects.toMatchObject({ message: 'Resposta inválida do servidor.' });
   });
 });

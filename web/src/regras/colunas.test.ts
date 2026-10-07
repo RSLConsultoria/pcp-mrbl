@@ -3,7 +3,7 @@ import { colunaDaCaixa, COLUNAS, itemAberto, itensAbertos, visivelNoQuadro } fro
 import { caixa, item } from './teste-util';
 
 const HOJE = new Date(2026, 9, 7);
-const resolvido = item({ id: 'r', status: 'RESOLVIDO', falta: 0 });
+const resolvido = item({ id: 'r', status: 'RESOLVIDO', falta: 0, resta: 0 });
 
 describe('colunas', () => {
   it('tem as 6 colunas na ordem do protótipo', () => {
@@ -11,9 +11,10 @@ describe('colunas', () => {
   });
   it('itemAberto: ABERTO/PARCIAL com falta > 0 ou desconhecida', () => {
     expect(itemAberto(item())).toBe(true);
-    expect(itemAberto(item({ status: 'PARCIAL', falta: 4 }))).toBe(true);
-    expect(itemAberto(item({ falta: 0 }))).toBe(false);
-    expect(itemAberto(item({ falta: null }))).toBe(true);
+    expect(itemAberto(item({ status: 'PARCIAL', falta: 4, resta: 4 }))).toBe(true);
+    expect(itemAberto(item({ falta: 0, resta: 0 }))).toBe(false);
+    expect(itemAberto(item({ falta: 52, baixada: 52, resta: 0 }))).toBe(false);
+    expect(itemAberto(item({ falta: null, resta: null }))).toBe(true);
     expect(itemAberto(resolvido)).toBe(false);
     expect(itensAbertos(caixa({ itens: [item(), resolvido] }))).toHaveLength(1);
   });
@@ -24,6 +25,10 @@ describe('colunas', () => {
     expect(colunaDaCaixa(caixa({ ciclo: 'CORTE', itens: [] }))).toBe('completa_corte');
     expect(colunaDaCaixa(caixa({ saiu: true }))).toBe('saiu_com');
     expect(colunaDaCaixa(caixa({ saiu: true, itens: [resolvido] }))).toBe('saiu_sem');
+  });
+  it('colunaDaCaixa respeita colunaManual', () => {
+    expect(colunaDaCaixa(caixa({ colunaManual: 'saiu_sem' }))).toBe('saiu_sem');
+    expect(colunaDaCaixa(caixa({ colunaManual: null }))).toBe('falta_pedido');
   });
   it('visivelNoQuadro esconde "saiu sem faltas" depois de 30 dias', () => {
     const saiuSem = (saiuEm: string) => caixa({ saiu: true, saiuEm, itens: [] });

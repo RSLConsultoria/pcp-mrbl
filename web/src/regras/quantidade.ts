@@ -12,9 +12,10 @@ export function formatarQtd(qtd: number | null, un: string, g: number | null): s
 }
 
 export function contaDoItem(i: Item): string {
-  const partes: string[] = [];
-  if (i.necessaria !== null) partes.push(`necessário ${formatarNumero(i.necessaria)}`);
-  if (i.separada !== null) partes.push(`separado ${formatarNumero(i.separada)}`);
-  partes.push(`falta ${formatarQtd(i.falta, i.un, i.faltaG)}`);
-  return partes.join(' · ');
+  if (i.falta === null) return 'falta não informada';
+  return [
+    `faltava ${formatarQtd(i.falta, i.un, i.faltaG)}`,
+    `baixado ${formatarNumero(i.baixada)}`,
+    `resta ${formatarQtd(i.resta, i.un, i.restaG)}`
+  ].join(' · ');
 }

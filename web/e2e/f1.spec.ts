@@ -57,7 +57,7 @@ test('clicar no card abre o painel com o link do Ploomes', async ({ page }) => {
   await page.getByRole('button', { name: 'OS 90001' }).click();
   const painel = page.getByRole('complementary', { name: 'Caixa da OS 90001' });
   await expect(painel.getByRole('link', { name: 'Abrir card no Ploomes' })).toHaveAttribute('href', 'https://app10.ploomes.com/deal/700001');
-  await expect(painel).toContainText('necessário 4 · separado 2 · falta 2 cones · 100 g');
+  await expect(painel).toContainText('faltava 2 cones · 100 g · baixado 0 · resta 2 cones · 100 g');
   await painel.getByRole('button', { name: 'Fechar' }).click();
   await expect(painel).toHaveCount(0);
 });
