@@ -22,6 +22,8 @@ export function CamposPedido({ valor, onMudar, usuarios, etapas }: Props) {
         <div className="campo">
           <label htmlFor={`${id}-etapa`}>Etapa</label>
           <select id={`${id}-etapa`} value={valor.etapa} onChange={(e) => mudar({ etapa: e.target.value })}>
+            {/* etapa que saiu do quadro: aparece como está, para que escolher qualquer etapa conte como mudança */}
+            {valor.etapa && !etapas.some((e) => e.id === valor.etapa) && <option value={valor.etapa} disabled>Outra etapa</option>}
             {etapas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
           </select>
         </div>
