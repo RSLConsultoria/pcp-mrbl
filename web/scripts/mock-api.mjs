@@ -13,6 +13,15 @@ import http from 'node:http';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
 const USUARIOS = ['Lucca', 'Maria', 'Renata'];
+// Abas FORNECEDORES (id, nome, ativo) e RESPONSAVEIS (nome, ativo): ativo vazio ou SIM aparece.
+const FORNECEDORES = [
+  { id: 'F001', nome: 'TECIDOS BETA', ativo: 'SIM' }, { id: 'F002', nome: 'AVIAMENTOS DELTA', ativo: '' },
+  { id: 'F003', nome: 'METAIS GAMA', ativo: 'SIM' }, { id: 'F004', nome: 'ZIPERES GAMA', ativo: 'SIM' },
+  { id: 'F005', nome: 'FITAS EPSILON', ativo: 'SIM' }, { id: 'F006', nome: 'FORNECEDOR ANTIGO', ativo: 'NAO' }
+];
+const RESPONSAVEIS = ['Gi', 'Fátima', 'Cesar', 'Luana', 'Lucca', 'Renata'].map((nome) => ({ nome, ativo: 'SIM' }));
+const ativos = (linhas) => [...new Set(linhas.filter((l) => !l.ativo || l.ativo === 'SIM').map((l) => l.nome.trim()).filter(Boolean))]
+  .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 const ENVIO_PLOOMES_MS = 20_000;
 const ATRASO_MS = Number(process.env.MOCK_ATRASO_MS) || 0;
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -72,9 +81,9 @@ const estado = {
     { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA', previsao: '' }, { itemId: 'a2', dealId: '700001', qtd: 30, fornecedor: '', previsao: diaIso(12) }] },
     { id: 'PED-0002', etapa: 'aguardando', origem: 'CLIENTE', quem: 'CLIENTE BETA', local: 'BRAGANCA', previsao: diaIso(10), responsavel: 'Lucca', criadoEm: diaIso(-4), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'b1', dealId: '700002', qtd: 52, fornecedor: '' }] },
     // já dividido: 120 MT chegaram e viraram o PED-0003.1; o PED-0003 espera os outros 180 MT
-    { id: 'PED-0003', etapa: 'aguardando', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 180, fornecedor: 'AVIAMENTOS DELTA' }] },
-    { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-1), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
-    { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Maria', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
+    { id: 'PED-0003', etapa: 'aguardando', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Gi', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 180, fornecedor: 'AVIAMENTOS DELTA' }] },
+    { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Gi', criadoEm: diaIso(-1), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
+    { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Gi', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
     // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
     // material da 90006 (já enviada à oficina) e da 90007 (pronta para enviar): resolvido, com a baixa dada
     { id: 'PED-0006', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-3), responsavel: 'Lucca', criadoEm: diaIso(-6), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'f1', dealId: '700006', qtd: 80, fornecedor: '' }] },
@@ -115,7 +124,10 @@ const pedidoAbertoDoItem = (dealId, itemId) => pedidosAbertosDoItem(dealId, item
 const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const slug = (s) => semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'etapa';
 const chaveNome = (s) => semAcento(s).trim().toLowerCase();
-const nomeLocal = (l) => (l === 'SAO_PAULO' ? 'São Paulo' : 'Bragança');
+const LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
+const nomeLocal = (l) => LOCAIS[l] ?? l;
+// Fornecedor (ou cliente) e responsável obrigatórios, como no servidor (n8n/src/pedidos.js).
+const erroQuemVazio = (origem) => (origem === 'CLIENTE' ? 'Informe o cliente.' : 'Informe o fornecedor.');
 
 function exigirEditavel(dealIds) {
   for (const d of dealIds) if (!editavel(d)) throw new Erro(403, 'Edição liberada em breve para esta caixa.');
@@ -129,8 +141,10 @@ function validarData(v) {
 }
 function validarDadosPedido(c) {
   if (c.origem !== 'FORNECEDOR' && c.origem !== 'CLIENTE') throw bad('Origem inválida.');
-  if (c.local !== 'BRAGANCA' && c.local !== 'SAO_PAULO') throw bad('Local inválido.');
+  if (!LOCAIS[c.local]) throw bad('Local inválido.');
   validarData(c.previsao);
+  if (!String(c.quem ?? '').trim()) throw bad(erroQuemVazio(c.origem));
+  if (!String(c.responsavel ?? '').trim()) throw bad('Informe o responsável.');
 }
 
 function registrar(dealId, usuario, texto, historicos) {
@@ -153,6 +167,8 @@ function montarBoard() {
     usuarios: USUARIOS,
     dealsEditaveis: estado.dealsEditaveis,
     etapasPedido: estado.etapas.map((e, i) => ({ ...e, ordem: i + 1 })),
+    fornecedores: ativos(FORNECEDORES),
+    responsaveis: ativos(RESPONSAVEIS),
     pedidos: [...estado.pedidos].sort(compararPedidos).map((p) => ({
       ...p,
       pai: p.pai ?? '',
@@ -280,7 +296,7 @@ function editarPedido(c, usuario) {
   const add = (d, t) => porDeal.set(d, [...(porDeal.get(d) ?? []), t]);
   const comuns = [];
   if ('origem' in campos && campos.origem !== 'FORNECEDOR' && campos.origem !== 'CLIENTE') throw bad('Origem inválida.');
-  if ('local' in campos && campos.local !== 'BRAGANCA' && campos.local !== 'SAO_PAULO') throw bad('Local inválido.');
+  if ('local' in campos && !LOCAIS[campos.local]) throw bad('Local inválido.');
   if ('previsao' in campos) validarData(campos.previsao);
   if ('etapa' in campos && !estado.etapas.some((e) => e.id === campos.etapa)) throw bad('Etapa inválida.');
   const rot = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
@@ -295,6 +311,9 @@ function editarPedido(c, usuario) {
   const novos = {};
   for (const k of Object.keys(rot)) {
     if (!(k in campos) || (campos[k] ?? '') === (p[k] ?? '')) continue;
+    // não deixa limpar o fornecedor/cliente nem o responsável
+    if (k === 'quem' && !String(campos.quem ?? '').trim()) throw bad(erroQuemVazio(campos.origem ?? p.origem));
+    if (k === 'responsavel' && !String(campos.responsavel ?? '').trim()) throw bad('Informe o responsável.');
     comuns.push(`${rot[k]}: ${fmt(k, antes[k])} → ${fmt(k, campos[k])}`);
     novos[k] = campos[k] ?? '';
   }
