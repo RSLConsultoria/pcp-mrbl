@@ -1,4 +1,4 @@
-// ===== Code node "Preparar Gravacao" =====
+// ===== Code node "Pre Validar Acao" =====
 // GERADO por n8n/scripts/gerar-code-nodes.js. Nao edite no n8n.
 // Para mudar a logica, edite n8n/src/ e rode: npm run build
 
@@ -810,8 +810,10 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   };
 }
 
-// ===== adaptador: Preparar Gravacao =====
-// Colunas da linha + a coluna-chave do casamento (id / deal_id); a aba vem de
-// $('Processar Acao').first().json.gravacao.aba no IF "E Item?".
-var g = $input.first().json.gravacao;
-return [{ json: linhaDeGravacao(g) }];
+// ===== adaptador: Pre Validar Acao =====
+// Sessao e corpo antes de ler a planilha. Saida { ok: true } segue para as
+// leituras; { ok: false, status, body } vai direto ao "Responder Pre".
+var estado = $getWorkflowStaticData('global');
+var entrada = $('Acao').first().json;
+var cabecalho = (entrada.headers || {}).authorization;
+return [{ json: preValidarAcao(estado, cabecalho, entrada.body || {}, Date.now()) }];

@@ -82,9 +82,11 @@ function itemDaLinha(l, ano) {
   var falta = numero(l.qtd_falta);
   var faltaG = numero(l.qtd_falta_g);
   var bx = numero(l.qtd_baixada);
-  var baixada = bx === null || isNaN(bx) ? 0 : bx;
+  var bxIlegivel = bx !== null && isNaN(bx);
+  var baixada = bx === null || bxIlegivel ? 0 : bx;
   faltaG = faltaG === null || isNaN(faltaG) ? null : faltaG;
-  var resta = restaDe(falta, baixada);
+  // qtd_baixada ilegivel: nao da para saber quanto resta (montarCaixas avisa).
+  var resta = bxIlegivel ? null : restaDe(falta, baixada);
   return {
     id: texto(l.id),
     nome: texto(l.descricao_item),
@@ -166,6 +168,9 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
       return;
     }
     if (semAcento(l.status) === 'SUBSTITUIDO') return;
+    if (isNaN(numero(l.qtd_baixada))) {
+      avisos.push('FALTANTES linha ' + numLinha + ' (OS ' + os + '): qtd_baixada ilegivel');
+    }
     if (!grupos[dealId]) { grupos[dealId] = []; ordem.push(dealId); }
     grupos[dealId].push(l);
   });

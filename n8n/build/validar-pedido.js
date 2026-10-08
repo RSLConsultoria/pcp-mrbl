@@ -163,9 +163,11 @@ function itemDaLinha(l, ano) {
   var falta = numero(l.qtd_falta);
   var faltaG = numero(l.qtd_falta_g);
   var bx = numero(l.qtd_baixada);
-  var baixada = bx === null || isNaN(bx) ? 0 : bx;
+  var bxIlegivel = bx !== null && isNaN(bx);
+  var baixada = bx === null || bxIlegivel ? 0 : bx;
   faltaG = faltaG === null || isNaN(faltaG) ? null : faltaG;
-  var resta = restaDe(falta, baixada);
+  // qtd_baixada ilegivel: nao da para saber quanto resta (montarCaixas avisa).
+  var resta = bxIlegivel ? null : restaDe(falta, baixada);
   return {
     id: texto(l.id),
     nome: texto(l.descricao_item),
@@ -247,6 +249,9 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
       return;
     }
     if (semAcento(l.status) === 'SUBSTITUIDO') return;
+    if (isNaN(numero(l.qtd_baixada))) {
+      avisos.push('FALTANTES linha ' + numLinha + ' (OS ' + os + '): qtd_baixada ilegivel');
+    }
     if (!grupos[dealId]) { grupos[dealId] = []; ordem.push(dealId); }
     grupos[dealId].push(l);
   });
@@ -478,7 +483,8 @@ function aplicarAcao(acao, alvo, contexto) {
   if (acao.tipo === 'baixa') {
     var falta = numero(alvo.qtd_falta);
     var baixada = numero(alvo.qtd_baixada);
-    if (baixada === null || isNaN(baixada)) baixada = 0;
+    if (baixada !== null && isNaN(baixada)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
+    if (baixada === null) baixada = 0;
     if (falta === null || !isFinite(falta)) {
       return erroAcao(400, 'Item sem quantidade faltante registrada.');
     }
@@ -573,11 +579,20 @@ function respostaOk(status) {
   return n >= 200 && n < 300;
 }
 
-// Decide o que fazer com a resposta do Buscar Contato: 429/5xx (ou sem resposta)
-// pula o item (segue PENDENTE); qualquer outro nao-2xx segue sem ContactId.
+// Status HTTP numerico da resposta, ou null (item de erro de rede/timeout,
+// que o node entrega com $json.error e sem statusCode).
+function statusHttp(v) {
+  if (v === null || v === undefined || texto(v) === '') return null;
+  var n = Number(v);
+  return isFinite(n) ? n : null;
+}
+
+// Decide o que fazer com a resposta do Buscar Contato: 429/5xx (ou sem
+// resposta / sem status) pula o item (segue PENDENTE); qualquer outro
+// nao-2xx segue sem ContactId.
 function decidirContato(resposta) {
-  var st = resposta ? Number(resposta.statusCode) : 0;
-  if (!resposta || st === 429 || st >= 500) return { pular: true, contactId: null };
+  var st = resposta ? statusHttp(resposta.statusCode) : null;
+  if (st === null || st === 429 || st >= 500) return { pular: true, contactId: null };
   if (!respostaOk(st)) return { pular: false, contactId: null };
   var v = resposta.body && resposta.body.value;
   var cid = v && v[0] ? v[0].ContactId : null;
@@ -599,15 +614,19 @@ function mensagemErroPloomes(resposta) {
   if (b && b.error && b.error.message) m = b.error.message;
   else if (b && b.message) m = b.message;
   else if (resposta && resposta.statusText) m = resposta.statusText;
-  else m = 'HTTP ' + (resposta ? resposta.status : '?');
+  else if (resposta && resposta.erro && resposta.erro.message) m = resposta.erro.message;
+  else if (resposta && typeof resposta.erro === 'string' && resposta.erro) m = resposta.erro;
+  else if (!resposta || statusHttp(resposta.status) === null) m = 'Sem resposta do Ploomes';
+  else m = 'HTTP ' + resposta.status;
   return texto(m).slice(0, 300);
 }
 
+// Sem status (erro de rede/timeout) conta como tentativa falha.
 function resultadoEnvio(linha, resposta) {
-  var status = resposta ? Number(resposta.status) : 0;
+  var status = resposta ? statusHttp(resposta.status) : null;
   if (status === 429) return { parar: true }; // so esta linha: fica PENDENTE
   var tentativas = tentativasDe(linha);
-  if (status >= 200 && status < 300) {
+  if (status !== null && status >= 200 && status < 300) {
     var b = resposta.body;
     var id = b && b.Id !== undefined ? b.Id
       : b && b.value && b.value[0] && b.value[0].Id !== undefined ? b.value[0].Id : '';
@@ -715,6 +734,17 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
+}
+
+// POST /pcp-acao, antes de ler a planilha: sessao e corpo. Falha devolve o
+// mesmo { status, body } que o processarAcao daria (com ok: false para o IF);
+// sucesso = { ok: true }. O processarAcao repete as checagens.
+function preValidarAcao(estado, cabecalho, corpo, agora) {
+  var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  var v = validarAcao(corpo, sessao.perfil);
+  if (!v.ok) return { ok: false, status: v.status, body: { erro: v.erro } };
+  return { ok: true };
 }
 
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas? } (linhas da planilha).

@@ -1,5 +1,6 @@
 // ===== adaptador: Montar Registro =====
-// Buscar Contato: 429/5xx descarta o item (segue PENDENTE, proxima rodada);
+// Buscar Contato: 429/5xx ou erro de rede/timeout (item com $json.error e sem
+// statusCode) descarta o item (segue PENDENTE, proxima rodada);
 // outro nao-2xx (ex. 404) mantem o item e monta o registro sem ContactId.
 // Resultado Envio le a mesma lista ($('Montar Registro').all()).
 var linhas = $('Selecionar Envio').all();

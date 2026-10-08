@@ -46,9 +46,11 @@ const http = (varName, nome, metodo, url, comCorpo) => `const ${varName} = node(
       ${comCorpo ? "sendBody: true,\n      specifyBody: 'json',\n      jsonBody: expr('{{ JSON.stringify($json.registro) }}')," : ''}
       options: {
         response: { response: { fullResponse: true, neverError: true } },
-        batching: { batch: { batchSize: 1, batchInterval: 700 } }
+        batching: { batch: { batchSize: 1, batchInterval: 700 } },
+        timeout: 30000
       }
     },
+    onError: 'continueRegularOutput',
     credentials: { httpHeaderAuth: { id: 'QfXOyNly69oAqwH2', name: 'Header Auth account' } },
     position: [0, 0]
   },
@@ -169,6 +171,9 @@ const api = IMPORT + [
   code('montarBoard', 'Montar Board', 'montar-board'),
   responder('responderBoard', 'Responder Board'),
   webhook('acaoWebhook', 'Acao', 'POST', 'pcp-acao'),
+  code('preValidarAcao', 'Pre Validar Acao', 'pre-validar-acao'),
+  'const preOk = ' + condicao('Pre OK?', '{{ $json.ok }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  responder('responderPre', 'Responder Pre'),
   sheets('lerFaltantesAcao', 'Ler FALTANTES Acao', 'FALTANTES', unico),
   sheets('lerCaixasPcpAcao', 'Ler CAIXAS_PCP Acao', 'CAIXAS_PCP', unico),
   sheets('lerGanhasAcao', 'Ler CAIXAS GANHAS Acao', 'CAIXAS GANHAS', unico),
@@ -198,15 +203,14 @@ export default workflow('pcp-mrbl-api', 'PCP MRBL - API', {
     .onTrue(lerFaltantes.to(lerGanhas).to(lerCaixasPcp).to(lerHistorico).to(lerUsuariosBoard).to(montarBoard).to(responderBoard))
     .onFalse(responderBoard))
   .add(acaoWebhook)
-  .to(lerFaltantesAcao)
-  .to(lerCaixasPcpAcao)
-  .to(lerGanhasAcao)
-  .to(processarAcao)
-  .to(acaoOk
+  .to(preValidarAcao)
+  .to(preOk
+    .onTrue(lerFaltantesAcao.to(lerCaixasPcpAcao).to(lerGanhasAcao).to(processarAcao).to(acaoOk
     .onTrue(prepararGravacao.to(eItem
       .onTrue(gravarItem.to(prepararHistorico.to(gravarHistorico.to(responderAcao))))
       .onFalse(gravarCaixa.to(prepararHistorico))))
-    .onFalse(responderAcao));
+    .onFalse(responderAcao)))
+    .onFalse(responderPre));
 `;
 
 const envio = IMPORT + [

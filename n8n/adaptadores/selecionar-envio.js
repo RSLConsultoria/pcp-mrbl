@@ -1,5 +1,5 @@
 // ===== adaptador: Selecionar Envio =====
-var DEALS_PERMITIDOS = [];  // vazio = todos. No primeiro teste, só o card de teste.
+var DEALS_PERMITIDOS = ['607479158'];  // TESTE: so o card de teste ate o go-live
 var rows = $input.all().map(function (i) { return i.json; });
 var sel = selecionarPendentes(rows);
 if (DEALS_PERMITIDOS.length) {

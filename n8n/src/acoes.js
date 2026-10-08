@@ -138,7 +138,8 @@ function aplicarAcao(acao, alvo, contexto) {
   if (acao.tipo === 'baixa') {
     var falta = numero(alvo.qtd_falta);
     var baixada = numero(alvo.qtd_baixada);
-    if (baixada === null || isNaN(baixada)) baixada = 0;
+    if (baixada !== null && isNaN(baixada)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
+    if (baixada === null) baixada = 0;
     if (falta === null || !isFinite(falta)) {
       return erroAcao(400, 'Item sem quantidade faltante registrada.');
     }

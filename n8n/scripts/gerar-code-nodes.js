@@ -10,6 +10,7 @@ const NODES = {
   'processar-login': 'Processar Login',
   'validar-pedido': 'Validar Pedido',
   'montar-board': 'Montar Board',
+  'pre-validar-acao': 'Pre Validar Acao',
   'processar-acao': 'Processar Acao',
   'preparar-gravacao': 'Preparar Gravacao',
   'preparar-historico': 'Preparar Historico',

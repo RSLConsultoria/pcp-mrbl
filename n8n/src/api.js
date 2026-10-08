@@ -92,6 +92,17 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   return { status: 200, body: corpo };
 }
 
+// POST /pcp-acao, antes de ler a planilha: sessao e corpo. Falha devolve o
+// mesmo { status, body } que o processarAcao daria (com ok: false para o IF);
+// sucesso = { ok: true }. O processarAcao repete as checagens.
+function preValidarAcao(estado, cabecalho, corpo, agora) {
+  var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  var v = validarAcao(corpo, sessao.perfil);
+  if (!v.ok) return { ok: false, status: v.status, body: { erro: v.erro } };
+  return { ok: true };
+}
+
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas? } (linhas da planilha).
 // Em sucesso devolve tambem "gravacao" e "historico" para os nodes de
 // escrita do workflow; o corpo da resposta ao front fica em "body".
