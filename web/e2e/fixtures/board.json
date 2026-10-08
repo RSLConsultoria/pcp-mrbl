@@ -35,7 +35,8 @@
           "obsAlmox": "",
           "obsPcp": "",
           "versao": "",
-          "editavel": true
+          "editavel": true,
+          "pedidoId": ""
         },
         {
           "id": "a2",
@@ -55,7 +56,8 @@
           "obsAlmox": "fornecedor confirmou envio",
           "obsPcp": "",
           "versao": "",
-          "editavel": true
+          "editavel": true,
+          "pedidoId": ""
         },
         {
           "id": "a3",
@@ -75,13 +77,16 @@
           "obsAlmox": "",
           "obsPcp": "",
           "versao": "",
-          "editavel": false
+          "editavel": false,
+          "pedidoId": ""
         }
       ],
       "previsao": "",
       "observacao": "",
       "versao": "2026-10-06T09:00:00.000Z",
-      "historico": []
+      "historico": [],
+      "tratativa": "",
+      "tratativaEm": ""
     },
     {
       "id": "700002",
@@ -116,13 +121,16 @@
           "obsAlmox": "",
           "obsPcp": "",
           "versao": "",
-          "editavel": true
+          "editavel": true,
+          "pedidoId": ""
         }
       ],
       "previsao": "",
       "observacao": "",
       "versao": "2026-10-06T09:00:00.000Z",
-      "historico": []
+      "historico": [],
+      "tratativa": "",
+      "tratativaEm": ""
     },
     {
       "id": "700003",
@@ -157,17 +165,43 @@
           "obsAlmox": "",
           "obsPcp": "",
           "versao": "",
-          "editavel": true
+          "editavel": true,
+          "pedidoId": ""
         }
       ],
       "previsao": "",
       "observacao": "",
       "versao": "2026-10-06T09:00:00.000Z",
-      "historico": []
+      "historico": [],
+      "tratativa": "",
+      "tratativaEm": ""
     }
   ],
   "usuarios": [
     "Lucca",
     "Maria"
+  ],
+  "pedidos": [],
+  "etapasPedido": [
+    {
+      "id": "a_pedir",
+      "nome": "A pedir",
+      "ordem": 1
+    },
+    {
+      "id": "solicitado",
+      "nome": "Solicitado",
+      "ordem": 2
+    },
+    {
+      "id": "aguardando",
+      "nome": "Aguardando entrega",
+      "ordem": 3
+    },
+    {
+      "id": "entregue",
+      "nome": "Entregue",
+      "ordem": 4
+    }
   ]
 }

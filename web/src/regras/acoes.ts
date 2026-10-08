@@ -45,7 +45,11 @@ export function passoDaData(valor: string, incompleta: boolean, aoSair: boolean)
 }
 
 // Aviso de uma linha mostrado quando o servidor aceita a ação.
-export function mensagemSucesso(acao: Acao, item?: Pick<Item, 'nome' | 'un'>): string {
+export function mensagemSucesso(
+  acao: Acao,
+  item?: Pick<Item, 'nome' | 'un'>,
+  extra: { pedidoId?: string; etapa?: string } = {}
+): string {
   const nome = item?.nome ?? 'item';
   switch (acao.tipo) {
     case 'baixa':
@@ -60,6 +64,23 @@ export function mensagemSucesso(acao: Acao, item?: Pick<Item, 'nome' | 'un'>): s
       return acao.valor ? `Previsão da caixa: ${ddmm(acao.valor)}` : 'Previsão da caixa removida';
     case 'obs_caixa':
       return acao.valor ? 'Observação da caixa salva' : 'Observação da caixa removida';
+    case 'gerar_pedido': {
+      const n = acao.itens.length;
+      const os = new Set(acao.itens.map((i) => i.dealId)).size;
+      return `${extra.pedidoId ?? 'Pedido'} gerado · ${n} ${n === 1 ? 'item' : 'itens'} · registrado em ${os} OS no Ploomes`;
+    }
+    case 'editar_pedido':
+      return `${acao.pedidoId} alterado`;
+    case 'mover_pedido':
+      return `${acao.pedidoId} movido para ${extra.etapa ?? acao.etapa}`;
+    case 'baixar_pedido':
+      return `Baixa do ${acao.pedidoId} registrada`;
+    case 'salvar_etapas':
+      return 'Etapas do quadro salvas';
+    case 'enviar_oficina':
+      return 'Caixa enviada à oficina';
+    case 'oficina_recebeu':
+      return 'Recebimento da oficina registrado';
   }
 }
 
@@ -94,7 +115,11 @@ export function ordenarHistorico(h: EntradaHistorico[]): EntradaHistorico[] {
 
 // Alvo da versão de uma ação: o item (linha da FALTANTES) ou a caixa (linha da CAIXAS_PCP).
 export function chaveDaAcao(acao: Acao): string {
-  return 'itemId' in acao ? `item:${acao.dealId}:${acao.itemId}` : `caixa:${acao.dealId}`;
+  if ('itemId' in acao) return `item:${acao.dealId}:${acao.itemId}`;
+  if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
+  if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';
+  if (acao.tipo === 'salvar_etapas') return 'etapas';
+  return `caixa:${acao.dealId}`;
 }
 
 // Ações enfileiradas antes da recarga levam a versão que a tela viu. Se a versão foi

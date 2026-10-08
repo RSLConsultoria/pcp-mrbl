@@ -50,6 +50,8 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(acao)
   });
-  if (typeof r.versao !== 'string' || !r.historico) throw new ApiError(200, 'Resposta inválida do servidor.');
-  return { versao: r.versao, historico: r.historico };
+  if (typeof r.versao !== 'string' || r.historico === undefined) throw new ApiError(200, 'Resposta inválida do servidor.');
+  const resp: RespostaAcao = { versao: r.versao, historico: r.historico };
+  if (typeof r.pedidoId === 'string') resp.pedidoId = r.pedidoId;
+  return resp;
 }
