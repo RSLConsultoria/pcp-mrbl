@@ -121,10 +121,20 @@ function ultimaAtividade(c: Caixa): string {
   return u;
 }
 
+// Caixa sem item aberto e sem tratativa: a data mais recente entre a saída, o último
+// histórico e a última baixa de item.
+function ultimaAtividadeResolvida(c: Caixa): string {
+  let u = c.saiuEm;
+  for (const h of c.historico) if (h.quando > u) u = h.quando;
+  for (const i of c.itens) if (i.resolvidoEm > u) u = i.resolvidoEm;
+  return u;
+}
+
 export interface SaidaComColuna { caixa: Caixa; coluna: ColunaDaSaida }
 
 // Caixas que saíram com falta, já com a coluna (calculada uma vez só); as concluídas
-// somem 30 dias depois da última ação.
+// somem 30 dias depois da última ação, e as resolvidas sem item aberto (nem tratativa) 30 dias
+// depois da saída, do último histórico ou da última baixa.
 export function saidasComColuna(board: Board, hoje: Date): SaidaComColuna[] {
   const pedidos = board.pedidos ?? [];
   const etapas = board.etapasPedido ?? [];
@@ -134,6 +144,10 @@ export function saidasComColuna(board: Board, hoje: Date): SaidaComColuna[] {
     const coluna = colunaSaida(c, pedidos, etapas);
     if (coluna.coluna === 'concluido') {
       const d = diasEntre(ultimaAtividade(c), hoje);
+      if (d !== null && d > DIAS_CONCLUIDO_VISIVEL) continue;
+    }
+    if (coluna.coluna === 'resolvido' && !c.tratativa && itensAbertos(c).length === 0) {
+      const d = diasEntre(ultimaAtividadeResolvida(c), hoje);
       if (d !== null && d > DIAS_CONCLUIDO_VISIVEL) continue;
     }
     out.push({ caixa: c, coluna });

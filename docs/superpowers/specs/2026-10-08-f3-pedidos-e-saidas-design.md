@@ -101,7 +101,7 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
   3. sem itens abertos (tudo baixado) → Resolvido;
   4. algum item aberto sem pedido → Sem pedido, com o selo "parcial · N de M com pedido" quando parte dos itens já tem pedido;
   5. senão → a etapa do **pedido mais atrasado** (menor ordem) entre todos os pedidos abertos (original e partes, `pedidoIds`) dos itens abertos; na última etapa → Resolvido. Pedido em etapa que não existe mais conta como a primeira etapa.
-- "Concluído" fica visível por 30 dias depois da última ação. "Resolvido" fica até a caixa ir à oficina.
+- "Concluído" fica visível por 30 dias depois da última ação. "Resolvido" fica até a caixa ir à oficina; mas a caixa sem item aberto e sem tratativa só aparece se a última atividade (saída, último histórico ou última baixa de item) for de até 30 dias, senão sai de Saídas (caixas antigas já resolvidas não se acumulam). Caixa com item aberto coberto por pedidos na última etapa aparece sempre.
 - **Card:** OS, peça, cliente, até 3 itens com o que resta e o(s) pedido(s) com a etapa (`PED-0044 · Solicitado`; pedido em etapa que saiu do quadro: `PED-0044 · Outra etapa`) ou "sem pedido", e o selo "saiu dd/mm · há N dias". Quando os pedidos da caixa estão em etapas diferentes, o selo "pedidos em etapas diferentes".
 - **Painel:** os mesmos dados mais os botões:
   - **Selecionar para pedido:** abre Solicitações com os itens da caixa já marcados (principal quando a coluna é Sem pedido);

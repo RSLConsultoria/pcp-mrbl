@@ -113,6 +113,20 @@ describe('caixasDeSaida', () => {
     });
     expect(caixasDeSaida(board([velha, recente, comHist]), hoje).map((c) => c.id)).toEqual(['r', 'h']);
   });
+  it('resolvido sem tratativa: some com mais de 30 dias de atividade (29 vs 31)', () => {
+    const sem = (extra = {}) => saiu({ itens: [item({ status: 'RESOLVIDO', resta: 0, resolvidoEm: '2026-08-01' })], ...extra });
+    const a29 = sem({ id: 'a29', saiuEm: '2026-09-09' });
+    const a31 = sem({ id: 'a31', saiuEm: '2026-09-07' });
+    const baixaRecente = sem({ id: 'b', saiuEm: '2026-08-01', itens: [item({ status: 'RESOLVIDO', resta: 0, resolvidoEm: '2026-09-09' })] });
+    const hist = sem({ id: 'h', saiuEm: '2026-08-01', historico: [{ quando: '2026-09-09T10:00:00Z', usuario: 'x', texto: 't', ploomes: 'ENVIADO' }] });
+    expect(caixasDeSaida(board([a29, a31, baixaRecente, hist]), hoje).map((c) => c.id)).toEqual(['a29', 'b', 'h']);
+  });
+  it('item aberto coberto por pedido na última etapa: sempre aparece, mesmo antiga', () => {
+    const c = saiu({ id: 'o', saiuEm: '2026-06-01', itens: [item({ pedidoId: 'PED-0001' })] });
+    const b = { ...board([c]), pedidos: [ped('PED-0001', 'z')], etapasPedido: etapas };
+    const r = saidasComColuna(b, hoje);
+    expect(r.map((x) => [x.caixa.id, x.coluna.coluna])).toEqual([['o', 'resolvido']]);
+  });
   it('saidasComColuna traz a coluna junto', () => {
     const r = saidasComColuna(board([saiu({ id: '1' }), resolvida({ id: 'r', saiuEm: '2026-09-20' })]), hoje);
     expect(r.map((x) => [x.caixa.id, x.coluna.coluna])).toEqual([['1', 'sem_pedido'], ['r', 'concluido']]);

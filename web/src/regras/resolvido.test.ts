@@ -129,12 +129,13 @@ describe('Saídas: Resolvido, Enviado à oficina e Concluído', () => {
     expect(podeEnviarOficina(saiu({ itens: [item({ pedidoId: 'PED-0001' })] }), [ped2('PED-0001', 'solicitado')], etapas)).toBe(false);
     expect(podeEnviarOficina(saiu({ itens: [item()] }), [], etapas)).toBe(false);
   });
-  it('Resolvido fica até enviar; Concluído some 30 dias depois da última ação', () => {
+  it('Resolvido fica até enviar (se recente, 30 dias); Concluído some 30 dias depois da última ação', () => {
     const hoje = new Date(2026, 9, 8);
     const board = (caixas: Board['caixas']): Board => ({ geradoEm: '', caixas, avisos: [], usuarios: [], etapasPedido: etapas });
     const baixado = { itens: [item({ status: 'RESOLVIDO', resta: 0 })], saiuEm: '2026-08-01' };
     const r = saidasComColuna(board([
-      saiu({ id: 'res', ...baixado }),
+      saiu({ id: 'res', ...baixado, itens: [item({ status: 'RESOLVIDO', resta: 0, resolvidoEm: '2026-10-01' })] }),
+      saiu({ id: 'antiga', ...baixado }),
       saiu({ id: 'velha', ...baixado, tratativa: 'RECEBIDO', tratativaEm: '2026-08-02' }),
       saiu({ id: 'nova', ...baixado, tratativa: 'RECEBIDO', tratativaEm: '2026-10-05' })
     ]), hoje);
