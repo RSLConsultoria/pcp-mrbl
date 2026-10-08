@@ -5,7 +5,9 @@ import { useTeclaEsc } from '../../hooks/useTeclaEsc';
 import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
-import { nomeLocal, nomeOrigem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel } from '../../regras/pedidos';
+import {
+  clientesDasCaixas, erroEdicaoPedido, nomeLocal, nomeOrigem, opcoesDeQuem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel
+} from '../../regras/pedidos';
 import {
   acaoEditarPedido, camposAlterados, comAlterados, entraNaUltimaEtapa, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, textoConfirmarResolvido, textoFamilia
 } from '../../regras/pedidosQuadro';
@@ -62,7 +64,10 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     })
   };
   const linhas = resumoAlteracoes(antes, depois, etapas);
-  const temErro = Object.keys(erros).length > 0;
+  const erroDados = erroEdicaoPedido(antes, depois); // não deixa limpar fornecedor/cliente nem responsável
+  const temErro = Object.keys(erros).length > 0 || erroDados !== null;
+  const clientes = clientesDasCaixas(board.caixas, pedido.itens.map((i) => i.dealId));
+  const fornecedores = board.fornecedores ?? [];
   const paraUltima = entraNaUltimaEtapa(antes.etapa, depois.etapa, etapas);
   const nomeDestino = etapas.find((e) => e.id === depois.etapa)?.nome ?? depois.etapa;
 
@@ -100,7 +105,8 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
       <div className="painel__corpo">
         {editavel ? (
           <>
-            <CamposPedido valor={form} onMudar={(v) => { setFormAlterado(camposAlterados(formInicial, v)); setConfirmando(false); }} usuarios={board.usuarios ?? []} etapas={etapas} />
+            <CamposPedido valor={form} onMudar={(v) => { setFormAlterado(camposAlterados(formInicial, v)); setConfirmando(false); }}
+              fornecedores={fornecedores} clientes={clientes} responsaveis={board.responsaveis ?? []} etapas={etapas} />
             <section className="secao">
               <h3 className="secao__titulo">Itens do pedido <span>{pedido.itens.length}</span></h3>
               <ul className="linhas-itens">
@@ -109,7 +115,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                   return (
                     <LinhaItemPedido key={i.itemId} os={i.os} nome={i.nome} un={i.un}
                       detalhe={Number.isFinite(resta) ? `resta ${qtdComUn(resta, i.un)} na caixa` : ''}
-                      valor={textos[i.itemId]} erro={erros[i.itemId]}
+                      valor={textos[i.itemId]} erro={erros[i.itemId]} fornecedores={opcoesDeQuem(form.origem, fornecedores, clientes)}
                       onMudar={(v) => { setTextosAlterados((t) => ({ ...t, [i.itemId]: camposAlterados(textosIniciais[i.itemId], v) })); setConfirmando(false); }} />
                   );
                 })}
@@ -122,6 +128,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                 onConfirmar={gravar} onCancelar={() => setConfirmando(false)} />
             ) : (
               <div className="acoes">
+                {erroDados && <p className="campo__erro" role="alert">{erroDados}</p>}
                 <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro} onClick={salvar}>
                   {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
                 </button>

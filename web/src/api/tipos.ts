@@ -55,7 +55,7 @@ export interface Caixa {
 }
 
 export type OrigemPedido = 'FORNECEDOR' | 'CLIENTE';
-export type LocalPedido = 'BRAGANCA' | 'SAO_PAULO';
+export type LocalPedido = 'BRAGANCA' | 'SAO_PAULO' | 'OFICINA' | 'CLIENTE';
 
 export interface ItemPedido {
   itemId: string;
@@ -101,6 +101,8 @@ export interface Board {
   dealsEditaveis?: string[]; // vazio ou ausente = todas as caixas editáveis
   pedidos?: Pedido[];
   etapasPedido?: EtapaPedido[];
+  fornecedores?: string[]; // aba FORNECEDORES: ativos, em ordem (opções do pedido)
+  responsaveis?: string[]; // aba RESPONSAVEIS: ativos, em ordem (responsável do pedido)
 }
 
 // Corpo do POST /pcp-acao.

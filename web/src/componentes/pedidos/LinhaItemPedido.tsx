@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { opcoesComAtual } from '../../regras/pedidos';
 import { Icone } from '../Icone';
 
 // previsao: só a do item ('' = igual à do pedido); ausente = linha sem o campo.
@@ -12,12 +13,13 @@ interface Props {
   detalhe: string; // ex.: "resta 26 UN"
   valor: TextoItem;
   erro?: string;
+  fornecedores: string[]; // opções do fornecedor do item (as mesmas do pedido)
   onMudar: (v: TextoItem) => void;
   onRemover?: () => void; // só na janela Gerar pedido
 }
 
 // Uma linha de item com quantidade, fornecedor e previsão editáveis (janela Gerar pedido e painel do pedido).
-export function LinhaItemPedido({ os, nome, cor, un, detalhe, valor, erro, onMudar, onRemover }: Props) {
+export function LinhaItemPedido({ os, nome, cor, un, detalhe, valor, erro, fornecedores, onMudar, onRemover }: Props) {
   const id = useId();
   const comPrevisao = valor.previsao !== undefined;
   return (
@@ -35,8 +37,11 @@ export function LinhaItemPedido({ os, nome, cor, un, detalhe, valor, erro, onMud
         </div>
         <div className="campo">
           <label htmlFor={`${id}-forn`}>Fornecedor do item</label>
-          <input id={`${id}-forn`} type="text" maxLength={100} value={valor.fornecedor} placeholder="Igual ao do pedido"
-            aria-label={`Fornecedor do item ${nome}`} onChange={(e) => onMudar({ ...valor, fornecedor: e.target.value })} />
+          <select id={`${id}-forn`} value={valor.fornecedor}
+            aria-label={`Fornecedor do item ${nome}`} onChange={(e) => onMudar({ ...valor, fornecedor: e.target.value })}>
+            <option value="">Igual ao do pedido</option>
+            {opcoesComAtual(fornecedores, valor.fornecedor).map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
         </div>
         {comPrevisao && (
           <div className="campo campo--previsao">

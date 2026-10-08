@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { Acao } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { arredondar3, lerQuantidade, mensagemSucesso } from '../../regras/acoes';
-import { validarGerarPedido } from '../../regras/pedidos';
+import { clientesDasCaixas, erroDadosPedido, opcoesDeQuem, validarGerarPedido } from '../../regras/pedidos';
 import { chaveItem, itensQueSairam, textoItensQueSairam, type ItemSelecionado } from '../../regras/pedidosQuadro';
 import { formatarQtd, quantidadeParaCampo } from '../../regras/quantidade';
 import { Janela } from '../Janela';
@@ -12,7 +12,8 @@ import { LinhaItemPedido, type TextoItem } from './LinhaItemPedido';
 
 interface Props {
   itens: ItemSelecionado[]; // refeitos a cada recarga do board: só os marcados que ainda podem entrar num pedido
-  usuarios: string[];
+  fornecedores: string[]; // aba FORNECEDORES (board)
+  responsaveis: string[]; // aba RESPONSAVEIS (board)
   executar: Executar;
   onRemover: (chave: string) => void;
   onGerado: (chaves: string[]) => void; // o servidor gravou: tira estes itens da marcação
@@ -22,7 +23,7 @@ interface Props {
 const chaveDe = ({ caixa, item }: ItemSelecionado) => chaveItem(caixa.dealId, item.id);
 const textoInicial = ({ item }: ItemSelecionado): TextoItem => ({ qtd: quantidadeParaCampo(item.resta), fornecedor: '', previsao: '' });
 
-export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGerado, onFechar }: Props) {
+export function JanelaGerarPedido({ itens, fornecedores, responsaveis, executar, onRemover, onGerado, onFechar }: Props) {
   // Itens que estavam na lista ao abrir: se a recarga do board mostra que algum deles entrou
   // em outro pedido (ou foi resolvido) com a janela aberta, ele sai da lista com uma nota.
   const [iniciais] = useState(() => itens.map(chaveDe));
@@ -32,12 +33,16 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
   const [form, setForm] = useState<FormPedido>({ origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '' });
   const [textos, setTextos] = useState<Record<string, TextoItem>>(() => Object.fromEntries(itens.map((x) => [chaveDe(x), textoInicial(x)])));
   const [tentou, setTentou] = useState(false);
+  const idErro = useId();
 
   const textoDe = (x: ItemSelecionado) => textos[chaveDe(x)] ?? textoInicial(x);
   const selecao = itens.map(({ caixa, item }) => ({ itemId: chaveItem(caixa.dealId, item.id), un: item.un, resta: item.resta }));
   const erros = validarGerarPedido(selecao, Object.fromEntries(itens.map((x) => [chaveDe(x), textoDe(x).qtd])));
   const temErro = Object.keys(erros).length > 0;
   const sairam = textoItensQueSairam(itensQueSairam(iniciais, itens, removidos));
+  const clientes = clientesDasCaixas(itens.map((x) => x.caixa), itens.map((x) => x.caixa.dealId));
+  const opcoesItem = opcoesDeQuem(form.origem, fornecedores, clientes);
+  const erroDados = erroDadosPedido(form); // fornecedor/cliente e responsável obrigatórios
 
   function remover(chave: string, indice: number) {
     const janela = lista.current?.closest<HTMLElement>('[role="dialog"]');
@@ -52,6 +57,7 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
   }
 
   function gerar() {
+    if (erroDados) return;
     setTentou(true);
     if (temErro) {
       lista.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus();
@@ -79,11 +85,16 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
     <Janela titulo="Gerar pedido" sobretitulo="Novo pedido" larga onFechar={onFechar}
       voltarFoco={() => (gerado.current ? focoDepoisDeGerar() : null)}
       rodape={<>
-        <span className="janela__nota">
-          {itens.length} {itens.length === 1 ? 'item' : 'itens'} de {nOs} OS · cada OS recebe um registro no Ploomes.
-        </span>
+        {erroDados && itens.length > 0 ? (
+          <span id={idErro} className="janela__nota janela__nota--erro">{erroDados}</span>
+        ) : (
+          <span className="janela__nota">
+            {itens.length} {itens.length === 1 ? 'item' : 'itens'} de {nOs} OS · as ações entram no registro do Ploomes de cada OS.
+          </span>
+        )}
         <button type="button" className="botao botao--leve" onClick={onFechar}>Cancelar</button>
-        <button type="button" className="botao botao--signal" disabled={itens.length === 0} onClick={gerar}>Confirmar e gerar</button>
+        <button type="button" className="botao botao--signal" disabled={itens.length === 0 || erroDados !== null}
+          aria-describedby={erroDados && itens.length > 0 ? idErro : undefined} onClick={gerar}>Confirmar e gerar</button>
       </>}>
       {sairam && <p className="janela__aviso" role="status">{sairam}</p>}
       {itens.length === 0 ? <p className="vazio">Nenhum item selecionado. Marque itens em Faltas sem pedido.</p> : (
@@ -94,14 +105,14 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
             return (
               <LinhaItemPedido key={k} os={caixa.os} nome={item.nome} cor={item.cor} un={item.un}
                 detalhe={`falta ${formatarQtd(item.resta, item.un, item.restaG)}`}
-                valor={textoDe(x)} erro={tentou ? erros[k] : undefined}
+                valor={textoDe(x)} erro={tentou ? erros[k] : undefined} fornecedores={opcoesItem}
                 onMudar={(v) => setTextos((t) => ({ ...t, [k]: v }))}
                 onRemover={() => remover(k, indice)} />
             );
           })}
         </ul>
       )}
-      <CamposPedido valor={form} onMudar={setForm} usuarios={usuarios} />
+      <CamposPedido valor={form} onMudar={setForm} fornecedores={fornecedores} clientes={clientes} responsaveis={responsaveis} />
     </Janela>
   );
 }

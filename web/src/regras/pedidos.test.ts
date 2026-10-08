@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Acao, Board, DadosPedido, EtapaPedido, Pedido } from '../api/tipos';
 import { mensagemSucesso } from './acoes';
 import {
-  faltasSemPedido, filtrarPedidos, quemDoPedido, resumoAlteracoes, ultimaEtapa, validarEtapas,
+  clientesDasCaixas, erroDadosPedido, erroEdicaoPedido, faltasSemPedido, filtrarPedidos, nomeLocal, opcoesComAtual, quemAoTrocarOrigem, quemDoPedido, resumoAlteracoes, ultimaEtapa, validarEtapas,
   validarGerarPedido, type EstadoEditavel
 } from './pedidos';
 import { caixa, item } from './teste-util';
@@ -118,5 +118,43 @@ describe('mensagemSucesso dos pedidos', () => {
     expect(mensagemSucesso({ tipo: 'enviar_oficina', dealId: '1', versao: '' })).toBe('Caixa enviada à oficina');
     expect(mensagemSucesso({ tipo: 'oficina_recebeu', dealId: '1', versao: '' })).toBe('Recebimento da oficina registrado');
     expect(mensagemSucesso({ tipo: 'salvar_etapas', etapas: [] })).toBe('Etapas do quadro salvas');
+  });
+});
+
+describe('fornecedor, cliente, responsável e local do pedido', () => {
+  it('fornecedor (ou cliente) e responsável obrigatórios', () => {
+    expect(erroDadosPedido({ origem: 'FORNECEDOR', quem: '', responsavel: 'Gi' })).toBe('Escolha o fornecedor.');
+    expect(erroDadosPedido({ origem: 'CLIENTE', quem: ' ', responsavel: 'Gi' })).toBe('Escolha o cliente.');
+    expect(erroDadosPedido({ origem: 'FORNECEDOR', quem: 'BETA', responsavel: '' })).toBe('Escolha o responsável.');
+    expect(erroDadosPedido({ origem: 'FORNECEDOR', quem: '', responsavel: '' })).toBe('Escolha o fornecedor e o responsável.');
+    expect(erroDadosPedido({ origem: 'CLIENTE', quem: 'ALFA', responsavel: 'Gi' })).toBeNull();
+  });
+  it('editar: não deixa limpar, mas pedido antigo sem fornecedor/responsável pode seguir assim', () => {
+    const a = { origem: 'FORNECEDOR' as const, quem: 'BETA', responsavel: 'Gi' };
+    expect(erroEdicaoPedido(a, { ...a, quem: '' })).toBe('Escolha o fornecedor.');
+    expect(erroEdicaoPedido(a, { ...a, origem: 'CLIENTE', quem: '' })).toBe('Escolha o cliente.');
+    expect(erroEdicaoPedido(a, { ...a, responsavel: '' })).toBe('Escolha o responsável.');
+    expect(erroEdicaoPedido(a, a)).toBeNull();
+    const antigo = { origem: 'FORNECEDOR' as const, quem: '', responsavel: '' };
+    expect(erroEdicaoPedido(antigo, antigo)).toBeNull();
+  });
+  it('valor que não está mais na lista continua como opção', () => {
+    expect(opcoesComAtual(['A', 'B'], 'X')).toEqual(['X', 'A', 'B']);
+    expect(opcoesComAtual(['A', 'B'], 'B')).toEqual(['A', 'B']);
+    expect(opcoesComAtual(['A', 'B'], '')).toEqual(['A', 'B']);
+  });
+  it('clientes das OSs: sem repetir, sem vazio, em ordem', () => {
+    const cx = [caixa({ dealId: '1', cliente: 'GAMA' }), caixa({ dealId: '2', cliente: 'ALFA' }), caixa({ dealId: '3', cliente: 'GAMA' }), caixa({ dealId: '4', cliente: '' })];
+    expect(clientesDasCaixas(cx, ['1', '2', '3', '4'])).toEqual(['ALFA', 'GAMA']);
+    expect(clientesDasCaixas(cx, ['3'])).toEqual(['GAMA']);
+  });
+  it('trocar Solicitar a: mantém o nome se ele está na lista nova; com uma opção só, já escolhe', () => {
+    expect(quemAoTrocarOrigem('BETA', ['ALFA', 'BETA'])).toBe('BETA');
+    expect(quemAoTrocarOrigem('BETA', ['ALFA', 'GAMA'])).toBe('');
+    expect(quemAoTrocarOrigem('BETA', ['ALFA'])).toBe('ALFA');
+  });
+  it('locais novos: Oficina e Cliente', () => {
+    expect(nomeLocal('OFICINA')).toBe('Oficina');
+    expect(nomeLocal('CLIENTE')).toBe('Cliente');
   });
 });

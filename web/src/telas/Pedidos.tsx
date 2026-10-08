@@ -55,7 +55,8 @@ export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela,
         )}
       </div>
       {janela === 'gerar' && (
-        <JanelaGerarPedido itens={selecionados} usuarios={board.usuarios ?? []} executar={executar}
+        <JanelaGerarPedido itens={selecionados} fornecedores={board.fornecedores ?? []} responsaveis={board.responsaveis ?? []}
+          executar={executar}
           onRemover={(k) => marcar([k], false)} onGerado={(chaves) => onSelecao((s) => {
             const resto = new Set(s);
             for (const k of chaves) resto.delete(k);

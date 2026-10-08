@@ -49,6 +49,12 @@ async function preparar(page: Page, hash: string, opts: Opcoes = {}): Promise<Mo
 }
 
 const aviso = (page: Page, texto: string | RegExp) => page.getByRole('status').filter({ hasText: texto });
+// Fornecedor e responsável são obrigatórios no Gerar pedido.
+async function preencherObrigatorios(page: Page, fornecedor = 'TECIDOS BETA', responsavel = 'Gi') {
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  await janela.getByLabel('Fornecedor', { exact: true }).selectOption(fornecedor);
+  await janela.getByLabel('Responsável').selectOption(responsavel);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-07T12:00:00-03:00'));
@@ -63,20 +69,20 @@ test('gerar pedido com 2 itens de OS diferentes envia o corpo certo', async ({ p
   await page.getByRole('button', { name: 'Gerar pedido' }).click();
   const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
   await janela.getByLabel('Quantidade (UN) de TAG CUIDADOS PADRÃO').fill('20');
-  await janela.getByLabel('Fornecedor do item ZÍPER METAL MÉDIO FIXO CA 18CM').fill('ZIPERES GAMA');
+  await janela.getByLabel('Fornecedor do item ZÍPER METAL MÉDIO FIXO CA 18CM').selectOption('ZIPERES GAMA');
   await janela.getByLabel('Previsão de ZÍPER METAL MÉDIO FIXO CA 18CM').fill('2026-10-25');
   await janela.getByLabel('Solicitar a').selectOption('FORNECEDOR');
-  await janela.getByLabel('Fornecedor', { exact: true }).fill('TECIDOS BETA');
+  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('TECIDOS BETA');
   await janela.getByLabel('Local de entrega').selectOption('SAO_PAULO');
   await janela.getByLabel('Previsão de entrega').fill('2026-10-20');
-  await janela.getByLabel('Responsável').selectOption('Maria');
+  await janela.getByLabel('Responsável').selectOption('Gi');
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
   await expect(aviso(page, /PED-0001 gerado · 2 itens · registrado em 2 OS no Ploomes/)).toBeVisible();
   await expect(janela).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Faltas sem pedido' })).toBeFocused();
   expect(mock.bodies).toHaveLength(1);
   const corpo = mock.bodies[0] as { itens: Corpo[] } & Corpo;
-  expect(corpo).toMatchObject({ tipo: 'gerar_pedido', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-20', responsavel: 'Maria' });
+  expect(corpo).toMatchObject({ tipo: 'gerar_pedido', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-20', responsavel: 'Gi' });
   expect(corpo.itens).toHaveLength(2);
   expect(corpo.itens).toEqual(expect.arrayContaining([
     { itemId: 'a2', dealId: '700001', qtd: 20, fornecedor: '', previsao: '' },
@@ -384,6 +390,7 @@ test('gerar pedido recusado com 409: a janela já fechou; mostra a mensagem do s
   await faltas.getByRole('checkbox', { name: /ZÍPER METAL/ }).check();
   await page.getByRole('button', { name: 'Gerar pedido' }).click();
   const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  await preencherObrigatorios(page);
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
   await expect(janela).toHaveCount(0);
   await expect(aviso(page, 'Item já está no PED-0003.')).toBeVisible();
@@ -394,6 +401,7 @@ test('gerar pedido recusado com 409: a janela já fechou; mostra a mensagem do s
   await expect(janela.getByLabel('Quantidade (UN) de ZÍPER METAL MÉDIO FIXO CA 18CM')).toHaveCount(0);
   await janela.getByRole('button', { name: 'Remover LINHA 120 RESISTENTE 335 da lista' }).click();
   await expect(janela.getByLabel(/Quantidade .* de LINHA 120/)).toHaveCount(0);
+  await preencherObrigatorios(page);
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
   await expect(janela).toHaveCount(0);
   await expect(aviso(page, /PED-0001 gerado · 1 item/)).toBeVisible();
@@ -511,4 +519,60 @@ test('dividir pedido: quantidade acima da do pedido mostra o erro no painel e n�
   await divisao.getByRole('button', { name: 'Cancelar' }).click();
   await expect(painel.getByRole('button', { name: 'Dividir pedido' })).toBeFocused();
   expect(mock.bodies).toHaveLength(0);
+});
+
+test('Gerar pedido: fornecedor e responsável obrigatórios, escolhidos em listas', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos');
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
+  await page.getByRole('button', { name: 'Gerar pedido' }).click();
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  const confirmar = janela.getByRole('button', { name: 'Confirmar e gerar' });
+  await expect(confirmar).toBeDisabled();
+  await expect(janela).toContainText('Escolha o fornecedor e o responsável.');
+  await expect(janela.getByLabel('Fornecedor', { exact: true }).locator('option')).toHaveText(['Selecione…', 'AVIAMENTOS DELTA', 'TECIDOS BETA', 'ZIPERES GAMA']);
+  await expect(janela.getByLabel('Fornecedor do item TAG CUIDADOS PADRÃO').locator('option')).toHaveText(['Igual ao do pedido', 'AVIAMENTOS DELTA', 'TECIDOS BETA', 'ZIPERES GAMA']);
+  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('AVIAMENTOS DELTA');
+  await expect(janela).toContainText('Escolha o responsável.');
+  await expect(confirmar).toBeDisabled();
+  await expect(janela.getByLabel('Responsável').locator('option')).toHaveText(['Selecione…', 'Cesar', 'Fátima', 'Gi', 'Luana', 'Lucca', 'Renata']);
+  await janela.getByLabel('Responsável').selectOption('Fátima');
+  await expect(janela).toContainText('1 item de 1 OS · as ações entram no registro do Ploomes de cada OS.');
+  await expect(janela.getByLabel('Local de entrega').locator('option')).toHaveText(['Bragança', 'São Paulo', 'Oficina', 'Cliente']);
+  await janela.getByLabel('Local de entrega').selectOption('OFICINA');
+  await confirmar.click();
+  await expect(aviso(page, /PED-0001 gerado/)).toBeVisible();
+  expect(mock.bodies[0]).toMatchObject({ quem: 'AVIAMENTOS DELTA', responsavel: 'Fátima', local: 'OFICINA' });
+});
+
+test('Gerar pedido para o cliente: as opções são os clientes das OSs marcadas', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos');
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
+  await page.getByRole('button', { name: 'Gerar pedido' }).click();
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('TECIDOS BETA');
+  await janela.getByLabel('Solicitar a').selectOption('CLIENTE');
+  // uma OS só: o cliente dela já vem escolhido
+  await expect(janela.getByLabel('Cliente', { exact: true })).toHaveValue('CLIENTE BETA');
+  await expect(janela.getByLabel('Cliente', { exact: true }).locator('option')).toHaveText(['CLIENTE BETA']);
+  await expect(janela.getByLabel('Fornecedor do item TAG CUIDADOS PADRÃO').locator('option')).toHaveText(['Igual ao do pedido', 'CLIENTE BETA']);
+  await janela.getByLabel('Responsável').selectOption('Gi');
+  await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
+  await expect(aviso(page, /PED-0001 gerado/)).toBeVisible();
+  expect(mock.bodies[0]).toMatchObject({ origem: 'CLIENTE', quem: 'CLIENTE BETA', responsavel: 'Gi' });
+});
+
+test('painel: Responsável vem da lista de responsáveis e mostra o atual mesmo fora dela', async ({ page }) => {
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'a_pedir', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
+  });
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
+  await expect(painel.getByLabel('Responsável')).toHaveValue('Maria');
+  await expect(painel.getByLabel('Responsável').locator('option')).toHaveText(['Maria', 'Cesar', 'Fátima', 'Gi', 'Luana', 'Lucca', 'Renata']);
+  await expect(painel.getByLabel('Fornecedor', { exact: true })).toHaveValue('TECIDOS BETA');
+  // trocar para Cliente: o cliente da única OS do pedido já vem escolhido
+  await painel.getByLabel('Solicitar a').selectOption('CLIENTE');
+  await expect(painel.getByLabel('Cliente', { exact: true })).toHaveValue('CLIENTE BETA');
 });

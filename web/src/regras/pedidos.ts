@@ -61,9 +61,52 @@ export function quemDoPedido(p: Pick<Pedido, 'quem' | 'itens'>): string {
 }
 
 const NOME_ORIGEM = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' } as const;
-const NOME_LOCAL = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo' } as const;
+export const NOME_LOCAL: Record<DadosPedido['local'], string> = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
 export const nomeOrigem = (o: DadosPedido['origem']): string => NOME_ORIGEM[o];
-export const nomeLocal = (l: DadosPedido['local']): string => NOME_LOCAL[l];
+export const nomeLocal = (l: DadosPedido['local']): string => NOME_LOCAL[l] ?? l;
+
+// Fornecedor (ou cliente, quando "Solicitar a" = Cliente) e responsável são obrigatórios.
+// Mesma regra do servidor (n8n/src/pedidos.js); null = tudo certo.
+export function erroDadosPedido(d: Pick<DadosPedido, 'origem' | 'quem' | 'responsavel'>): string | null {
+  const quem = d.origem === 'CLIENTE' ? 'o cliente' : 'o fornecedor';
+  const semQuem = d.quem.trim() === '';
+  const semResp = d.responsavel.trim() === '';
+  if (semQuem && semResp) return `Escolha ${quem} e o responsável.`;
+  if (semQuem) return `Escolha ${quem}.`;
+  return semResp ? 'Escolha o responsável.' : null;
+}
+
+// Editar: só recusa limpar o que estava preenchido (pedido antigo sem fornecedor ou sem
+// responsável continua editável).
+type Obrigatorios = Pick<DadosPedido, 'origem' | 'quem' | 'responsavel'>;
+export function erroEdicaoPedido(antes: Obrigatorios, depois: Obrigatorios): string | null {
+  const limpou = (k: 'quem' | 'responsavel') => depois[k].trim() === '' && antes[k].trim() !== '';
+  return erroDadosPedido({ origem: depois.origem, quem: limpou('quem') ? '' : '-', responsavel: limpou('responsavel') ? '' : '-' });
+}
+
+// Opções de uma lista com o valor atual na frente, quando ele não está mais nela
+// (fornecedor desativado, nome antigo digitado à mão).
+export function opcoesComAtual(lista: string[], atual: string): string[] {
+  return atual === '' || lista.includes(atual) ? lista : [atual, ...lista];
+}
+
+// Clientes das OSs (caixa.cliente): as opções de "Cliente" quando o pedido é para o cliente.
+export function clientesDasCaixas(caixas: Pick<Caixa, 'dealId' | 'cliente'>[], dealIds: string[]): string[] {
+  const deals = new Set(dealIds);
+  const nomes = caixas.filter((c) => deals.has(c.dealId)).map((c) => c.cliente.trim()).filter((n) => n !== '');
+  return [...new Set(nomes)].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+// Opções de "Fornecedor"/"Cliente" (e do fornecedor do item) conforme "Solicitar a".
+export const opcoesDeQuem = (origem: DadosPedido['origem'], fornecedores: string[], clientes: string[]): string[] =>
+  origem === 'CLIENTE' ? clientes : fornecedores;
+
+// Ao trocar "Solicitar a", o nome escolhido só fica se existir na lista nova; com uma
+// opção só (um cliente), ela já vem escolhida.
+export function quemAoTrocarOrigem(quem: string, opcoes: string[]): string {
+  if (opcoes.includes(quem)) return quem;
+  return opcoes.length === 1 ? opcoes[0] : '';
+}
 
 export interface EstadoEditavel {
   etapa: string;

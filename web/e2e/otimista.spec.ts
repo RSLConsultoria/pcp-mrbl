@@ -164,7 +164,10 @@ test('gerar pedido: a janela fecha na hora e o pedido entra como "salvando…"',
   const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
   await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
   await page.getByRole('button', { name: 'Gerar pedido' }).click();
-  await page.getByRole('dialog', { name: 'Gerar pedido' }).getByRole('button', { name: 'Confirmar e gerar' }).click();
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('TECIDOS BETA');
+  await janela.getByLabel('Responsável').selectOption('Gi');
+  await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
   await expect(page.getByRole('dialog', { name: 'Gerar pedido' })).toHaveCount(0);
   const novo = page.getByRole('region', { name: 'A pedir' }).getByRole('article', { name: 'Pedido Novo pedido' });
   await expect(novo).toContainText('salvando…');
