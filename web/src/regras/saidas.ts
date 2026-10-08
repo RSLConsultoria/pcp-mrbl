@@ -1,6 +1,6 @@
-import type { Board, Caixa, EtapaPedido, Pedido } from '../api/tipos';
+import type { Board, Caixa, EtapaPedido, Item, Pedido } from '../api/tipos';
 import { itensAbertos } from './colunas';
-import { diasEntre } from './datas';
+import { ddmm, diasEntre, textoDias } from './datas';
 
 export type ColunaSaidaId = 'sem_tratativa' | 'aguardando' | 'almoxarifado' | 'enviado' | 'resolvido';
 
@@ -9,7 +9,7 @@ export const COLUNAS_SAIDA: { id: ColunaSaidaId; nome: string; cor: string; vazi
   { id: 'aguardando', nome: 'Aguardando material', cor: 'var(--falta)', vazio: 'Nenhuma caixa esperando material.' },
   { id: 'almoxarifado', nome: 'Material no almoxarifado', cor: 'var(--signal)', vazio: 'Quando o pedido chega, a caixa vem para cá.' },
   { id: 'enviado', nome: 'Enviado à oficina', cor: 'var(--navy)', vazio: 'Nenhuma caixa enviada à oficina.' },
-  { id: 'resolvido', nome: 'Resolvido', cor: 'var(--ok)', vazio: 'Caixas resolvidas ficam aqui por 30 dias.' }
+  { id: 'resolvido', nome: 'Resolvido', cor: 'var(--success)', vazio: 'Caixas resolvidas ficam aqui por 30 dias.' }
 ];
 
 const DIAS_RESOLVIDO_VISIVEL = 30;
@@ -66,4 +66,34 @@ export function diasDesdeSaida(c: Pick<Caixa, 'saiuEm'>, hoje: Date): number | n
 
 export function seloSaidaVermelho(dias: number | null): boolean {
   return dias !== null && dias >= DIAS_SELO_VERMELHO;
+}
+
+// "PED-0044 · Solicitado" quando o item está num pedido aberto; senão "sem pedido".
+export function textoPedidoDoItem(i: Pick<Item, 'pedidoId'>, pedidos: Pedido[], etapas: EtapaPedido[]): string {
+  if (!i.pedidoId) return 'sem pedido';
+  const p = pedidos.find((x) => x.id === i.pedidoId);
+  const etapa = p && etapas.find((e) => e.id === p.etapa)?.nome;
+  return etapa ? `${i.pedidoId} · ${etapa}` : i.pedidoId;
+}
+
+// "saiu 18/09 · há 19 dias".
+export function textoSaiu(c: Pick<Caixa, 'saiuEm'>, hoje: Date): string {
+  if (!c.saiuEm) return 'saiu';
+  return `saiu ${ddmm(c.saiuEm)} · ${textoDias(diasDesdeSaida(c, hoje))}`;
+}
+
+export function textoParcial(p: { com: number; total: number }): string {
+  return `parcial · ${p.com} de ${p.total} com pedido`;
+}
+
+export function textoTratativa(c: Pick<Caixa, 'tratativa' | 'tratativaEm'>): string {
+  const em = c.tratativaEm ? ` em ${ddmm(c.tratativaEm)}` : '';
+  if (c.tratativa === 'ENVIADO') return `Enviado à oficina${em}`;
+  if (c.tratativa === 'RECEBIDO') return `Oficina recebeu${em}`;
+  return 'Ainda não enviado à oficina';
+}
+
+// Itens da caixa que podem entrar num pedido novo: abertos, editáveis e sem pedido.
+export function itensParaPedido(c: Caixa): Item[] {
+  return itensAbertos(c).filter((i) => i.editavel && i.pedidoId === '');
 }

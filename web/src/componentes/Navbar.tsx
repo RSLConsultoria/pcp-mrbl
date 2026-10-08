@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { horaMinuto } from '../regras/datas';
+import type { Tela } from '../regras/telas';
 import { iniciais } from '../regras/texto';
 import { Icone, type NomeIcone } from './Icone';
 
-const GUIAS: { nome: string; icone: NomeIcone; ativa: boolean }[] = [
-  { nome: 'No Ploomes', icone: 'produtos', ativa: true },
-  { nome: 'Saídas com falta', icone: 'bell', ativa: false },
-  { nome: 'Solicitações de faltas', icone: 'propostas', ativa: false },
-  { nome: 'Controle de produção', icone: 'funil', ativa: false },
-  { nome: 'Visão das peças', icone: 'doc', ativa: false }
+// tela ausente = guia ainda desabilitada.
+const GUIAS: { nome: string; icone: NomeIcone; tela?: Tela }[] = [
+  { nome: 'No Ploomes', icone: 'produtos', tela: 'ploomes' },
+  { nome: 'Saídas com falta', icone: 'bell', tela: 'saidas' },
+  { nome: 'Solicitações de faltas', icone: 'propostas', tela: 'pedidos' },
+  { nome: 'Controle de produção', icone: 'funil' },
+  { nome: 'Visão das peças', icone: 'doc' }
 ];
 
-export function Navbar({ nome, geradoEm, onSair }: { nome: string; geradoEm?: string; onSair: () => void }) {
+interface Props { nome: string; geradoEm?: string; tela: Tela; onTela: (t: Tela) => void; onSair: () => void }
+
+export function Navbar({ nome, geradoEm, tela, onTela, onSair }: Props) {
   const [menu, setMenu] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -41,8 +45,9 @@ export function Navbar({ nome, geradoEm, onSair }: { nome: string; geradoEm?: st
       </div>
       <nav className="soc-modnav" aria-label="Módulos" style={{ '--mc': 'var(--signal)' } as CSSProperties}>
         {GUIAS.map((g) => (
-          <button key={g.nome} type="button" className="soc-modnav__item" disabled={!g.ativa}
-            aria-current={g.ativa ? 'page' : undefined} title={g.ativa ? undefined : 'Em breve'}>
+          <button key={g.nome} type="button" className="soc-modnav__item" disabled={!g.tela}
+            aria-current={g.tela === tela ? 'page' : undefined} title={g.tela ? undefined : 'Em breve'}
+            onClick={() => g.tela && onTela(g.tela)}>
             <Icone nome={g.icone} />
             <span>{g.nome}</span>
           </button>

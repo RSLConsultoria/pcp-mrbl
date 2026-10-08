@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Board, EtapaPedido, Pedido } from '../api/tipos';
-import { caixasDeSaida, colunaSaida, diasDesdeSaida, seloSaidaVermelho } from './saidas';
+import { caixasDeSaida, colunaSaida, diasDesdeSaida, itensParaPedido, seloSaidaVermelho, textoParcial, textoPedidoDoItem, textoSaiu, textoTratativa } from './saidas';
 import { caixa, item } from './teste-util';
 
 const etapas: EtapaPedido[] = [
@@ -68,5 +68,20 @@ describe('selo de dias', () => {
     expect(seloSaidaVermelho(6)).toBe(false);
     expect(seloSaidaVermelho(7)).toBe(true);
     expect(seloSaidaVermelho(null)).toBe(false);
+  });
+});
+
+describe('textos de Saídas', () => {
+  it('pedido do item, saída, parcial e tratativa', () => {
+    expect(textoPedidoDoItem(item({ pedidoId: 'PED-0001' }), [ped('PED-0001', 'z')], etapas)).toBe('PED-0001 · Z');
+    expect(textoPedidoDoItem(item(), [], etapas)).toBe('sem pedido');
+    expect(textoSaiu({ saiuEm: '2026-09-18' }, new Date(2026, 9, 7))).toBe('saiu 18/09 · há 19 dias');
+    expect(textoParcial({ com: 1, total: 3 })).toBe('parcial · 1 de 3 com pedido');
+    expect(textoTratativa({ tratativa: 'ENVIADO', tratativaEm: '2026-10-05' })).toBe('Enviado à oficina em 05/10');
+    expect(textoTratativa({ tratativa: '', tratativaEm: '' })).toBe('Ainda não enviado à oficina');
+  });
+  it('itens para pedido: abertos, editáveis e sem pedido', () => {
+    const c = saiu({ itens: [item({ id: 'a' }), item({ id: 'b', pedidoId: 'PED-0001' }), item({ id: 'c', editavel: false }), item({ id: 'd', status: 'RESOLVIDO', resta: 0 })] });
+    expect(itensParaPedido(c).map((i) => i.id)).toEqual(['a']);
   });
 });

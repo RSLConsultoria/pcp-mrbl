@@ -1,0 +1,126 @@
+/* F3: Saídas com falta e Solicitações de faltas. Mesma direção do app.css:
+   fundo frio, cards brancos com faixa à esquerda, ouro só no botão principal. */
+
+/* Ações da barra (à direita da busca) */
+.barra__direita { margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.barra__direita .legenda { margin-left: 0; }
+.segmentado { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--canvas); }
+.segmentado button { height: 30px; padding: 0 12px; border: 0; border-radius: 3px; background: transparent; font: 600 13px var(--font-sans); color: var(--suave); cursor: pointer; white-space: nowrap; }
+.segmentado button:hover { color: var(--texto); }
+.segmentado button[aria-pressed="true"] { background: #fff; color: var(--texto); box-shadow: 0 1px 2px rgba(18,26,58,.12); }
+.segmentado button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+.botao--contorno { background: #fff; color: var(--texto); border: 1px solid var(--borda); }
+.botao--contorno:not(:disabled):hover { border-color: #CBD0DC; background: var(--canvas); }
+.botao--icone { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.botao--icone svg { color: var(--suave); }
+
+/* Cards de Saídas e de pedidos */
+.card[draggable="true"] { cursor: grab; }
+.card[draggable="true"]:active { cursor: grabbing; }
+.card__selos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.selo-dias { padding: 2px 8px; border-radius: 999px; background: var(--canvas); font-size: 12px; font-weight: 600; color: var(--suave); font-variant-numeric: tabular-nums; }
+.selo-dias--atrasado { background: var(--erro-bg); color: var(--erro-text); }
+.card__item--duplo { flex-direction: column; align-items: stretch; gap: 2px; }
+.card__item-linha { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.card__pedido { font-size: 12px; font-weight: 600; color: var(--navy); }
+.card__pedido--sem { color: var(--falta); font-weight: 500; }
+.card__item-meta { flex: none; color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.selo-origem { flex: none; padding: 2px 9px; border-radius: 999px; background: var(--navy-tint); color: var(--navy); font-size: 11.5px; font-weight: 700; }
+.selo-origem--cliente { background: var(--signal-tint); color: var(--signal-lo); }
+.card__acao { width: 100%; margin-top: 10px; }
+.coluna--alvo { border-radius: var(--raio); background: var(--signal-tint); box-shadow: 0 0 0 1px var(--signal); }
+.coluna--alvo .coluna__cabecalho { background: transparent; }
+.quadro__sem-etapas { margin: 52px 0 0; width: 292px; }
+.tag--pedido { color: var(--navy); background: var(--navy-tint); }
+
+/* Ações do painel de Saídas */
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.acoes__nota { margin: 4px 0 0; font-size: 12.5px; color: var(--suave); }
+.confirmacao { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; padding: 14px 16px; border: 1px solid var(--borda); border-left: 3px solid var(--navy); border-radius: var(--raio); background: var(--canvas); }
+.confirmacao__texto { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--texto); }
+
+/* Solicitações de faltas: faltas à esquerda, quadro à direita */
+.pedidos { flex: 1; min-width: 0; display: flex; }
+.reserva { flex: 0 0 360px; min-width: 0; display: flex; flex-direction: column; background: #fff; border-right: 1px solid var(--borda); }
+.reserva__topo { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 14px; border-bottom: 1px solid var(--borda); }
+.reserva__linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.reserva__titulo { margin: 0; font-size: 15px; font-weight: 600; }
+.reserva__contagem { padding: 2px 10px; border-radius: 999px; background: var(--canvas); font-size: 12px; font-weight: 600; color: var(--suave); font-variant-numeric: tabular-nums; }
+.reserva__contagem--ativa { background: var(--navy); color: #fff; }
+.reserva__ajuda { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--suave); }
+.reserva__lista { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+.grupo { border: 1px solid var(--borda); border-radius: var(--raio); background: #fff; }
+.grupo__cabeca { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--borda); background: var(--canvas); border-radius: var(--raio) var(--raio) 0 0; cursor: pointer; }
+.grupo__os { font-family: var(--font-display-alt); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.grupo__peca { flex: 1; min-width: 0; font-size: 12.5px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grupo__tipo i { display: block; width: 9px; height: 9px; border-radius: 2px; }
+.grupo__itens { list-style: none; margin: 0; padding: 4px 0; }
+.grupo__item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; font-size: 13px; line-height: 1.4; cursor: pointer; }
+.grupo__item:hover { background: var(--canvas); }
+.grupo__nome { flex: 1; min-width: 0; }
+.grupo__qtd { flex: none; font-weight: 600; color: var(--falta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.grupo input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--navy); cursor: pointer; }
+.grupo input[type="checkbox"]:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* Linhas de item editáveis (janela e painel do pedido) */
+.linhas-itens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.linha-item { display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--borda); }
+.linha-item:first-child { border-top: 0; padding-top: 4px; }
+.linha-item__texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.linha-item__nome { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.linha-item__os { color: var(--navy); font-variant-numeric: tabular-nums; }
+.linha-item__detalhe { font-size: 12.5px; color: var(--suave); font-variant-numeric: tabular-nums; }
+.linha-item__campos { display: grid; grid-template-columns: 160px 1fr; gap: 12px; }
+.janela--larga .linha-item { display: grid; grid-template-columns: minmax(0, 1fr) 400px; align-items: end; column-gap: 20px; }
+.janela--larga .linha-item .campo__erro { grid-column: 2; }
+.campo input[aria-invalid="true"] { border-color: var(--error, #d85d55); }
+.campo input::placeholder { color: var(--leve); }
+
+/* Resumo do que será gravado */
+.resumo { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--canvas); }
+.resumo__titulo { margin: 0; font-size: 13px; font-weight: 600; color: var(--suave); }
+.resumo__linhas { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; line-height: 1.45; color: var(--texto); }
+.resumo__nota { margin: 2px 0 0; font-size: 12px; color: var(--suave); }
+
+/* Janelas */
+.janela-fundo { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 64px 16px 24px; overflow: auto; background: rgba(14,27,79,.32); animation: janela-fundo 140ms ease-out; }
+.janela { width: 100%; max-width: 520px; display: flex; flex-direction: column; background: #fff; border-radius: var(--raio); box-shadow: var(--shadow-popover); animation: janela-entra 160ms ease-out; }
+.janela--larga { max-width: 880px; }
+.janela__cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 28px 16px; border-bottom: 1px solid var(--borda); }
+.janela__sobretitulo { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--suave); }
+.janela__titulo { margin: 0; font-family: var(--font-display-alt); font-size: 21px; font-weight: 600; color: var(--texto); }
+.janela__corpo { display: flex; flex-direction: column; gap: 20px; padding: 20px 28px 24px; }
+.janela__rodape { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--borda); }
+.janela__nota { margin-right: auto; font-size: 12.5px; color: var(--suave); }
+.janela__ajuda { margin: 0; font-size: 13px; line-height: 1.5; color: var(--suave); }
+.janela--larga .campos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@keyframes janela-fundo { from { opacity: 0; } to { opacity: 1; } }
+@keyframes janela-entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Etapas do quadro */
+.etapas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.etapas__linha { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; }
+.etapas__n { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 50%; background: var(--canvas); font-size: 12px; font-weight: 700; color: var(--suave); }
+.etapas__linha input { height: 38px; min-width: 0; padding: 0 12px; border: 1px solid var(--borda); border-radius: 4px; font: 14px var(--font-sans); color: var(--texto); }
+.etapas__linha input:focus { outline: 0; border-color: var(--signal); box-shadow: var(--focus-ring); }
+.etapas__remover:disabled { opacity: .45; }
+.etapas__trava { grid-column: 2 / -1; font-size: 12px; color: var(--suave); }
+.etapas__adicionar { align-self: flex-start; }
+
+@media (max-width: 720px) {
+  .barra { flex-wrap: wrap; }
+  .barra__direita { margin-left: 0; flex-wrap: wrap; }
+  .pedidos { flex-direction: column; }
+  .painel { z-index: 5; }
+  .reserva { flex: none; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--borda); }
+  .janela-fundo { padding: 16px; }
+  .janela--larga .campos, .linha-item__campos { grid-template-columns: 1fr; }
+  .janela--larga .linha-item { display: flex; }
+  .janela__cabecalho, .janela__corpo, .janela__rodape { padding-left: 16px; padding-right: 16px; }
+  .janela__rodape { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .janela, .janela-fundo { animation: none; }
+  .segmentado button { transition: none; }
+}

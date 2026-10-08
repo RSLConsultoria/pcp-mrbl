@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contaDoItem, formatarNumero, formatarQtd, qtdComUn } from './quantidade';
+import { contaDoItem, formatarNumero, formatarQtd, qtdComUn, quantidadeParaCampo } from './quantidade';
 import { item } from './teste-util';
 
 describe('quantidade', () => {
@@ -30,5 +30,13 @@ describe('quantidade', () => {
     expect(contaDoItem(item({ un: 'cones', falta: 2, faltaG: 100, baixada: 0, resta: 2, restaG: 100 })))
       .toBe('faltava 2 cones · 100 g · baixado 0 · resta 2 cones · 100 g');
     expect(contaDoItem(item({ falta: null, resta: null }))).toBe('falta não informada');
+  });
+});
+
+describe('quantidadeParaCampo', () => {
+  it('vírgula decimal e sem milhar', () => {
+    expect(quantidadeParaCampo(1000.5)).toBe('1000,5');
+    expect(quantidadeParaCampo(26)).toBe('26');
+    expect(quantidadeParaCampo(null)).toBe('');
   });
 });

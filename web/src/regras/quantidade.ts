@@ -29,3 +29,8 @@ export function contaDoItem(i: Item): string {
     `resta ${formatarQtd(i.resta, i.un, i.restaG)}`
   ].join(' · ');
 }
+
+// Número pronto para um campo de texto editável: vírgula decimal, sem separador de milhar.
+export function quantidadeParaCampo(n: number | null): string {
+  return n === null ? '' : String(n).replace('.', ',');
+}
