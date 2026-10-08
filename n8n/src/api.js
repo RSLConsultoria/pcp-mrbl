@@ -164,6 +164,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
     })
   };
   if (r.pedidoId) extras.pedidoId = r.pedidoId;
+  if (r.partes) extras.partes = r.partes;
   var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
   // O workflow publicado grava gravacao/historico na aba errada para estes
   // tipos; sem eles nada e escrito ate o workflow novo (operacoes[]) entrar.

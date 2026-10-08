@@ -82,9 +82,9 @@ test('gerar_pedido: operacoes, historico por OS e resposta', () => {
     }
   });
   assert.deepEqual(r.operacoes.slice(1), [
-    { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: { id: 'PED-0044|a', pedido_id: 'PED-0044', item_id: 'a', deal_id: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 20, fornecedor: '' } },
-    { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: { id: 'PED-0044|b', pedido_id: 'PED-0044', item_id: 'b', deal_id: '600001', os: '90001', nome: 'ZÍPER', un: 'UN', qtd: 6, fornecedor: 'METAIS GAMA' } },
-    { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: { id: 'PED-0044|c', pedido_id: 'PED-0044', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', un: 'UN', qtd: 50, fornecedor: '' } }
+    { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: { id: 'PED-0044|a', pedido_id: 'PED-0044', item_id: 'a', deal_id: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 20, fornecedor: '', previsao: '' } },
+    { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: { id: 'PED-0044|b', pedido_id: 'PED-0044', item_id: 'b', deal_id: '600001', os: '90001', nome: 'ZÍPER', un: 'UN', qtd: 6, fornecedor: 'METAIS GAMA', previsao: '' } },
+    { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: { id: 'PED-0044|c', pedido_id: 'PED-0044', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', un: 'UN', qtd: 50, fornecedor: '', previsao: '' } }
   ]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.os, h.acao, h.texto, h.ploomes_status, h.item_id, h.email]), [
     ['600001', '90001', 'gerar_pedido', 'Lucca gerou PED-0044 · 2 itens desta OS · Fornecedor TECIDOS BETA', 'PENDENTE', '', 'lucca@exemplo.com'],
@@ -306,7 +306,7 @@ test('salvar_etapas: validacoes e bloqueio de etapa com pedido aberto', () => {
 });
 
 // ---------- oficina ----------
-// Material da caixa todo na ultima etapa: a e b no PED-0043 (Entregue).
+// Material da caixa todo na ultima etapa: a e b no PED-0043 (Resolvido, ainda sem baixa: dado antigo).
 const NA_ULTIMA = { pedidos: [SEED_P, ped({ etapa: 'entregue' })], pedidosItens: [SEED_I, pit({}), pit({ id: 'PED-0043|b', item_id: 'b', nome: 'ZÍPER', un: 'UN', qtd: 6 })] };
 
 test('enviar_oficina: CAIXAS_PCP appendOrUpdate e herda responsavel ao criar', () => {
@@ -326,7 +326,7 @@ test('enviar_oficina: CAIXAS_PCP appendOrUpdate e herda responsavel ao criar', (
 });
 
 test('enviar_oficina: 409 enquanto o material nao esta todo na ultima etapa', () => {
-  const erro = { status: 409, body: { erro: 'O material desta caixa ainda não chegou (etapa Entregue).' } };
+  const erro = { status: 409, body: { erro: 'O material desta caixa ainda não chegou (etapa Resolvido).' } };
   const env = (lin) => acao({ tipo: 'enviar_oficina', dealId: '600001', versao: '' }, lin);
   // a e b sem pedido
   assert.deepEqual(env(linhas()), erro);

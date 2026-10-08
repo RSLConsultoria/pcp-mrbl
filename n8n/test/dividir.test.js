@@ -78,9 +78,9 @@ test('dividir_pedido: operacoes, historico por OS envolvida e pedidoId do filho'
       id: 'PED-0002.1', etapa: 'recebidos', origem: 'FORNECEDOR', quem: 'METAIS GAMA', local: 'BRAGANCA', previsao: '2026-10-15',
       responsavel: 'Renata', criado_em: ISO, criado_por: 'Lucca', baixado_em: '', atualizado_em: ISO, pai: 'PED-0002' } },
     { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: {
-      id: 'PED-0002.1|a', pedido_id: 'PED-0002.1', item_id: 'a', deal_id: '600001', os: '90001', nome: 'ZÍPER METAL', un: 'UN', qtd: 20, fornecedor: 'METAIS GAMA' } },
+      id: 'PED-0002.1|a', pedido_id: 'PED-0002.1', item_id: 'a', deal_id: '600001', os: '90001', nome: 'ZÍPER METAL', un: 'UN', qtd: 20, fornecedor: 'METAIS GAMA', previsao: '' } },
     { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: {
-      id: 'PED-0002.1|b', pedido_id: 'PED-0002.1', item_id: 'b', deal_id: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 10, fornecedor: '' } },
+      id: 'PED-0002.1|b', pedido_id: 'PED-0002.1', item_id: 'b', deal_id: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 10, fornecedor: '', previsao: '' } },
     { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002|a', qtd: 32 } },
     { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002|b', qtd: 0 } },
     { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002', atualizado_em: ISO } }
@@ -107,7 +107,7 @@ test('dividir_pedido: numero do filho = maior filho + 1; dividir um filho cria o
   assert.equal(f.body.pedidoId, 'PED-0002.3');
   assert.equal(f.operacoes[0].linha.pai, 'PED-0002');
   assert.deepEqual(f.operacoes[2].linha, { id: 'PED-0002.1|a', qtd: 3 });
-  assert.equal(f.historicos[0].texto, 'Lucca dividiu PED-0002.1: 2 UN de ZÍPER METAL foram para PED-0002.3 (Entregue)');
+  assert.equal(f.historicos[0].texto, 'Lucca dividiu PED-0002.1: 2 UN de ZÍPER METAL foram para PED-0002.3 (Entregue) e deu baixa: 2 UN de ZÍPER METAL (resta 98 UN)');
 });
 
 test('dividir_pedido: validacoes', () => {

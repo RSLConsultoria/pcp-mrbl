@@ -1,16 +1,18 @@
 // ===== src/pedidos.js =====
 // F3: solicitacoes de faltas (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO) e a
 // tratativa das caixas que sairam com falta (enviar a oficina / oficina
-// recebeu). Funcoes puras; sem import/export. Depende de util.js e acoes.js.
+// recebeu). A ultima etapa (maior ordem) e sempre a "Resolvido": mover para
+// ela da a baixa do pedido nas caixas. Funcoes puras; sem import/export. Depende de util.js e acoes.js.
 // Cada acao devolve { operacoes: [{ aba, operacao, chave, linha }], historicos }.
 
 var TIPOS_PEDIDO = ['gerar_pedido', 'editar_pedido', 'mover_pedido', 'baixar_pedido',
-  'dividir_pedido', 'salvar_etapas', 'enviar_oficina', 'oficina_recebeu'];
+  'dividir_pedido', 'dividir_por_previsao', 'salvar_etapas', 'enviar_oficina', 'oficina_recebeu'];
 var ETAPAS_PADRAO = [
   { id: 'a_pedir', nome: 'A pedir', ordem: 1 },
   { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
   { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 },
-  { id: 'entregue', nome: 'Entregue', ordem: 4 }
+  // id 'entregue' mantido para os dados existentes; o nome e "Resolvido".
+  { id: 'entregue', nome: 'Resolvido', ordem: 4 }
 ];
 var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
 var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo' };
@@ -170,6 +172,24 @@ function pedidoAbertoPorItem(lista) {
   return m;
 }
 
+// Datas distintas em ordem (aaaa-mm-dd ordena como texto); '' (sem previsao) por ultimo.
+function previsoesDistintas(lista) {
+  var vistas = {};
+  var out = [];
+  lista.forEach(function (d) { if (!vistas['_' + d]) { vistas['_' + d] = 1; out.push(d); } });
+  return out.sort(function (a, b) {
+    if (a === b) return 0;
+    if (a === '') return 1;
+    if (b === '') return -1;
+    return a < b ? -1 : 1;
+  });
+}
+
+// Previsao efetiva de uma linha da PEDIDOS_ITENS: a do item ou a do pedido.
+function previsaoDoItem(it, linhaPedido, ano) {
+  return dataISO(it.previsao, ano) || dataISO(linhaPedido.previsao, ano) || '';
+}
+
 // Board: pedidos, etapasPedido e o mapa item -> pedido aberto.
 function montarPedidos(extras, ano) {
   extras = extras || {};
@@ -180,6 +200,22 @@ function montarPedidos(extras, ano) {
       var l = p.linha;
       var baixadoEm = texto(l.baixado_em);
       var etapa = texto(l.etapa);
+      var previsao = dataISO(l.previsao, ano);
+      var itens = p.itens.map(function (it) {
+        var q = numero(it.qtd);
+        return {
+          itemId: texto(it.item_id),
+          dealId: texto(it.deal_id),
+          os: texto(it.os),
+          nome: texto(it.nome),
+          un: texto(it.un),
+          qtd: q === null || isNaN(q) ? null : q,
+          fornecedor: texto(it.fornecedor),
+          // previsao efetiva: a do item ou, vazia, a do pedido
+          previsao: dataISO(it.previsao, ano) || previsao
+        };
+      });
+      var datas = previsoesDistintas(itens.map(function (i) { return i.previsao; }));
       return {
         id: p.id,
         pai: texto(l.pai),
@@ -187,24 +223,15 @@ function montarPedidos(extras, ano) {
         origem: semAcento(l.origem),
         quem: texto(l.quem),
         local: semAcento(l.local).replace(/\s+/g, '_'),
-        previsao: dataISO(l.previsao, ano),
+        previsao: previsao,
+        previsaoMaisProxima: datas.length && datas[0] !== '' ? datas[0] : previsao,
+        previsoesDiferentes: datas.length > 1,
         responsavel: texto(l.responsavel),
         criadoEm: texto(l.criado_em),
         baixadoEm: baixadoEm,
         versao: texto(l.atualizado_em),
         finalizado: baixadoEm !== '',
-        itens: p.itens.map(function (it) {
-          var q = numero(it.qtd);
-          return {
-            itemId: texto(it.item_id),
-            dealId: texto(it.deal_id),
-            os: texto(it.os),
-            nome: texto(it.nome),
-            un: texto(it.un),
-            qtd: q === null || isNaN(q) ? null : q,
-            fornecedor: texto(it.fornecedor)
-          };
-        })
+        itens: itens
       };
     });
   return { pedidos: pedidos, etapasPedido: etapas, abertoPorItem: pedidoAbertoPorItem(lista),
@@ -318,7 +345,9 @@ function validarAcaoPedido(corpo) {
       if (q === null) return erroAcao(400, 'Informe uma quantidade maior que zero');
       r = textoCurto(it.fornecedor, 100, 'Fornecedor inválido.');
       if (!r.ok) return erroAcao(400, r.erro);
-      acao.itens.push({ itemId: itemId, dealId: dealId, qtd: q, fornecedor: r.valor });
+      var rp = campoPedido('previsao', it.previsao);
+      if (!rp.ok) return erroAcao(400, rp.erro);
+      acao.itens.push({ itemId: itemId, dealId: dealId, qtd: q, fornecedor: r.valor, previsao: rp.valor });
     }
     acao.campos = {};
     var nomes = ['origem', 'quem', 'local', 'previsao', 'responsavel'];
@@ -383,6 +412,11 @@ function validarAcaoPedido(corpo) {
         r = textoCurto(ie.fornecedor, 100, 'Fornecedor inválido.');
         if (!r.ok) return erroAcao(400, r.erro);
         mud.fornecedor = r.valor;
+      }
+      if (ie.previsao !== undefined) {
+        r = campoPedido('previsao', ie.previsao);
+        if (!r.ok) return erroAcao(400, r.erro);
+        mud.previsao = r.valor;
       }
       acao.itens.push(mud);
     }
@@ -497,7 +531,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
       }
       linhasItens.push({
         id: pid + '|' + it.itemId, pedido_id: pid, item_id: it.itemId, deal_id: it.dealId, os: texto(l.os),
-        nome: texto(l.descricao_item), un: texto(l.unidade), qtd: it.qtd, fornecedor: it.fornecedor
+        nome: texto(l.descricao_item), un: texto(l.unidade), qtd: it.qtd, fornecedor: it.fornecedor, previsao: it.previsao
       });
     }
     var c = acao.campos;
@@ -526,17 +560,27 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var grupos = porOS(p.itens, function (x) { return texto(x.deal_id); }, function (x) { return texto(x.os); });
   function existeEtapa(id) { return etapas.some(function (e) { return e.id === id; }); }
 
-  if (tipo === 'dividir_pedido') return aplicarDivisao(acao, linhas, ctx, p, etapas);
+  var ultima = etapas[etapas.length - 1];
+  if (tipo === 'dividir_pedido') return aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId);
+  if (tipo === 'dividir_por_previsao') return aplicarDivisaoPorPrevisao(acao, linhas, ctx, p);
 
   if (tipo === 'mover_pedido') {
     if (!existeEtapa(acao.etapa)) return erroAcao(400, 'Etapa inválida.');
     if (acao.etapa === texto(p.linha.etapa)) return erroAcao(400, 'O pedido já está nessa etapa.');
     var nomeEtapa = mostrarCampo('etapa', acao.etapa, etapas);
+    var linhaMov = { id: p.id, etapa: acao.etapa, atualizado_em: agora };
+    var bxM = { operacoes: [], partes: {} };
+    // Entrar na ultima etapa (Resolvido) da a baixa e finaliza o pedido.
+    if (acao.etapa === ultima.id) {
+      bxM = baixaDosItens(p.itens, faltantesPorId, agora);
+      if (!bxM.ok) return bxM;
+      linhaMov = { id: p.id, etapa: acao.etapa, baixado_em: agora, atualizado_em: agora };
+    }
     return {
       ok: true,
-      operacoes: [op('PEDIDOS', 'update', 'id', { id: p.id, etapa: acao.etapa, atualizado_em: agora })],
+      operacoes: bxM.operacoes.concat([op('PEDIDOS', 'update', 'id', linhaMov)]),
       historicos: grupos.map(function (g) {
-        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' moveu ' + p.id + ' para ' + nomeEtapa);
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' moveu ' + p.id + ' para ' + nomeEtapa + textoBaixa(bxM.partes[g.dealId]));
       }),
       versao: agora,
       pedidoId: p.id
@@ -544,36 +588,15 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   }
 
   if (tipo === 'baixar_pedido') {
-    if (texto(p.linha.etapa) !== etapas[etapas.length - 1].id) return erroAcao(400, 'Dar baixa só na última etapa.');
-    var opsF = [];
-    var partes = {};
-    for (var k = 0; k < p.itens.length; k++) {
-      var pi = p.itens[k];
-      var lf = faltantesPorId[texto(pi.item_id)];
-      if (!lf || semAcento(lf.status) === 'SUBSTITUIDO') continue;
-      var falta = numero(lf.qtd_falta);
-      var bx = numero(lf.qtd_baixada);
-      if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
-      if (falta === null || isNaN(falta)) continue;
-      bx = bx || 0;
-      var r0 = arredondar(Math.max(0, falta - bx));
-      var q = numero(pi.qtd);
-      q = q === null || isNaN(q) ? 0 : q;
-      var dar = arredondar(Math.min(q, r0));
-      if (dar > 0) {
-        opsF.push(op('FALTANTES', 'update', 'id', { id: texto(lf.id), qtd_baixada: arredondar(bx + dar), atualizado_em_app: agora }));
-      }
-      if (dar <= 0) continue;
-      var un = texto(lf.unidade);
-      var d = texto(pi.deal_id);
-      (partes[d] = partes[d] || []).push(formatarQtd(dar) + ' ' + un + ' de ' + texto(lf.descricao_item) +
-        ' (resta ' + formatarQtd(arredondar(r0 - dar)) + ' ' + un + ')');
-    }
+    // Mantido por compatibilidade; o app da baixa movendo para a ultima etapa.
+    if (texto(p.linha.etapa) !== ultima.id) return erroAcao(400, 'Dar baixa só na última etapa.');
+    var bx = baixaDosItens(p.itens, faltantesPorId, agora);
+    if (!bx.ok) return bx;
     return {
       ok: true,
-      operacoes: opsF.concat([op('PEDIDOS', 'update', 'id', { id: p.id, baixado_em: agora, atualizado_em: agora })]),
-      historicos: grupos.filter(function (g) { return partes[g.dealId]; }).map(function (g) {
-        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' deu baixa do ' + p.id + ': ' + partes[g.dealId].join('; '));
+      operacoes: bx.operacoes.concat([op('PEDIDOS', 'update', 'id', { id: p.id, baixado_em: agora, atualizado_em: agora })]),
+      historicos: grupos.filter(function (g) { return bx.partes[g.dealId]; }).map(function (g) {
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' deu baixa do ' + p.id + ': ' + bx.partes[g.dealId].join('; '));
       }),
       versao: agora,
       pedidoId: p.id
@@ -592,6 +615,9 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     resumoPedido.push(NOMES_CAMPO[n] + ': ' + mostrarCampo(n, antes, etapas) + ' → ' + mostrarCampo(n, depois, etapas));
   });
   if (mudPedido.etapa !== undefined && !existeEtapa(mudPedido.etapa)) return erroAcao(400, 'Etapa inválida.');
+  var ano = new Date(agora).getFullYear();
+  var previsaoPedidoDepois = mudPedido.previsao !== undefined ? mudPedido.previsao : valorAtualCampo(p.linha, 'previsao', ano);
+  var qtdNova = {};
   var opsItens = [];
   var resumoItens = {};
   for (var j = 0; j < acao.itens.length; j++) {
@@ -609,12 +635,22 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
       if (re === null) return erroAcao(400, 'Item sem quantidade faltante registrada.');
       if (mi.qtd > re) return erroAcao(400, 'Falta só ' + formatarQtd(re) + ' ' + texto(lfe.unidade) + ' de ' + nomeItem);
       mud.qtd = mi.qtd;
+      qtdNova[mi.itemId] = mi.qtd;
       res.push('qtd de ' + nomeItem + ': ' + (qAntes === null || isNaN(qAntes) ? '—' : formatarQtd(qAntes)) + ' → ' + formatarQtd(mi.qtd));
     }
     var fAntes = texto(linhaPi.fornecedor);
     if (mi.fornecedor !== undefined && mi.fornecedor !== fAntes) {
       mud.fornecedor = mi.fornecedor;
       res.push('fornecedor de ' + nomeItem + ': ' + (fAntes || '—') + ' → ' + (mi.fornecedor || '—'));
+    }
+    if (mi.previsao !== undefined) {
+      // compara a previsao efetiva (vazia = a do pedido, ja com a mudanca deste editar)
+      var pvAntes = previsaoDoItem(linhaPi, p.linha, ano);
+      var pvDepois = mi.previsao || previsaoPedidoDepois;
+      if (pvAntes !== pvDepois) {
+        mud.previsao = mi.previsao;
+        res.push('previsão de ' + nomeItem + ': ' + mostrarCampo('previsao', pvAntes, etapas) + ' → ' + mostrarCampo('previsao', pvDepois, etapas));
+      }
     }
     if (!res.length) continue;
     opsItens.push(op('PEDIDOS_ITENS', 'update', 'id', Object.assign({ id: texto(linhaPi.id) || p.id + '|' + mi.itemId }, mud)));
@@ -623,23 +659,89 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   }
   if (!resumoPedido.length && !opsItens.length) return erroAcao(400, 'Nada alterado.');
   var linhaPed = Object.assign({ id: p.id }, mudPedido, { atualizado_em: agora });
+  var bxE = { operacoes: [], partes: {} };
+  if (mudPedido.etapa === ultima.id) {
+    // Mudar a etapa para a ultima (Resolvido) da a baixa, com as quantidades ja editadas.
+    bxE = baixaDosItens(p.itens.map(function (x) {
+      var k = texto(x.item_id);
+      return qtdNova[k] === undefined ? x : Object.assign({}, x, { qtd: qtdNova[k] });
+    }), faltantesPorId, agora);
+    if (!bxE.ok) return bxE;
+    linhaPed = Object.assign({ id: p.id }, mudPedido, { baixado_em: agora, atualizado_em: agora });
+  }
   return {
     ok: true,
-    operacoes: [op('PEDIDOS', 'update', 'id', linhaPed)].concat(opsItens),
+    operacoes: [op('PEDIDOS', 'update', 'id', linhaPed)].concat(opsItens, bxE.operacoes),
     historicos: grupos.map(function (g) {
       var resumo = resumoPedido.concat(resumoItens[g.dealId] || []);
-      return resumo.length ? linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' alterou ' + p.id + ': ' + resumo.join(', ')) : null;
+      return resumo.length
+        ? linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' alterou ' + p.id + ': ' + resumo.join(', ') + textoBaixa(bxE.partes[g.dealId]))
+        : null;
     }).filter(function (h) { return h; }),
     versao: agora,
     pedidoId: p.id
   };
 }
 
+// Baixa dos itens de um pedido na FALTANTES: soma min(qtd, resta) em qtd_baixada
+// (pula SUBSTITUIDO e quem nao tem falta registrada). itens = linhas da
+// PEDIDOS_ITENS (ou { item_id, deal_id, qtd }). Devolve { ok, operacoes,
+// partes: { dealId: ['20 MT de VIÉS (resta 80 MT)'] } } ou o erro.
+function baixaDosItens(itens, faltantesPorId, agora) {
+  var operacoes = [];
+  var partes = {};
+  for (var k = 0; k < itens.length; k++) {
+    var pi = itens[k];
+    var lf = faltantesPorId[texto(pi.item_id)];
+    if (!lf || semAcento(lf.status) === 'SUBSTITUIDO') continue;
+    var falta = numero(lf.qtd_falta);
+    var bx = numero(lf.qtd_baixada);
+    if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
+    if (falta === null || isNaN(falta)) continue;
+    bx = bx || 0;
+    var r0 = arredondar(Math.max(0, falta - bx));
+    var q = numero(pi.qtd);
+    q = q === null || isNaN(q) ? 0 : q;
+    var dar = arredondar(Math.min(q, r0));
+    if (dar <= 0) continue;
+    operacoes.push(op('FALTANTES', 'update', 'id', { id: texto(lf.id), qtd_baixada: arredondar(bx + dar), atualizado_em_app: agora }));
+    var un = texto(lf.unidade);
+    var d = texto(pi.deal_id);
+    (partes[d] = partes[d] || []).push(formatarQtd(dar) + ' ' + un + ' de ' + texto(lf.descricao_item) +
+      ' (resta ' + formatarQtd(arredondar(r0 - dar)) + ' ' + un + ')');
+  }
+  return { ok: true, operacoes: operacoes, partes: partes };
+}
+
+// " e deu baixa: 20 MT de VIÉS (resta 80 MT)" ou '' quando a OS nao teve baixa.
+function textoBaixa(partes) {
+  return partes && partes.length ? ' e deu baixa: ' + partes.join('; ') : '';
+}
+
+// Linha da parte nova na PEDIDOS, copiando os dados do pedido.
+function linhaParte(p, filho, raiz, etapaId, previsao, agora, u, baixado) {
+  var l = p.linha;
+  var ano = new Date(agora).getFullYear();
+  return op('PEDIDOS', 'append', 'id', {
+    id: filho, etapa: etapaId, origem: valorAtualCampo(l, 'origem', ano), quem: texto(l.quem),
+    local: valorAtualCampo(l, 'local', ano), previsao: previsao, responsavel: texto(l.responsavel),
+    criado_em: agora, criado_por: u, baixado_em: baixado ? agora : '', atualizado_em: agora, pai: raiz
+  });
+}
+
+// Linha do item na parte nova (leva a previsao propria do item).
+function linhaItemParte(x, filho, qtd, ano) {
+  return op('PEDIDOS_ITENS', 'append', 'id', {
+    id: filho + '|' + texto(x.item_id), pedido_id: filho, item_id: texto(x.item_id), deal_id: texto(x.deal_id), os: texto(x.os),
+    nome: texto(x.nome), un: texto(x.un), qtd: qtd, fornecedor: texto(x.fornecedor), previsao: dataISO(x.previsao, ano) || ''
+  });
+}
+
 // dividir_pedido: parte dos itens (ou parte da quantidade) vira um pedido
 // novo da mesma familia (PED-0002 -> PED-0002.k), na etapa escolhida. O
 // pedido dividido fica com o resto; linha com qtd 0 e ignorada na leitura.
 // Dividir uma parte (PED-0002.1) cria outra parte da raiz (PED-0002.k).
-function aplicarDivisao(acao, linhas, ctx, p, etapas) {
+function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
   var u = ctx.usuario;
   var agora = ctx.agora;
   var etapa = etapas.filter(function (e) { return e.id === acao.etapa; })[0];
@@ -662,33 +764,71 @@ function aplicarDivisao(acao, linhas, ctx, p, etapas) {
   });
   if (!sobra) return erroAcao(400, 'Para mover o pedido inteiro, arraste o card.');
 
+  // Parte que vai direto para a ultima etapa (Resolvido) ja nasce com a baixa.
+  var naUltima = etapa.id === etapas[etapas.length - 1].id;
+  var bx = { operacoes: [], partes: {} };
+  if (naUltima) {
+    bx = baixaDosItens(movidos.map(function (m) { return Object.assign({}, m.linha, { qtd: m.qtd }); }), faltantesPorId, agora);
+    if (!bx.ok) return bx;
+  }
   var raiz = raizDoPedido(p.id);
   var filho = proximoIdFilho(linhas.pedidos, raiz);
-  var l = p.linha;
   var ano = new Date(agora).getFullYear();
-  var operacoes = [op('PEDIDOS', 'append', 'id', {
-    id: filho, etapa: etapa.id, origem: valorAtualCampo(l, 'origem', ano), quem: texto(l.quem),
-    local: valorAtualCampo(l, 'local', ano), previsao: valorAtualCampo(l, 'previsao', ano), responsavel: texto(l.responsavel),
-    criado_em: agora, criado_por: u, baixado_em: '', atualizado_em: agora, pai: raiz
-  })];
-  movidos.forEach(function (m) {
-    var x = m.linha;
-    operacoes.push(op('PEDIDOS_ITENS', 'append', 'id', {
-      id: filho + '|' + texto(x.item_id), pedido_id: filho, item_id: texto(x.item_id), deal_id: texto(x.deal_id), os: texto(x.os),
-      nome: texto(x.nome), un: texto(x.un), qtd: m.qtd, fornecedor: texto(x.fornecedor)
-    }));
-  });
+  var operacoes = [linhaParte(p, filho, raiz, etapa.id, valorAtualCampo(p.linha, 'previsao', ano), agora, u, naUltima)];
+  movidos.forEach(function (m) { operacoes.push(linhaItemParte(m.linha, filho, m.qtd, ano)); });
   movidos.forEach(function (m) {
     operacoes.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(m.linha.id) || p.id + '|' + texto(m.linha.item_id), qtd: m.resta }));
   });
   operacoes.push(op('PEDIDOS', 'update', 'id', { id: p.id, atualizado_em: agora }));
+  operacoes = operacoes.concat(bx.operacoes);
   var historicos = porOS(movidos, function (m) { return texto(m.linha.deal_id); }, function (m) { return texto(m.linha.os); })
     .map(function (g) {
       var partes = g.itens.map(function (m) { return formatarQtd(m.qtd) + ' ' + texto(m.linha.un) + ' de ' + texto(m.linha.nome); });
       return linhaHistorico(ctx, g.dealId, g.os, '', acao.tipo,
-        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + etapa.nome + ')');
+        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + etapa.nome + ')' + textoBaixa(bx.partes[g.dealId]));
     });
   return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: filho };
+}
+
+// dividir_por_previsao: agrupa os itens pela previsao efetiva; o grupo da data
+// mais proxima fica no pedido e cada outra data vira uma parte (na etapa do
+// pedido, com a previsao do grupo). Sem data vai por ultimo.
+function aplicarDivisaoPorPrevisao(acao, linhas, ctx, p) {
+  var u = ctx.usuario;
+  var agora = ctx.agora;
+  var ano = new Date(agora).getFullYear();
+  var datas = previsoesDistintas(p.itens.map(function (x) { return previsaoDoItem(x, p.linha, ano); }));
+  if (datas.length < 2) return erroAcao(400, 'Os itens têm a mesma previsão.');
+  var raiz = raizDoPedido(p.id);
+  var existentes = (linhas.pedidos || []).slice();
+  var operacoes = [];
+  var zerar = [];
+  var movidos = [];
+  var partes = [];
+  datas.slice(1).forEach(function (d) {
+    var filho = proximoIdFilho(existentes, raiz);
+    existentes.push({ id: filho });
+    partes.push(filho);
+    operacoes.push(linhaParte(p, filho, raiz, texto(p.linha.etapa), d, agora, u, false));
+    p.itens.forEach(function (x) {
+      if (previsaoDoItem(x, p.linha, ano) !== d) return;
+      var q = numero(x.qtd);
+      q = q === null || isNaN(q) ? 0 : q;
+      operacoes.push(linhaItemParte(x, filho, q, ano));
+      zerar.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(x.id) || p.id + '|' + texto(x.item_id), qtd: 0 }));
+      movidos.push({ linha: x, qtd: q, filho: filho, data: d });
+    });
+  });
+  operacoes = operacoes.concat(zerar, [op('PEDIDOS', 'update', 'id', { id: p.id, atualizado_em: agora })]);
+  var historicos = porOS(movidos, function (m) { return texto(m.linha.deal_id); }, function (m) { return texto(m.linha.os); })
+    .map(function (g) {
+      var txt = g.itens.map(function (m) {
+        return formatarQtd(m.qtd) + ' ' + texto(m.linha.un) + ' de ' + texto(m.linha.nome) + ' foram para ' + m.filho +
+          ' (' + (m.data ? 'previsão ' + dataCurta(m.data) : 'sem previsão') + ')';
+      });
+      return linhaHistorico(ctx, g.dealId, g.os, '', acao.tipo, u + ' dividiu ' + p.id + ' por previsão: ' + txt.join('; '));
+    });
+  return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: partes[0], partes: partes };
 }
 
 function slugEtapa(nome) {
