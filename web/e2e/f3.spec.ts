@@ -367,7 +367,7 @@ test('caixa fora de dealsEditaveis: Saídas sem botões e pedido que não arrast
   await expect(pedidoPainel.getByRole('button', { name: /Salvar alterações|Nada alterado/ })).toHaveCount(0);
 });
 
-test('gerar pedido recusado com 409: mostra a mensagem do servidor, tira o item que entrou em outro pedido e permite remover', async ({ page }) => {
+test('gerar pedido recusado com 409: a janela já fechou; mostra a mensagem do servidor e os itens voltam marcados', async ({ page }) => {
   let tentativas = 0;
   const box: { mock?: Mock } = {};
   box.mock = await preparar(page, '#pedidos', {
@@ -385,17 +385,36 @@ test('gerar pedido recusado com 409: mostra a mensagem do servidor, tira o item 
   await page.getByRole('button', { name: 'Gerar pedido' }).click();
   const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
+  await expect(janela).toHaveCount(0);
   await expect(aviso(page, 'Item já está no PED-0003.')).toBeVisible();
-  await expect(janela).toContainText('1 item saiu da lista porque já está em pedido ou foi resolvido.');
+  // o 409 relê o board: o ZÍPER entrou no PED-0003; os da OS 90001 voltam às faltas, ainda marcados
+  await expect(page.getByRole('article', { name: 'Pedido Novo pedido' })).toHaveCount(0);
+  await expect(faltas).toContainText('2 selecionados');
+  await page.getByRole('button', { name: 'Gerar pedido' }).click();
   await expect(janela.getByLabel('Quantidade (UN) de ZÍPER METAL MÉDIO FIXO CA 18CM')).toHaveCount(0);
   await janela.getByRole('button', { name: 'Remover LINHA 120 RESISTENTE 335 da lista' }).click();
   await expect(janela.getByLabel(/Quantidade .* de LINHA 120/)).toHaveCount(0);
-  await expect(janela).toContainText('1 item saiu da lista'); // o removido à mão não entra na nota
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
   await expect(janela).toHaveCount(0);
+  await expect(aviso(page, /PED-0001 gerado · 1 item/)).toBeVisible();
   const { bodies } = box.mock!;
   expect(bodies).toHaveLength(2);
   expect((bodies[1] as { itens: Corpo[] }).itens).toEqual([{ itemId: 'a2', dealId: '700001', qtd: 26, fornecedor: '', previsao: '' }]);
+});
+
+test('Gerar pedido aberto: item que entrou em outro pedido na recarga sai da lista com uma nota', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos');
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
+  await faltas.getByRole('checkbox', { name: /ZÍPER METAL/ }).check();
+  await page.getByRole('button', { name: 'Gerar pedido' }).click();
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  mock.board.caixas[1].itens[0].pedidoId = 'PED-0003';
+  mock.board.pedidos = [pedido('PED-0003', 'solicitado', [{ itemId: 'b1', dealId: '700002', os: '90002', nome: 'ZÍPER METAL MÉDIO FIXO CA 18CM', un: 'UN', qtd: 52 }])] as never;
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(janela).toContainText('1 item saiu da lista porque já está em pedido ou foi resolvido.');
+  await expect(janela.getByLabel('Quantidade (UN) de ZÍPER METAL MÉDIO FIXO CA 18CM')).toHaveCount(0);
+  expect(mock.bodies).toHaveLength(0);
 });
 
 test('contagem de Faltas sem pedido conta os marcados fora da busca', async ({ page }) => {

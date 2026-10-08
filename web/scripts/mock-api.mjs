@@ -1,5 +1,8 @@
 // Servidor local de conferência: imita pcp-login, pcp-board e pcp-acao com dados fictícios.
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
+// MOCK_ATRASO_MS=4000 segura cada resposta da pcp-acao (imita o servidor lento: a tela tem de
+// mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
+// ?atraso=4000 na URL da ação.
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
 // A última etapa é "Resolvido": mover um pedido para ela dá a baixa nas caixas (e finaliza o pedido).
 // Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
@@ -11,6 +14,8 @@ import http from 'node:http';
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
 const USUARIOS = ['Lucca', 'Maria', 'Renata'];
 const ENVIO_PLOOMES_MS = 20_000;
+const ATRASO_MS = Number(process.env.MOCK_ATRASO_MS) || 0;
+const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const agoraIso = () => new Date().toISOString();
 const diaIso = (deslocDias = 0) => new Date(Date.now() + deslocDias * 86_400_000).toISOString().slice(0, 10);
 
@@ -548,7 +553,7 @@ const lerCorpo = (req) => new Promise((ok) => {
 const servidor = http.createServer(async (req, res) => {
   cors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-  const rota = (req.url ?? '').split('?')[0];
+  const [rota, busca = ''] = (req.url ?? '').split('?');
   try {
     if (rota === '/pcp-login' && req.method === 'POST') {
       return enviar(res, 200, { token: 'm'.repeat(64), nome: 'Lucca', perfil: PERFIL, expiraEm: new Date(Date.now() + 12 * 3_600_000).toISOString() });
@@ -556,6 +561,8 @@ const servidor = http.createServer(async (req, res) => {
     if (rota === '/pcp-board' && req.method === 'GET') return enviar(res, 200, montarBoard());
     if (rota === '/pcp-acao' && req.method === 'POST') {
       const corpo = await lerCorpo(req);
+      const atraso = Number(new URLSearchParams(busca).get('atraso')) || ATRASO_MS;
+      if (atraso > 0) await esperar(atraso);
       if (!corpo) return enviar(res, 400, { erro: 'Corpo inválido.' });
       const r = processar(corpo, 'Lucca');
       console.log(`[acao] ${corpo.tipo} ok`);
