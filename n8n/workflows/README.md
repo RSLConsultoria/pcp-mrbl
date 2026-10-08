@@ -43,7 +43,9 @@ Execuções não são salvas (`saveData*: none`), porque o corpo do login traz a
 - Workflow "PCP MRBL - Enviar ao Ploomes": id z9misKW25YTuDhJ6, inativo; DEALS_PERMITIDOS = ['607479158'] (igual no arquivo e no node).
 - Rascunho: API com acao ainda não publicada (a versão ativa do PCP MRBL - API continua a anterior ate o publish).
 
-## F3: deploy da escrita genérica no "PCP MRBL - API"
+## F3: deploy da escrita genérica no "PCP MRBL - API" (histórico)
+
+> Substituído pela leitura/gravação em lote (seção seguinte). Os nodes `Ler <ABA>`, `Filtrar`/`Tem`/`Gravar` e o `scripts/destinos.js` citados abaixo não existem mais; o passo 0 (planilha) continua valendo.
 
 **Atenção: publique tudo junto.** Os Code nodes da F3 (`Processar Acao`, `Montar Board`, `Pre Validar Acao`, gerados a partir de `src/` com pedidos) e a fiação abaixo vão no mesmo publish. O `Processar Acao` novo devolve `operacoes[]`/`historicos[]`; o rabo antigo (Preparar Gravacao → E Item? → Gravar Item | Gravar Caixa → Preparar Historico → Gravar Historico) só entende `gravacao`/`historico` e mandaria qualquer ação F3 para CAIXAS_PCP. E o código novo com o rabo novo, mas sem as leituras novas, quebra (`$('Ler PEDIDOS Acao')` inexistente). `ACOES_F3_ATIVAS` (src/api.js, hoje `true`) só recusa os tipos F3; não protege um deploy parcial.
 
@@ -123,3 +125,40 @@ Conexões (para cada `i`, com `próximo` = `Filtrar` do destino `i+1`, ou `Respo
 ### Rollback
 
 Volte os dois lados juntos: no n8n, restaure o `activeVersionId` anotado antes do `update_workflow` (`restore_workflow_version` e publish dessa versão); no GitHub, reverta o merge da F3 na `main` (o front publicado manda ações F3 que a API antiga não entende, e a API nova devolve campos que o front antigo ignora). As linhas que a F3 gravou nas abas PEDIDOS/PEDIDOS_ITENS/ETAPAS_PEDIDO podem ficar; a API antiga não as lê.
+
+## Desempenho: leitura e gravação em lote, registro compilado (08/10/2026)
+
+Desenho: `docs/superpowers/specs/2026-10-08-desempenho-e-compilado-design.md`. Lógica em `src/planilhaLote.js` (lote) e `src/envioPloomes.js` (compilado).
+
+### Pré-requisito: credencial
+
+A credencial **Google Sheets - MRBL** (googleApi, service account, id `72hvCT9jkADwOOo1`) precisa de **"Set up for use in HTTP Request node"** ligado, com o escopo `https://www.googleapis.com/auth/spreadsheets`. Sem isso os HTTP Request abaixo falham com 401/403. Depois de aplicar o SDK, religue a credencial (`setNodeCredential`) em: Ler USUARIOS (Google Sheets), Ler Planilha, Ler Planilha Acao e Gravar Lote (HTTP Request).
+
+### Nodes do "PCP MRBL - API"
+
+- **Login** (igual): Login → Ler USUARIOS (Google Sheets) → Processar Login → Responder Login.
+- **Board**: Board → Validar Pedido → Precisa Ler? → (sim) **Ler Planilha** → Montar Board → Responder Board; (não, cache de 55 s) → Responder Board.
+  - Ler Planilha: HTTP GET `values:batchGet` das 8 abas (FALTANTES, CAIXAS GANHAS, CAIXAS_PCP, HISTORICO_APP, USUARIOS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO), `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=FORMATTED_STRING` (os padrões do node Sheets). executeOnce, retry 3× / 3 s.
+- **Ação**: Acao → Pre Validar Acao → Pre OK? → (sim) **Ler Planilha Acao** → Processar Acao → Acao OK? → (sim) **Montar Escritas** → **Tem Escritas?** → (sim) **Loop Escritas** ⇄ **Gravar Lote**, e ao terminar → Responder Acao; Tem Escritas? (não) e Acao OK? (não) → Responder Acao; Pre OK? (não) → Responder Pre.
+  - Ler Planilha Acao: batchGet de FALTANTES, CAIXAS_PCP, CAIXAS GANHAS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO e só a linha 1 do HISTORICO_APP (cabeçalho para o append).
+  - Montar Escritas: um item por requisição, na ordem: cabeçalhos novos (se algum campo não tiver coluna) → `values:append` em PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP → **um** `values:batchUpdate` com todas as atualizações (só as colunas da operação, sem regravar a coluna de casamento) → `values:append` no HISTORICO_APP. Tudo RAW. Update sem linha, destino desconhecido ou operação sem chave derrubam o node **antes** de qualquer escrita. Nada a gravar → `{ vazio: true }`.
+  - Loop Escritas (Split in Batches, 1 por vez) + Gravar Lote (HTTP POST, url/corpo do item, retry 3× / 3 s): o HTTP Request dispara todos os itens de uma vez e o retry dele repetiria os que já deram certo; no loop cada execução é uma requisição só, em ordem.
+  - Responder Acao: executeOnce, corpo/status de `$('Processar Acao')`.
+
+### Homologação
+
+`workflows/pcp-api-homolog.sdk.js` é o mesmo workflow, chamado **"PCP MRBL - API (homolog)"**, com webhooks `pcp-login-h`, `pcp-board-h`, `pcp-acao-h` (mesma planilha; edição continua só no card de teste). Gerado pelo `npm run build`.
+
+**Atenção:** gravar um workflow **ativo** pela API pública do n8n (PUT) publica na hora. Por isso: crie o homolog, teste nele (site local apontando para os `-h`) e só depois aplique o mesmo conteúdo no `PCP MRBL - API` (`WpuXpcSa5oGiEkTm`). Antes de aplicar, anote o `activeVersionId` atual.
+
+Teste no homolog, no card de teste: uma baixa (F2), um gerar pedido, um mover, um dividir; confira na planilha que nada foi gravado fora das colunas da operação, que o HISTORICO_APP ganhou as linhas e que a resposta veio só uma vez.
+
+### Envio ao Ploomes (compilado)
+
+A cada 2 min: Ler HISTORICO_APP → Selecionar Envio (agrupa PENDENTE por deal; só libera o grupo quando a linha mais nova tem 10 min ou mais; até 30 linhas por registro e 20 grupos por rodada; `DEALS_PERMITIDOS` continua no adaptador) → Buscar Contato (uma vez por grupo, `$json.grupo.deal_id`) → Montar Registro (um InteractionRecord: `[PCP · OS x] Atualizações do app PCP` + uma linha `• HH:mm texto` por ação, hora de São Paulo, Date = a mais nova) → Criar Registro → Resultado Envio (o mesmo resultado para todas as linhas do grupo, um item por linha) → Gravar Envio (igual). 429 deixa o grupo inteiro PENDENTE.
+
+### Rollback
+
+- API: `restore_workflow_version` para o `activeVersionId` anotado e publish. Nada muda na planilha (mesmas abas e colunas).
+- Envio: restaure a versão anterior do workflow `z9misKW25YTuDhJ6`. Linhas já marcadas ENVIADO pelo compilado ficam como estão.
+- O homolog pode ser desativado/apagado sem efeito na produção.
