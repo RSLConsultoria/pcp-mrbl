@@ -1,10 +1,14 @@
 // ===== adaptador: Montar Board =====
 var estado = $getWorkflowStaticData('global');
-var faltantes = $('Ler FALTANTES').all().map(function (i) { return i.json; });
-var ganhas = $('Ler CAIXAS GANHAS').all().map(function (i) { return i.json; });
+var ler = function (nome) { return $(nome).all().map(function (i) { return i.json; }); };
+var faltantes = ler('Ler FALTANTES');
+var ganhas = ler('Ler CAIXAS GANHAS');
 var extras = {
-  caixasPcp: $('Ler CAIXAS_PCP').all().map(function (i) { return i.json; }),
-  historico: $('Ler HISTORICO_APP').all().map(function (i) { return i.json; }),
-  usuarios: $('Ler USUARIOS Board').all().map(function (i) { return i.json; })
+  caixasPcp: ler('Ler CAIXAS_PCP'),
+  historico: ler('Ler HISTORICO_APP'),
+  usuarios: ler('Ler USUARIOS Board'),
+  pedidos: ler('Ler PEDIDOS'),
+  pedidosItens: ler('Ler PEDIDOS_ITENS'),
+  etapas: ler('Ler ETAPAS_PEDIDO')
 };
 return [{ json: montarRespostaBoard(estado, faltantes, ganhas, Date.now(), extras) }];

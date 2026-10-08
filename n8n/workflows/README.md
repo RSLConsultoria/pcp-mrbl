@@ -42,3 +42,60 @@ Execuções não são salvas (`saveData*: none`), porque o corpo do login traz a
 
 - Workflow "PCP MRBL - Enviar ao Ploomes": id z9misKW25YTuDhJ6, inativo; DEALS_PERMITIDOS = ['607479158'] (igual no arquivo e no node).
 - Rascunho: API com acao ainda não publicada (a versão ativa do PCP MRBL - API continua a anterior ate o publish).
+
+## F3: deploy da escrita genérica no "PCP MRBL - API"
+
+**Atenção: publique tudo junto.** Os Code nodes da F3 (`Processar Acao`, `Montar Board`, `Pre Validar Acao`, gerados a partir de `src/` com pedidos) e a fiação abaixo vão no mesmo publish. O `Processar Acao` novo devolve `operacoes[]`/`historicos[]`; o rabo antigo (Preparar Gravacao → E Item? → Gravar Item | Gravar Caixa → Preparar Historico → Gravar Historico) só entende `gravacao`/`historico` e mandaria qualquer ação F3 para CAIXAS_PCP. E o código novo com o rabo novo, mas sem as leituras novas, quebra (`$('Ler PEDIDOS Acao')` inexistente). `ACOES_F3_ATIVAS` (src/api.js, hoje `true`) só recusa os tipos F3; não protege um deploy parcial.
+
+Fonte da verdade: `workflows/pcp-api.sdk.js` (gerado por `npm run build`; posições já definidas no gerador, `scripts/gerar-workflow-sdk.js`). Os destinos de escrita ficam em `scripts/destinos.js`.
+
+### 1. Ramo Board: 3 leituras novas antes do Montar Board
+
+| Node (Google Sheets, read) | Aba | Opções |
+|---|---|---|
+| Ler PEDIDOS | PEDIDOS | executeOnce, alwaysOutputData |
+| Ler PEDIDOS_ITENS | PEDIDOS_ITENS | executeOnce, alwaysOutputData |
+| Ler ETAPAS_PEDIDO | ETAPAS_PEDIDO | executeOnce, alwaysOutputData |
+
+Conexões: `Ler USUARIOS Board → Ler PEDIDOS → Ler PEDIDOS_ITENS → Ler ETAPAS_PEDIDO → Montar Board` (remova `Ler USUARIOS Board → Montar Board`). Cole `build/montar-board.js` no Montar Board.
+
+### 2. Ramo Acao: 4 leituras novas antes do Processar Acao
+
+| Node (Google Sheets, read) | Aba |
+|---|---|
+| Ler PEDIDOS Acao | PEDIDOS |
+| Ler PEDIDOS_ITENS Acao | PEDIDOS_ITENS |
+| Ler ETAPAS_PEDIDO Acao | ETAPAS_PEDIDO |
+| Ler HISTORICO_APP Acao | HISTORICO_APP |
+
+Todas com executeOnce e alwaysOutputData. Conexões: `Ler CAIXAS GANHAS Acao → Ler PEDIDOS Acao → Ler PEDIDOS_ITENS Acao → Ler ETAPAS_PEDIDO Acao → Ler HISTORICO_APP Acao → Processar Acao`. Cole `build/processar-acao.js` no Processar Acao e `build/pre-validar-acao.js` no Pre Validar Acao.
+
+### 3. Ramo Acao: troque o rabo de gravação
+
+Apague: `Preparar Gravacao`, `E Item?`, `Gravar Item`, `Gravar Caixa`, `Preparar Historico`, `Gravar Historico`.
+
+Crie 9 destinos, nesta ordem. Cada um tem 3 nodes: Code `Filtrar <ABA> <op>` (jsCode = `build/filtrar-<aba>-<op>.js`, modo runOnceForAllItems), IF `Tem <ABA> <op>?` (condição: `{{ $json._vazio === true }}` é **false**, boolean, singleValue) e o Google Sheets de escrita (alwaysOutputData; mapping autoMapInputData; `cellFormat: RAW`, `handlingExtraData: insertInNewColumn`).
+
+| # | Code | IF | Sheets | Operação | Aba | Coluna de casamento |
+|---|---|---|---|---|---|---|
+| 0 | Filtrar FALTANTES update | Tem FALTANTES update? | Atualizar FALTANTES | update | FALTANTES | id |
+| 1 | Filtrar CAIXAS_PCP appendOrUpdate | Tem CAIXAS_PCP appendOrUpdate? | Gravar CAIXAS_PCP | appendOrUpdate | CAIXAS_PCP | deal_id |
+| 2 | Filtrar PEDIDOS append | Tem PEDIDOS append? | Incluir PEDIDOS | append | PEDIDOS | — |
+| 3 | Filtrar PEDIDOS update | Tem PEDIDOS update? | Atualizar PEDIDOS | update | PEDIDOS | id |
+| 4 | Filtrar PEDIDOS_ITENS append | Tem PEDIDOS_ITENS append? | Incluir PEDIDOS_ITENS | append | PEDIDOS_ITENS | — |
+| 5 | Filtrar PEDIDOS_ITENS update | Tem PEDIDOS_ITENS update? | Atualizar PEDIDOS_ITENS | update | PEDIDOS_ITENS | id |
+| 6 | Filtrar ETAPAS_PEDIDO appendOrUpdate | Tem ETAPAS_PEDIDO appendOrUpdate? | Gravar ETAPAS_PEDIDO | appendOrUpdate | ETAPAS_PEDIDO | id |
+| 7 | Filtrar ETAPAS_PEDIDO update | Tem ETAPAS_PEDIDO update? | Atualizar ETAPAS_PEDIDO | update | ETAPAS_PEDIDO | id |
+| 8 | Filtrar HISTORICO_APP append | Tem HISTORICO_APP append? | Incluir HISTORICO_APP | append | HISTORICO_APP | — |
+
+Conexões (para cada `i`, com `próximo` = `Filtrar` do destino `i+1`, ou `Responder Acao` depois do 8):
+- `Acao OK?` (true) → `Filtrar FALTANTES update`; `Acao OK?` (false) → `Responder Acao` (como antes).
+- `Filtrar i → Tem i?`
+- `Tem i?` (true) → `Sheets i` → `próximo`
+- `Tem i?` (false) → `próximo`
+
+### 4. Credenciais e publish
+
+- Religue a credencial **Google Sheets - MRBL** (googleApi, id `72hvCT9jkADwOOo1`) nos 7 nodes de leitura novos e nos 9 de escrita (`setNodeCredential` no `update_workflow`; o SDK não a grava de forma confiável).
+- As abas PEDIDOS, PEDIDOS_ITENS e ETAPAS_PEDIDO precisam existir com cabeçalho na linha 1 (o update/appendOrUpdate casa pela coluna `id`).
+- Teste no rascunho com uma ação F2 (baixa) e uma F3 (gerar pedido) no card de teste; confira que nenhuma linha vazia entrou e que o HISTORICO_APP ganhou uma linha por OS. Só então publique.
