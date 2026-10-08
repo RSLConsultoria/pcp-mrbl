@@ -95,9 +95,9 @@ test('gerar_pedido: operacoes, historico por OS e resposta', () => {
   assert.equal(r.body.versao, ISO);
   assert.equal(r.body.historicos.length, 2);
   assert.equal(r.body.historicos[1].dealId, '600002');
-  // compatibilidade F2
-  assert.equal(r.gravacao.aba, 'PEDIDOS');
-  assert.equal(r.historico.texto, r.historicos[0].texto);
+  // o workflow publicado nao pode gravar tipos F3 pela via da F2
+  assert.equal(r.gravacao, null);
+  assert.equal(r.historico, null);
 });
 
 test('gerar_pedido: origem Cliente, etapas configuradas e local com acento', () => {
@@ -313,7 +313,8 @@ test('enviar_oficina: CAIXAS_PCP appendOrUpdate e herda responsavel ao criar', (
   assert.deepEqual(r.operacoes, [{ aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id', linha: {
     deal_id: '600001', os: '90001', tratativa: 'ENVIADO', tratativa_em: ISO, atualizado_em: ISO, responsavel: 'Maria' } }]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.os, h.acao, h.texto]), [['600001', '90001', 'enviar_oficina', 'Lucca enviou o material faltante à oficina']]);
-  assert.deepEqual(r.gravacao, { aba: 'CAIXAS_PCP', chave: { coluna: 'deal_id', valor: '600001' }, campos: r.operacoes[0].linha });
+  assert.equal(r.gravacao, null);
+  assert.equal(r.historico, null);
   const comCp = acao({ tipo: 'enviar_oficina', dealId: '600001', versao: 'C1' }, linhas({ caixasPcp: [{ deal_id: '600001', os: '90001', responsavel: '', atualizado_em: 'C1' }] }));
   assert.equal(comCp.status, 200);
   assert.equal('responsavel' in comCp.operacoes[0].linha, false);
@@ -361,4 +362,70 @@ test('acoes da F2 tambem devolvem operacoes e historicos', () => {
   assert.deepEqual(c.operacoes[0].operacao, 'appendOrUpdate');
   assert.deepEqual(c.operacoes[0].chave, 'deal_id');
   assert.equal(c.operacoes[0].linha.deal_id, '600001');
+});
+
+// ---------- revisao da F3 ----------
+test('ACOES_F3_ATIVAS=false: 400 no pre e no processar para tipos F3; F2 intacta', () => {
+  const s = sessao();
+  ctx.ACOES_F3_ATIVAS = false;
+  try {
+    const esperado = { status: 400, body: { erro: 'Esta ação ainda não está disponível.' } };
+    for (const corpo of [GERAR, { tipo: 'enviar_oficina', dealId: '600001', versao: '' }, { tipo: 'salvar_etapas', etapas: [] }]) {
+      assert.deepEqual(limpo(ctx.preValidarAcao(s.e, s.cab, corpo, T0)), Object.assign({ ok: false }, esperado));
+      assert.deepEqual(limpo(ctx.processarAcao(s.e, s.cab, corpo, linhas(), T0, gerarId)), esperado);
+    }
+    assert.deepEqual(limpo(ctx.preValidarAcao(s.e, s.cab, { tipo: 'obs_caixa', dealId: '600001', valor: 'x', versao: '' }, T0)), { ok: true });
+  } finally {
+    ctx.ACOES_F3_ATIVAS = true;
+  }
+  assert.deepEqual(limpo(ctx.preValidarAcao(s.e, s.cab, GERAR, T0)), { ok: true });
+});
+
+test('pedido sem itens validos: editar/mover/baixar -> 409', () => {
+  const lin = linhas({ pedidos: [ped({ etapa: 'entregue' })], pedidosItens: [pit({ deal_id: '0' })] });
+  for (const corpo of [
+    { tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'aguardando' },
+    { tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { quem: 'X' } },
+    { tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }
+  ]) {
+    assert.deepEqual(acao(corpo, lin), { status: 409, body: { erro: 'Pedido sem itens válidos.' } });
+  }
+});
+
+test('baixar_pedido: pula SUBSTITUIDO e omite itens com dar 0 do historico', () => {
+  const lin = linhas({
+    faltantes: [falt({ id: 'a' }), falt({ id: 'd', status: 'SUBSTITUIDO' }), falt({ id: 'c', os: '90002', deal_id: '600002', qtd_falta: 5, qtd_baixada: 5 })],
+    pedidos: [ped({ etapa: 'entregue' })],
+    pedidosItens: [pit({}), pit({ id: 'PED-0043|d', item_id: 'd', nome: 'LINHA' }),
+      pit({ id: 'PED-0043|c', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', qtd: 3 })]
+  });
+  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, lin);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'a'], ['PEDIDOS', 'PED-0043']]);
+  assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
+    ['600001', 'Lucca deu baixa do PED-0043: 20 MT de VIÉS (resta 80 MT)']
+  ]);
+});
+
+test('gerar_pedido: item ja resolvido -> 409', () => {
+  const corpo = (id) => ({ tipo: 'gerar_pedido', origem: 'Fornecedor', local: 'Bragança', itens: [{ itemId: id, dealId: '600001', qtd: 1 }] });
+  const lin = linhas({ faltantes: [falt({ id: 'v', status: 'RESOLVIDO' }), falt({ id: 'z', qtd_falta: 5, qtd_baixada: 5 }), falt({ id: 'a' })] });
+  const esperado = { status: 409, body: { erro: 'Item já resolvido.' } };
+  assert.deepEqual(acao(corpo('v'), lin), esperado);
+  assert.deepEqual(acao(corpo('z'), lin), esperado);
+  assert.equal(acao(corpo('a'), lin).status, 200);
+});
+
+test('oficina_recebeu: qtd_baixada ilegivel -> 400', () => {
+  const lin = linhas({ faltantes: [falt({ id: 'a', qtd_baixada: 'abc' })] });
+  assert.deepEqual(acao({ tipo: 'oficina_recebeu', dealId: '600001', versao: '' }, lin),
+    { status: 400, body: { erro: 'Baixa registrada ilegível na planilha.' } });
+});
+
+test('editar_pedido: previsao dd/mm usa o ano corrente', () => {
+  const lin = linhas({ pedidos: [ped({ previsao: '15/10' })], pedidosItens: [pit({})] });
+  const r = acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { previsao: '2026-10-15', quem: 'NOVO' } }, lin);
+  assert.equal(r.status, 200);
+  assert.equal(r.operacoes[0].linha.previsao, undefined);
+  assert.equal(r.operacoes[0].linha.quem, 'NOVO');
 });

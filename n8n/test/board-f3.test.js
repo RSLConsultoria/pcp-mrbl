@@ -55,9 +55,11 @@ test('board: etapasPedido padrao com aba vazia; ordenadas pela coluna ordem', ()
   const f = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [{ id: 'a', nome: 'Um', ordem: 1 }, { id: 'entregue', nome: 'Fim', ordem: 2 }],
     pedidos: PEDIDOS, pedidosItens: ITENS }));
   assert.equal(f.body.pedidos.find((p) => p.id === 'PED-0007').finalizado, true);
+  // finalizado = baixado_em preenchido, independente da etapa
   const g = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [{ id: 'entregue', nome: 'Fim', ordem: 1 }, { id: 'z', nome: 'Z', ordem: 2 }],
     pedidos: PEDIDOS, pedidosItens: ITENS }));
-  assert.equal(g.body.pedidos.find((p) => p.id === 'PED-0007').finalizado, false);
+  assert.equal(g.body.pedidos.find((p) => p.id === 'PED-0007').finalizado, true);
+  assert.equal(g.body.pedidos.find((p) => p.id === 'PED-0010').finalizado, false);
 });
 
 test('board: item.pedidoId so de pedido aberto; caixa.tratativa e tratativaEm', () => {
@@ -73,4 +75,16 @@ test('board: item.pedidoId so de pedido aberto; caixa.tratativa e tratativaEm', 
   assert.equal(sem.tratativa, '');
   assert.equal(sem.tratativaEm, '');
   assert.equal(sem.itens[0].pedidoId, '');
+});
+
+test('board: avisos de pedido duplicado e item em dois pedidos abertos', () => {
+  const dup = Object.assign({}, PEDIDOS[1], { quem: 'OUTRO' });
+  const itens = ITENS.concat([{ id: 'PED-0010|a', pedido_id: 'PED-0010', item_id: 'a', deal_id: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 1, fornecedor: '' }]);
+  const r = limpo(ctx.montarRespostaBoard({}, [falt({})], [], T0, { pedidos: PEDIDOS.concat([dup]), pedidosItens: itens }));
+  assert.deepEqual(r.body.avisos, [
+    'Pedido PED-0044 duplicado na planilha (gerado ao mesmo tempo?). Revise a aba PEDIDOS.',
+    'Item VIÉS (OS 90001) está em mais de um pedido aberto.'
+  ]);
+  assert.equal(r.body.pedidos.filter((p) => p.id === 'PED-0044').length, 1);
+  assert.equal(r.body.pedidos.find((p) => p.id === 'PED-0044').quem, 'TECIDOS BETA');
 });

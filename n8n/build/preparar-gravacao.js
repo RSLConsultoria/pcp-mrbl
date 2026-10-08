@@ -588,6 +588,38 @@ function lerPedidos(pedidos, itens) {
   return lista;
 }
 
+// Avisos de dados inconsistentes (corrida na geracao de ids, item em 2 pedidos).
+function avisosPedidos(pedidos, itens, lista) {
+  var avisos = [];
+  var vistos = {};
+  var jaAvisou = {};
+  (pedidos || []).forEach(function (p) {
+    if (!p || !pedidoValido(p.id)) return;
+    var id = texto(p.id);
+    if (vistos[id] && !jaAvisou[id]) {
+      jaAvisou[id] = 1;
+      avisos.push('Pedido ' + id + ' duplicado na planilha (gerado ao mesmo tempo?). Revise a aba PEDIDOS.');
+    }
+    vistos[id] = 1;
+  });
+  var porItem = {};
+  var ordem = [];
+  lista.forEach(function (p) {
+    if (!pedidoAberto(p)) return;
+    p.itens.forEach(function (it) {
+      var k = texto(it.item_id);
+      if (!porItem[k]) { porItem[k] = { ids: {}, n: 0, it: it }; ordem.push(k); }
+      if (!porItem[k].ids[p.id]) { porItem[k].ids[p.id] = 1; porItem[k].n++; }
+    });
+  });
+  ordem.forEach(function (k) {
+    if (porItem[k].n > 1) {
+      avisos.push('Item ' + texto(porItem[k].it.nome) + ' (OS ' + texto(porItem[k].it.os) + ') está em mais de um pedido aberto.');
+    }
+  });
+  return avisos;
+}
+
 function pedidoAberto(p) {
   return texto(p.linha.baixado_em) === '';
 }
@@ -606,7 +638,6 @@ function pedidoAbertoPorItem(lista) {
 function montarPedidos(extras, ano) {
   extras = extras || {};
   var etapas = lerEtapas(extras.etapas);
-  var ultima = etapas[etapas.length - 1].id;
   var lista = lerPedidos(extras.pedidos, extras.pedidosItens);
   var pedidos = lista.slice().sort(function (a, b) { return numeroDoPedido(a.id) - numeroDoPedido(b.id); })
     .map(function (p) {
@@ -624,7 +655,7 @@ function montarPedidos(extras, ano) {
         criadoEm: texto(l.criado_em),
         baixadoEm: baixadoEm,
         versao: texto(l.atualizado_em),
-        finalizado: etapa === ultima && baixadoEm !== '',
+        finalizado: baixadoEm !== '',
         itens: p.itens.map(function (it) {
           var q = numero(it.qtd);
           return {
@@ -639,7 +670,8 @@ function montarPedidos(extras, ano) {
         })
       };
     });
-  return { pedidos: pedidos, etapasPedido: etapas, abertoPorItem: pedidoAbertoPorItem(lista) };
+  return { pedidos: pedidos, etapasPedido: etapas, abertoPorItem: pedidoAbertoPorItem(lista),
+    avisos: avisosPedidos(extras.pedidos, extras.pedidosItens, lista) };
 }
 
 // ---------- validacao do corpo ----------
@@ -865,10 +897,10 @@ function mostrarCampo(nome, v, etapas) {
   return v;
 }
 
-function valorAtualCampo(linha, nome) {
+function valorAtualCampo(linha, nome, ano) {
   if (nome === 'origem') return semAcento(linha.origem);
   if (nome === 'local') return semAcento(linha.local).replace(/\s+/g, '_');
-  if (nome === 'previsao') return dataISO(linha.previsao, 2000) || texto(linha.previsao);
+  if (nome === 'previsao') return dataISO(linha.previsao, ano) || texto(linha.previsao);
   return texto(linha[nome]);
 }
 
@@ -902,8 +934,10 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
         return erroAcao(409, 'Item não encontrado.');
       }
       if (abertos[it.itemId]) return erroAcao(409, 'Item já está no ' + abertos[it.itemId] + '.');
+      if (!STATUS_ABERTOS[semAcento(l.status)]) return erroAcao(409, 'Item já resolvido.');
       var resta = restaDaLinha(l);
       if (resta === null) return erroAcao(400, 'Item sem quantidade faltante registrada.');
+      if (resta <= 0) return erroAcao(409, 'Item já resolvido.');
       if (it.qtd > resta) {
         return erroAcao(400, 'Falta só ' + formatarQtd(resta) + ' ' + texto(l.unidade) + ' de ' + texto(l.descricao_item));
       }
@@ -930,6 +964,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   // editar / mover / baixar: pedido existente
   var p = lista.filter(function (x) { return x.id === acao.pedidoId; })[0];
   if (!p) return erroAcao(404, 'Pedido não encontrado.');
+  if (!p.itens.length) return erroAcao(409, 'Pedido sem itens válidos.');
   var dealsP = p.itens.map(function (x) { return texto(x.deal_id); });
   if (primeiroNaoEditavel(dealsP) !== null) return erroAcao(403, ERRO_NAO_EDITAVEL);
   if (!pedidoAberto(p)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
@@ -959,7 +994,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     for (var k = 0; k < p.itens.length; k++) {
       var pi = p.itens[k];
       var lf = faltantesPorId[texto(pi.item_id)];
-      if (!lf) continue;
+      if (!lf || semAcento(lf.status) === 'SUBSTITUIDO') continue;
       var falta = numero(lf.qtd_falta);
       var bx = numero(lf.qtd_baixada);
       if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
@@ -972,6 +1007,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
       if (dar > 0) {
         opsF.push(op('FALTANTES', 'update', 'id', { id: texto(lf.id), qtd_baixada: arredondar(bx + dar), atualizado_em_app: agora }));
       }
+      if (dar <= 0) continue;
       var un = texto(lf.unidade);
       var d = texto(pi.deal_id);
       (partes[d] = partes[d] || []).push(formatarQtd(dar) + ' ' + un + ' de ' + texto(lf.descricao_item) +
@@ -993,7 +1029,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var resumoPedido = [];
   CAMPOS_PEDIDO.forEach(function (n) {
     if (!Object.prototype.hasOwnProperty.call(acao.campos, n)) return;
-    var antes = valorAtualCampo(p.linha, n);
+    var antes = valorAtualCampo(p.linha, n, new Date(agora).getFullYear());
     var depois = acao.campos[n];
     if (antes === depois) return;
     mudPedido[n] = depois;
@@ -1109,14 +1145,16 @@ function aplicarTratativa(acao, linhas, ctx) {
   }
   var operacoes = [op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', linhaCp)];
   if (recebeu) {
-    faltantes.forEach(function (l) {
-      if (!STATUS_ABERTOS[semAcento(l.status)]) return;
+    for (var i = 0; i < faltantes.length; i++) {
+      var l = faltantes[i];
+      if (!STATUS_ABERTOS[semAcento(l.status)]) continue;
       var falta = numero(l.qtd_falta);
-      if (falta === null || isNaN(falta)) return;
+      if (falta === null || isNaN(falta)) continue;
       var bx = numero(l.qtd_baixada);
-      if (bx !== null && !isNaN(bx) && bx >= falta) return;
+      if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
+      if (bx !== null && bx >= falta) continue;
       operacoes.push(op('FALTANTES', 'update', 'id', { id: texto(l.id), qtd_baixada: arredondar(falta), atualizado_em_app: agora }));
-    });
+    }
   }
   var txt = recebeu
     ? ctx.usuario + ' registrou que a oficina recebeu o material'
@@ -1246,6 +1284,7 @@ var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 30 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
 var DEALS_EDITAVEIS = ['607479158'];  // vazio = todos. Até o go-live, só a OS de teste.
+var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
 
 function dealEditavel(dealId) {
@@ -1254,6 +1293,7 @@ function dealEditavel(dealId) {
 }
 
 var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
+var ERRO_F3_DESLIGADA = 'Esta ação ainda não está disponível.';
 
 function proprio(obj, chave) {
   return Object.prototype.hasOwnProperty.call(obj, chave) ? obj[chave] : undefined;
@@ -1334,7 +1374,7 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
   var ped = montarPedidos(extras, new Date(agora).getFullYear());
   var corpo = {
-    geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios,
+    geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos.concat(ped.avisos), usuarios: usuarios,
     dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
@@ -1348,6 +1388,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
+    if (!ACOES_F3_ATIVAS) return { ok: false, status: 400, body: { erro: ERRO_F3_DESLIGADA } };
     if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
       return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
     }
@@ -1380,6 +1421,7 @@ function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
 }
 
 function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
+  if (!ACOES_F3_ATIVAS) return { status: 400, body: { erro: ERRO_F3_DESLIGADA } };
   if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
     return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
   }
@@ -1397,7 +1439,12 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
     })
   };
   if (r.pedidoId) extras.pedidoId = r.pedidoId;
-  return respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
+  // O workflow publicado grava gravacao/historico na aba errada para estes
+  // tipos; sem eles nada e escrito ate o workflow novo (operacoes[]) entrar.
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
 }
 
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,

@@ -1,3 +1,5 @@
+> **08/10/2026:** finalizado = pedido com baixa registrada (baixado_em), independente da etapa — evita reabrir pedidos ao mudar as etapas.
+
 # F3: Solicitações de faltas e Saídas com falta
 
 Data: 08/10/2026 · Autor: Lucca (RSL Consultoria) · Status: aprovado em conversa. A conferência é local, antes de publicar.

@@ -9,6 +9,7 @@ var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 30 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
 var DEALS_EDITAVEIS = ['607479158'];  // vazio = todos. Até o go-live, só a OS de teste.
+var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
 
 function dealEditavel(dealId) {
@@ -17,6 +18,7 @@ function dealEditavel(dealId) {
 }
 
 var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
+var ERRO_F3_DESLIGADA = 'Esta ação ainda não está disponível.';
 
 function proprio(obj, chave) {
   return Object.prototype.hasOwnProperty.call(obj, chave) ? obj[chave] : undefined;
@@ -97,7 +99,7 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
   var ped = montarPedidos(extras, new Date(agora).getFullYear());
   var corpo = {
-    geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios,
+    geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos.concat(ped.avisos), usuarios: usuarios,
     dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
@@ -111,6 +113,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
+    if (!ACOES_F3_ATIVAS) return { ok: false, status: 400, body: { erro: ERRO_F3_DESLIGADA } };
     if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
       return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
     }
@@ -143,6 +146,7 @@ function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
 }
 
 function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
+  if (!ACOES_F3_ATIVAS) return { status: 400, body: { erro: ERRO_F3_DESLIGADA } };
   if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
     return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
   }
@@ -160,7 +164,12 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
     })
   };
   if (r.pedidoId) extras.pedidoId = r.pedidoId;
-  return respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
+  // O workflow publicado grava gravacao/historico na aba errada para estes
+  // tipos; sem eles nada e escrito ate o workflow novo (operacoes[]) entrar.
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
 }
 
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
