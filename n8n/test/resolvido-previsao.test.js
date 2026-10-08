@@ -253,3 +253,46 @@ test('dividir_por_previsao: item sem data vai por ultimo; validacoes', () => {
   assert.deepEqual(acao({ tipo: 'dividir_por_previsao', pedidoId: 'PED-0044', versao: 'P1' }, linhas({ pedidos: [ped({ baixado_em: 'X' })] })),
     { status: 409, body: { erro: 'Pedido finalizado não pode ser alterado.' } });
 });
+
+// ---------- revisao final: ultima etapa fixa, so ADM, baixa so de item aberto ----------
+test('salvar_etapas: a ultima etapa (Resolvido) precisa continuar por ultimo', () => {
+  const erro = { status: 400, body: { erro: 'A última etapa (Resolvido) precisa continuar por último.' } };
+  // nova etapa depois da ultima
+  assert.deepEqual(acao({ tipo: 'salvar_etapas', etapas: [
+    { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' },
+    { id: 'entregue', nome: 'Resolvido' }, { nome: 'Depois' }
+  ] }, linhas({ pedidos: [] })), erro);
+  // ultima removida
+  assert.deepEqual(acao({ tipo: 'salvar_etapas', etapas: [{ id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' }] },
+    linhas({ pedidos: [] })), erro);
+  // ultima reordenada
+  assert.deepEqual(acao({ tipo: 'salvar_etapas', etapas: [{ id: 'entregue', nome: 'Resolvido' }, { id: 'a_pedir', nome: 'A pedir' }] },
+    linhas({ pedidos: [] })), erro);
+  // nome atual da ultima na mensagem; renomear a ultima mantendo a posicao vale
+  const ETAPAS = [{ id: 'a', nome: 'Pedir', ordem: 1 }, { id: 'fim', nome: 'Chegou', ordem: 2 }];
+  assert.deepEqual(acao({ tipo: 'salvar_etapas', etapas: [{ id: 'fim', nome: 'Chegou' }, { id: 'a', nome: 'Pedir' }] },
+    linhas({ pedidos: [], etapas: ETAPAS })), { status: 400, body: { erro: 'A última etapa (Chegou) precisa continuar por último.' } });
+  const ok = acao({ tipo: 'salvar_etapas', etapas: [{ id: 'a', nome: 'Pedir' }, { nome: 'Nova' }, { id: 'fim', nome: 'Chegou na fábrica' }] },
+    linhas({ pedidos: [], etapas: ETAPAS }));
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.operacoes[2].linha, { id: 'fim', nome: 'Chegou na fábrica', ordem: 3 });
+});
+
+test('salvar_etapas: so administradores', () => {
+  const crypto2 = require('crypto');
+  const us = [{ email: 'op@exemplo.com', nome: 'Op', perfil: 'operador', senha_hash: ctx.gerarHash(crypto2, 'senha-forte-123'), ativo: 'SIM' }];
+  const e = {};
+  const login = ctx.processarLogin(crypto2, e, { email: 'op@exemplo.com', senha: 'senha-forte-123' }, us, T0);
+  const cab = 'Bearer ' + login.body.token;
+  const corpo = { tipo: 'salvar_etapas', etapas: [{ id: 'a_pedir', nome: 'A pedir' }, { id: 'entregue', nome: 'Resolvido' }] };
+  const esperado = { status: 403, body: { erro: 'Só administradores podem alterar as etapas do quadro.' } };
+  assert.deepEqual(limpo(ctx.preValidarAcao(e, cab, corpo, T0)), Object.assign({ ok: false }, esperado));
+  assert.deepEqual(limpo(ctx.processarAcao(e, cab, corpo, linhas({ pedidos: [] }), T0, gerarId)), esperado);
+});
+
+test('baixa na ultima etapa so para linhas ABERTO/PARCIAL', () => {
+  const lin = linhas({ faltantes: [falt({ id: 'a', status: 'RESOLVIDO' }), falt({ id: 'c', os: '90002', deal_id: '600002', qtd_falta: 50, status: 'PARCIAL' })] });
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' }, lin);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'c'], ['PEDIDOS', 'PED-0044']]);
+});

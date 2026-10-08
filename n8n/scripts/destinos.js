@@ -2,17 +2,20 @@
 // que sao gravados. Cada destino vira 3 nodes: Code "Filtrar ..." (linhas
 // daquele destino, lidas de $('Processar Acao')), IF "Tem ...?" e o Google
 // Sheets que grava. Usado por gerar-code-nodes.js, gerar-workflow-sdk.js e testes.
+// Pedidos (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO) gravam antes da baixa
+// (FALTANTES, CAIXAS_PCP): se algo falhar no meio, sobra baixa a menos
+// (corrigivel com uma baixa manual), nunca baixa em dobro.
 const VERBO = { update: 'Atualizar', append: 'Incluir', appendOrUpdate: 'Gravar' };
 
 const DESTINOS = [
-  { aba: 'FALTANTES', operacao: 'update', chave: 'id', fonte: 'operacoes' },
-  { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id', fonte: 'operacoes' },
   { aba: 'PEDIDOS', operacao: 'append', chave: 'id', fonte: 'operacoes' },
   { aba: 'PEDIDOS', operacao: 'update', chave: 'id', fonte: 'operacoes' },
   { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', fonte: 'operacoes' },
   { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', fonte: 'operacoes' },
   { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', fonte: 'operacoes' },
   { aba: 'ETAPAS_PEDIDO', operacao: 'update', chave: 'id', fonte: 'operacoes' },
+  { aba: 'FALTANTES', operacao: 'update', chave: 'id', fonte: 'operacoes' },
+  { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id', fonte: 'operacoes' },
   { aba: 'HISTORICO_APP', operacao: 'append', chave: 'id', fonte: 'historicos' }
 ].map((d) => Object.assign(d, {
   arquivo: 'filtrar-' + d.aba.toLowerCase().replace(/_/g, '-') + '-' + d.operacao.toLowerCase(),

@@ -11,7 +11,7 @@
 // mesma aba, operacao e chave, e a linha de update precisa da chave; senao o
 // node falha antes de qualquer escrita.
 var DESTINO = {"aba":"FALTANTES","operacao":"update","chave":"id","fonte":"operacoes"};
-var CONFERIR = [{"aba":"FALTANTES","operacao":"update","chave":"id","fonte":"operacoes"},{"aba":"CAIXAS_PCP","operacao":"appendOrUpdate","chave":"deal_id","fonte":"operacoes"},{"aba":"PEDIDOS","operacao":"append","chave":"id","fonte":"operacoes"},{"aba":"PEDIDOS","operacao":"update","chave":"id","fonte":"operacoes"},{"aba":"PEDIDOS_ITENS","operacao":"append","chave":"id","fonte":"operacoes"},{"aba":"PEDIDOS_ITENS","operacao":"update","chave":"id","fonte":"operacoes"},{"aba":"ETAPAS_PEDIDO","operacao":"appendOrUpdate","chave":"id","fonte":"operacoes"},{"aba":"ETAPAS_PEDIDO","operacao":"update","chave":"id","fonte":"operacoes"},{"aba":"HISTORICO_APP","operacao":"append","chave":"id","fonte":"historicos"}];
+var CONFERIR = null;
 var resultado = $('Processar Acao').first().json;
 var operacoes = resultado.operacoes || [];
 if (CONFERIR) {

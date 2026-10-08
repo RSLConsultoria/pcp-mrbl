@@ -28,7 +28,7 @@ linha(0, 0, ['Login', 'Ler USUARIOS', 'Processar Login', 'Responder Login']);
 linha(300, 0, ['Board', 'Validar Pedido', 'Precisa Ler?', 'Ler FALTANTES', 'Ler CAIXAS GANHAS', 'Ler CAIXAS_PCP',
   'Ler HISTORICO_APP', 'Ler USUARIOS Board', 'Ler PEDIDOS', 'Ler PEDIDOS_ITENS', 'Ler ETAPAS_PEDIDO', 'Montar Board', 'Responder Board']);
 linha(600, 0, ['Acao', 'Pre Validar Acao', 'Pre OK?', 'Ler FALTANTES Acao', 'Ler CAIXAS_PCP Acao', 'Ler CAIXAS GANHAS Acao',
-  'Ler PEDIDOS Acao', 'Ler PEDIDOS_ITENS Acao', 'Ler ETAPAS_PEDIDO Acao', 'Ler HISTORICO_APP Acao', 'Processar Acao', 'Acao OK?']);
+  'Ler PEDIDOS Acao', 'Ler PEDIDOS_ITENS Acao', 'Ler ETAPAS_PEDIDO Acao', 'Processar Acao', 'Acao OK?']);
 POS['Responder Pre'] = [3 * DX, 780];
 // Gravacoes: 3 destinos por faixa (Filtrar -> Tem? -> Sheets acima, o "nao"
 // segue reto para o proximo Filtrar). Faixas em y = 1000, 1300, 1600.
@@ -50,6 +50,10 @@ posAtual = POS;
 
 const CRED = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
 const OPCOES_RAW = "options: { cellFormat: 'RAW', handlingExtraData: 'insertInNewColumn' }";
+// Todo Google Sheets do workflow da API tenta de novo (cota/instabilidade da
+// planilha): 3 tentativas, 3 s entre elas. O workflow de envio fica como esta.
+let RETRY = '';
+const RETRY_API = 'retryOnFail: true,\n    maxTries: 3,\n    waitBetweenTries: 3000,\n    ';
 
 // Escrita: operation = update | appendOrUpdate | append. match = colunas de casamento.
 const escrever = (varName, nome, operation, aba, match, extra) => `const ${varName} = node({
@@ -57,7 +61,7 @@ const escrever = (varName, nome, operation, aba, match, extra) => `const ${varNa
   version: 4.7,
   config: {
     name: '${nome}',
-    ${extra || ''}parameters: {
+    ${extra || ''}${RETRY}parameters: {
       resource: 'sheet',
       operation: '${operation}',
       authentication: 'serviceAccount',
@@ -101,7 +105,7 @@ const sheets = (varName, nome, aba, extra) => `const ${varName} = node({
   version: 4.7,
   config: {
     name: '${nome}',
-    ${extra}alwaysOutputData: true,
+    ${extra}${RETRY}alwaysOutputData: true,
     parameters: {
       resource: 'sheet',
       operation: 'read',
@@ -201,6 +205,7 @@ const proximo = (i) => (i + 1 < DESTINOS.length ? 'filtrar' + (i + 1) : 'respond
 const cadeiaGravacao = (i) => (i >= DESTINOS.length ? 'responderAcao'
   : 'filtrar' + i + '.to(tem' + i + '\n      .onTrue(gravar' + i + '.to(' + cadeiaGravacao(i + 1) + '))\n      .onFalse(' + proximo(i) + '))');
 
+RETRY = RETRY_API;
 const api = IMPORT + [
   webhook('loginWebhook', 'Login', 'POST', 'pcp-login'),
   sheets('lerUsuarios', 'Ler USUARIOS', 'USUARIOS', ''),
@@ -229,7 +234,6 @@ const api = IMPORT + [
   sheets('lerPedidosAcao', 'Ler PEDIDOS Acao', 'PEDIDOS', unico),
   sheets('lerPedidosItensAcao', 'Ler PEDIDOS_ITENS Acao', 'PEDIDOS_ITENS', unico),
   sheets('lerEtapasAcao', 'Ler ETAPAS_PEDIDO Acao', 'ETAPAS_PEDIDO', unico),
-  sheets('lerHistoricoAcao', 'Ler HISTORICO_APP Acao', 'HISTORICO_APP', unico),
   code('processarAcao', 'Processar Acao', 'processar-acao'),
   'const acaoOk = ' + condicao('Acao OK?', '{{ $json.status }}', 'number', 'equals', '200') + ';',
   ...DESTINOS.map((d, i) => [
@@ -259,13 +263,14 @@ export default workflow('pcp-mrbl-api', 'PCP MRBL - API', {
   .to(preValidarAcao)
   .to(preOk
     .onTrue(lerFaltantesAcao.to(lerCaixasPcpAcao).to(lerGanhasAcao).to(lerPedidosAcao).to(lerPedidosItensAcao)
-      .to(lerEtapasAcao).to(lerHistoricoAcao).to(processarAcao).to(acaoOk
+      .to(lerEtapasAcao).to(processarAcao).to(acaoOk
     .onTrue(${cadeiaGravacao(0)})
     .onFalse(responderAcao)))
     .onFalse(responderPre));
 `;
 
 posAtual = POS_ENVIO;
+RETRY = '';
 const envio = IMPORT + [
   `const agenda = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',

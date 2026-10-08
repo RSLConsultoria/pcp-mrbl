@@ -1208,7 +1208,7 @@ function baixaDosItens(itens, faltantesPorId, agora) {
   for (var k = 0; k < itens.length; k++) {
     var pi = itens[k];
     var lf = faltantesPorId[texto(pi.item_id)];
-    if (!lf || semAcento(lf.status) === 'SUBSTITUIDO') continue;
+    if (!lf || !STATUS_ABERTOS[semAcento(lf.status)]) continue;
     var falta = numero(lf.qtd_falta);
     var bx = numero(lf.qtd_baixada);
     if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
@@ -1351,7 +1351,10 @@ function slugEtapa(nome) {
   return s || 'etapa';
 }
 
+var ERRO_ETAPAS_SO_ADM = 'Só administradores podem alterar as etapas do quadro.';
+
 function aplicarEtapas(acao, linhas, ctx, lista) {
+  if (texto(ctx.perfil).toUpperCase() !== 'ADM') return erroAcao(403, ERRO_ETAPAS_SO_ADM);
   var temLinhas = (linhas.etapas || []).some(function (e) { return e && texto(e.id) !== '' && texto(e.nome) !== ''; });
   var atuais = lerEtapas(linhas.etapas);
   var idsAtuais = {};
@@ -1361,6 +1364,11 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
   var i;
   for (i = 0; i < acao.etapas.length; i++) {
     if (acao.etapas[i].id && !idsAtuais[acao.etapas[i].id]) return erroAcao(400, 'Etapa inválida.');
+  }
+  // A ultima etapa (Resolvido: mover para ela da a baixa) fica sempre por ultimo.
+  var ultimaAtual = atuais[atuais.length - 1];
+  if (acao.etapas[acao.etapas.length - 1].id !== ultimaAtual.id) {
+    return erroAcao(400, 'A última etapa (' + ultimaAtual.nome + ') precisa continuar por último.');
   }
   var mantidas = {};
   acao.etapas.forEach(function (e) { if (e.id) mantidas[e.id] = 1; });
@@ -1571,7 +1579,7 @@ function resultadoEnvio(linha, resposta) {
 var VALIDADE_SESSAO_MS = 12 * 3600 * 1000;
 var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
-var VALIDADE_CACHE_MS = 30 * 1000;
+var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
 var DEALS_EDITAVEIS = ['607479158'];  // vazio = todos. Até o go-live, só a OS de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
@@ -1684,6 +1692,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
     }
     var vp = validarAcaoPedido(corpo);
     if (!vp.ok) return { ok: false, status: vp.status, body: { erro: vp.erro } };
+    if (vp.acao.tipo === 'salvar_etapas' && sessao.perfil !== 'ADM') return { ok: false, status: 403, body: { erro: ERRO_ETAPAS_SO_ADM } };
     return { ok: true };
   }
   if (!dealEditavel(corpo && corpo.dealId)) return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
@@ -1718,7 +1727,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   var v = validarAcaoPedido(corpo);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
   var r = aplicarAcaoPedido(v.acao, linhas || {}, {
-    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId
+    usuario: sessao.nome, email: sessao.email, perfil: sessao.perfil, agora: new Date(agora).toISOString(), gerarId: gerarId
   });
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
   var extras = {
@@ -1739,7 +1748,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
 }
 
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
-// pedidosItens?, etapas?, historico? } (linhas da planilha).
+// pedidosItens?, etapas? } (linhas da planilha).
 // Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
 // historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
@@ -1810,8 +1819,7 @@ var linhas = {
   ganhas: ler('Ler CAIXAS GANHAS Acao'),
   pedidos: ler('Ler PEDIDOS Acao'),
   pedidosItens: ler('Ler PEDIDOS_ITENS Acao'),
-  etapas: ler('Ler ETAPAS_PEDIDO Acao'),
-  historico: ler('Ler HISTORICO_APP Acao')
+  etapas: ler('Ler ETAPAS_PEDIDO Acao')
 };
 var gerarId = function () { return require('crypto').randomUUID(); };
 return [{ json: processarAcao(estado, cabecalho, corpo, linhas, Date.now(), gerarId) }];

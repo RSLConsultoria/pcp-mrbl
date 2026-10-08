@@ -6,7 +6,7 @@
 var VALIDADE_SESSAO_MS = 12 * 3600 * 1000;
 var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
-var VALIDADE_CACHE_MS = 30 * 1000;
+var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
 var DEALS_EDITAVEIS = ['607479158'];  // vazio = todos. Até o go-live, só a OS de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
@@ -119,6 +119,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
     }
     var vp = validarAcaoPedido(corpo);
     if (!vp.ok) return { ok: false, status: vp.status, body: { erro: vp.erro } };
+    if (vp.acao.tipo === 'salvar_etapas' && sessao.perfil !== 'ADM') return { ok: false, status: 403, body: { erro: ERRO_ETAPAS_SO_ADM } };
     return { ok: true };
   }
   if (!dealEditavel(corpo && corpo.dealId)) return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
@@ -153,7 +154,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   var v = validarAcaoPedido(corpo);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
   var r = aplicarAcaoPedido(v.acao, linhas || {}, {
-    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId
+    usuario: sessao.nome, email: sessao.email, perfil: sessao.perfil, agora: new Date(agora).toISOString(), gerarId: gerarId
   });
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
   var extras = {
@@ -174,7 +175,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
 }
 
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
-// pedidosItens?, etapas?, historico? } (linhas da planilha).
+// pedidosItens?, etapas? } (linhas da planilha).
 // Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
 // historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {

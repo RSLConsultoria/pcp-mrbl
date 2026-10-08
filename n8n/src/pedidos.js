@@ -693,7 +693,7 @@ function baixaDosItens(itens, faltantesPorId, agora) {
   for (var k = 0; k < itens.length; k++) {
     var pi = itens[k];
     var lf = faltantesPorId[texto(pi.item_id)];
-    if (!lf || semAcento(lf.status) === 'SUBSTITUIDO') continue;
+    if (!lf || !STATUS_ABERTOS[semAcento(lf.status)]) continue;
     var falta = numero(lf.qtd_falta);
     var bx = numero(lf.qtd_baixada);
     if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
@@ -836,7 +836,10 @@ function slugEtapa(nome) {
   return s || 'etapa';
 }
 
+var ERRO_ETAPAS_SO_ADM = 'Só administradores podem alterar as etapas do quadro.';
+
 function aplicarEtapas(acao, linhas, ctx, lista) {
+  if (texto(ctx.perfil).toUpperCase() !== 'ADM') return erroAcao(403, ERRO_ETAPAS_SO_ADM);
   var temLinhas = (linhas.etapas || []).some(function (e) { return e && texto(e.id) !== '' && texto(e.nome) !== ''; });
   var atuais = lerEtapas(linhas.etapas);
   var idsAtuais = {};
@@ -846,6 +849,11 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
   var i;
   for (i = 0; i < acao.etapas.length; i++) {
     if (acao.etapas[i].id && !idsAtuais[acao.etapas[i].id]) return erroAcao(400, 'Etapa inválida.');
+  }
+  // A ultima etapa (Resolvido: mover para ela da a baixa) fica sempre por ultimo.
+  var ultimaAtual = atuais[atuais.length - 1];
+  if (acao.etapas[acao.etapas.length - 1].id !== ultimaAtual.id) {
+    return erroAcao(400, 'A última etapa (' + ultimaAtual.nome + ') precisa continuar por último.');
   }
   var mantidas = {};
   acao.etapas.forEach(function (e) { if (e.id) mantidas[e.id] = 1; });

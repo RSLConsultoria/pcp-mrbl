@@ -68,7 +68,7 @@ const FALT = [
 ];
 function acao(corpo) {
   const s = sessao();
-  const linhas = { faltantes: FALT, caixasPcp: [], ganhas: [], pedidos: [], pedidosItens: [], etapas: [], historico: [] };
+  const linhas = { faltantes: FALT, caixasPcp: [], ganhas: [], pedidos: [], pedidosItens: [], etapas: [] };
   return limpo(ctx.processarAcao(s.e, s.cab, corpo, linhas, T0, gerarId));
 }
 
@@ -76,7 +76,7 @@ test('destinos: um Code, um IF e um Sheets por (aba, operacao), nomes unicos', (
   const nomes = DESTINOS.flatMap((d) => [d.filtrar, d.tem, d.gravar]);
   assert.equal(new Set(nomes).size, nomes.length);
   assert.deepEqual(DESTINOS.map((d) => d.aba),
-    ['FALTANTES', 'CAIXAS_PCP', 'PEDIDOS', 'PEDIDOS', 'PEDIDOS_ITENS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', 'HISTORICO_APP']);
+    ['PEDIDOS', 'PEDIDOS', 'PEDIDOS_ITENS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', 'FALTANTES', 'CAIXAS_PCP', 'HISTORICO_APP']);
 });
 
 test('F2 baixa: uma linha em FALTANTES (update) e uma no HISTORICO_APP, como antes', () => {
@@ -128,7 +128,7 @@ test('todos os destinos de uma vez: cada operacao exatamente uma vez, na ordem',
   const escritas = simular(saida);
   assert.deepEqual(escritas, esperado(saida));
   assert.deepEqual(escritas.map((e) => e.aba),
-    ['FALTANTES', 'CAIXAS_PCP', 'PEDIDOS', 'PEDIDOS', 'PEDIDOS_ITENS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', 'HISTORICO_APP']);
+    ['PEDIDOS', 'PEDIDOS', 'PEDIDOS_ITENS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', 'FALTANTES', 'CAIXAS_PCP', 'HISTORICO_APP']);
   const total = escritas.reduce((s, e) => s + e.linhas.length, 0);
   assert.equal(total, saida.operacoes.length + saida.historicos.length);
 });
@@ -137,7 +137,16 @@ test('sem operacoes nem historicos: nada e gravado', () => {
   assert.deepEqual(simular({ status: 200, operacoes: [], historicos: [] }), []);
 });
 
-test('Filtrar FALTANTES confere a lista antes de qualquer escrita', () => {
+// Pedido antes da baixa: se uma escrita falhar no meio, sobra baixa a menos
+// (o pedido nao finalizado pode ser movido de novo), nunca baixa em dobro.
+test('ordem: PEDIDOS/PEDIDOS_ITENS/ETAPAS_PEDIDO antes de FALTANTES e CAIXAS_PCP; historico por ultimo', () => {
+  assert.deepEqual(DESTINOS.map((d) => d.gravar), [
+    'Incluir PEDIDOS', 'Atualizar PEDIDOS', 'Incluir PEDIDOS_ITENS', 'Atualizar PEDIDOS_ITENS',
+    'Gravar ETAPAS_PEDIDO', 'Atualizar ETAPAS_PEDIDO', 'Atualizar FALTANTES', 'Gravar CAIXAS_PCP', 'Incluir HISTORICO_APP'
+  ]);
+});
+
+test('Filtrar do primeiro destino confere a lista antes de qualquer escrita', () => {
   const sai = (operacoes) => () => rodarFiltrar(0, { status: 200, operacoes, historicos: [] });
   assert.throws(sai([{ aba: 'OUTRA', operacao: 'update', chave: 'id', linha: { id: 'a' } }]), /sem destino/);
   assert.throws(sai([{ aba: 'PEDIDOS', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'a' } }]), /sem destino/);
@@ -152,4 +161,21 @@ test('build: o texto dos Code nodes Filtrar e o mesmo do template', () => {
     if (!fs.existsSync(arq)) return; // antes do primeiro npm run build
     assert.ok(fs.readFileSync(arq, 'utf8').endsWith(codigoFiltrar(TEMPLATE, d, i)), d.arquivo);
   });
+});
+
+// Revisao final: todo Google Sheets da API com retry; ramo acao sem a leitura
+// morta do HISTORICO_APP (processarAcao nao usa linhas.historico).
+test('pcp-api.sdk.js: todo Google Sheets tenta 3x; sem Ler HISTORICO_APP Acao', () => {
+  const arq = path.join(__dirname, '..', 'workflows', 'pcp-api.sdk.js');
+  const sdk = fs.readFileSync(arq, 'utf8');
+  const blocos = sdk.split(/\nconst \w+ = /).filter((b) => b.includes("type: 'n8n-nodes-base.googleSheets'"));
+  assert.ok(blocos.length >= 20, 'nodes Sheets: ' + blocos.length);
+  blocos.forEach((b) => {
+    const nome = /name: '([^']+)'/.exec(b)[1];
+    assert.ok(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b), nome);
+  });
+  assert.ok(!sdk.includes('Ler HISTORICO_APP Acao'));
+  assert.ok(!fs.readFileSync(path.join(__dirname, '..', 'adaptadores', 'processar-acao.js'), 'utf8').includes('HISTORICO_APP'));
+  const envio = fs.readFileSync(path.join(__dirname, '..', 'workflows', 'pcp-envio.sdk.js'), 'utf8');
+  assert.ok(!envio.includes('retryOnFail'));
 });

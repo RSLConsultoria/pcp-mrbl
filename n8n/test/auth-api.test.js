@@ -89,8 +89,8 @@ test('board: token valido sem cache pede leitura; com cache novo devolve o cache
   assert.deepEqual(r.body, { geradoEm: new Date(T0).toISOString(), caixas: [], avisos: [], usuarios: [], dealsEditaveis: [],
     pedidos: [], etapasPedido: limpo(ctx.ETAPAS_PADRAO) });
 
-  assert.deepEqual(limpo(ctx.validarPedidoBoard(estado, cab, T0 + 29000)), { status: 200, body: r.body });
-  assert.deepEqual(limpo(ctx.validarPedidoBoard(estado, cab, T0 + 31000)), { ler: true });
+  assert.deepEqual(limpo(ctx.validarPedidoBoard(estado, cab, T0 + 54000)), { status: 200, body: r.body });
+  assert.deepEqual(limpo(ctx.validarPedidoBoard(estado, cab, T0 + 56000)), { ler: true });
 });
 
 test('board: sessao vencida = 401 e some do estado', () => {

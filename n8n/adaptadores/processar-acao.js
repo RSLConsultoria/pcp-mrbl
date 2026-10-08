@@ -10,8 +10,7 @@ var linhas = {
   ganhas: ler('Ler CAIXAS GANHAS Acao'),
   pedidos: ler('Ler PEDIDOS Acao'),
   pedidosItens: ler('Ler PEDIDOS_ITENS Acao'),
-  etapas: ler('Ler ETAPAS_PEDIDO Acao'),
-  historico: ler('Ler HISTORICO_APP Acao')
+  etapas: ler('Ler ETAPAS_PEDIDO Acao')
 };
 var gerarId = function () { return require('crypto').randomUUID(); };
 return [{ json: processarAcao(estado, cabecalho, corpo, linhas, Date.now(), gerarId) }];
