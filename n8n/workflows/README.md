@@ -138,7 +138,7 @@ A credencial **Google Sheets - MRBL** (googleApi, service account, id `72hvCT9jk
 
 - **Login** (igual): Login → Ler USUARIOS (Google Sheets) → Processar Login → Responder Login.
 - **Board**: Board → Validar Pedido → Precisa Ler? → (sim) **Ler Planilha** → Montar Board → Responder Board; (não, cache de 55 s) → Responder Board.
-  - Ler Planilha: HTTP GET `values:batchGet` das 8 abas (FALTANTES, CAIXAS GANHAS, CAIXAS_PCP, HISTORICO_APP, USUARIOS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO), `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=FORMATTED_STRING` (os padrões do node Sheets). executeOnce, retry 3× / 3 s.
+  - Ler Planilha: HTTP GET `values:batchGet` das 10 abas (FALTANTES, CAIXAS GANHAS, CAIXAS_PCP, HISTORICO_APP, USUARIOS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, FORNECEDORES, RESPONSAVEIS), `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=FORMATTED_STRING` (os padrões do node Sheets). executeOnce, retry 3× / 3 s.
 - **Ação**: Acao → Pre Validar Acao → Pre OK? → (sim) **Ler Planilha Acao** → Processar Acao → Acao OK? → (sim) **Montar Escritas** → **Tem Escritas?** → (sim) **Loop Escritas** ⇄ **Gravar Lote**, e ao terminar → Responder Acao; Tem Escritas? (não) e Acao OK? (não) → Responder Acao; Pre OK? (não) → Responder Pre.
   - Ler Planilha Acao: batchGet de FALTANTES, CAIXAS_PCP, CAIXAS GANHAS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO e só a linha 1 do HISTORICO_APP (cabeçalho para o append).
   - Montar Escritas: um item por requisição, na ordem: cabeçalhos novos (se algum campo não tiver coluna) → `values:append` em PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP → **um** `values:batchUpdate` com todas as atualizações (só as colunas da operação, sem regravar a coluna de casamento) → `values:append` no HISTORICO_APP. Tudo RAW; os appends usam `insertDataOption=OVERWRITE` (escrevem nas linhas vazias logo depois da tabela, sem deslocar linhas, então os números de linha lidos continuam valendo para o batchUpdate da mesma ação). Update sem linha, destino desconhecido ou operação sem chave derrubam o node **antes** de qualquer escrita. Nada a gravar → `{ vazio: true }`.
@@ -162,3 +162,27 @@ A cada 2 min: Ler HISTORICO_APP → Selecionar Envio (agrupa PENDENTE por deal; 
 - API: `restore_workflow_version` para o `activeVersionId` anotado e publish. Nada muda na planilha (mesmas abas e colunas).
 - Envio: restaure a versão anterior do workflow `z9misKW25YTuDhJ6`. Linhas já marcadas ENVIADO pelo compilado ficam como estão.
 - O homolog pode ser desativado/apagado sem efeito na produção.
+
+## Fornecedor e responsável obrigatórios no pedido (08/10/2026)
+
+O Gerar pedido passa a exigir **Fornecedor** (ou o cliente, quando "Solicitar a" = Cliente) e **Responsável**, escolhidos em listas. O board devolve `fornecedores` e `responsaveis` (ativos, sem repetir, em ordem pt-BR), lidos de duas abas novas no `Ler Planilha` (LEITURAS_BOARD). O ramo ação não lê as abas: o servidor só confere que os campos não vêm vazios (`gerar_pedido` 400 "Informe o fornecedor." / "Informe o cliente." / "Informe o responsável."; `editar_pedido` não deixa limpar). "Local de entrega" ganhou `OFICINA` e `CLIENTE`.
+
+### Antes do deploy: criar as abas (senão o board quebra)
+
+Aba que não existe derruba o `values:batchGet` inteiro (400) e o board para de carregar. Crie as duas **antes** de aplicar o SDK, com o cabeçalho exato na linha 1 (aba só com cabeçalho também funciona: a lista vem vazia):
+
+- **FORNECEDORES**: colunas `id` | `nome` | `ativo`. Uma linha por fornecedor; `ativo` vazio ou `SIM` = aparece na lista (`NAO` esconde). `id` é livre (ex.: F001); o pedido grava o `nome`.
+- **RESPONSAVEIS**: colunas `nome` | `ativo`, com as linhas:
+
+  | nome | ativo |
+  |---|---|
+  | Gi | SIM |
+  | Fátima | SIM |
+  | Cesar | SIM |
+  | Luana | SIM |
+  | Lucca | SIM |
+  | Renata | SIM |
+
+O responsável da caixa (No Ploomes) continua vindo da aba USUARIOS.
+
+Deploy: `npm run build` e aplicar o SDK (homolog primeiro, como acima). Rollback: o mesmo da seção anterior; as abas novas podem ficar (a API antiga não as lê).

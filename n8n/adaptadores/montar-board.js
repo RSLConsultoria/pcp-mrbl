@@ -9,6 +9,8 @@ var extras = {
   usuarios: abas['USUARIOS'],
   pedidos: abas['PEDIDOS'],
   pedidosItens: abas['PEDIDOS_ITENS'],
-  etapas: abas['ETAPAS_PEDIDO']
+  etapas: abas['ETAPAS_PEDIDO'],
+  fornecedores: abas['FORNECEDORES'],
+  responsaveis: abas['RESPONSAVEIS']
 };
 return [{ json: montarRespostaBoard(estado, abas['FALTANTES'], abas['CAIXAS GANHAS'], Date.now(), extras) }];

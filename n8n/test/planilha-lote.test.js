@@ -52,7 +52,7 @@ test('urlLeitura: batchGet com todas as abas, UNFORMATTED_VALUE e datas formatad
 
 test('leituras do board e da acao', () => {
   assert.deepEqual(limpo(ctx.LEITURAS_BOARD), ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
-    'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO']);
+    'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS']);
   assert.deepEqual(limpo(ctx.LEITURAS_ACAO), ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS',
     'ETAPAS_PEDIDO', { aba: 'HISTORICO_APP', soCabecalho: true }]);
 });
@@ -74,6 +74,15 @@ test('planilhaDoLote: casa valueRanges pela ordem pedida; linhas e cabecalhos po
   });
   assert.deepEqual(p.cabecalhos, { 'CAIXAS GANHAS': ['deal_id', 'os'], FALTANTES: [], HISTORICO_APP: ['id', 'quando'] });
   assert.deepEqual(p.linhaCabecalho, { 'CAIXAS GANHAS': 1, FALTANTES: 1, HISTORICO_APP: 1 });
+});
+
+test('planilhaDoLote: aba so com cabecalho ou toda vazia (sem values) vira lista vazia', () => {
+  const resp = { valueRanges: [
+    { range: "'FORNECEDORES'!A1:Z1000", majorDimension: 'ROWS', values: [['id', 'nome', 'ativo']] },
+    { range: "'RESPONSAVEIS'!A1:Z1000", majorDimension: 'ROWS' }
+  ] };
+  const p = limpo(ctx.planilhaDoLote(resp, ['FORNECEDORES', 'RESPONSAVEIS']));
+  assert.deepEqual(p.linhas, { FORNECEDORES: [], RESPONSAVEIS: [] });
 });
 
 test('planilhaDoLote: resposta sem a quantidade pedida de ranges falha', () => {
@@ -239,7 +248,7 @@ test('acao real: processarAcao (gerar_pedido) -> requisicoes', () => {
   let n = 0;
   const saida = ctx.processarAcao(e, 'Bearer ' + tok, {
     tipo: 'gerar_pedido', itens: [{ itemId: 'a', dealId: '600001', qtd: 20, fornecedor: '' }],
-    origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: ''
+    origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: 'Gi'
   }, linhas, T0, () => 'id-' + (++n));
   assert.equal(saida.status, 200, JSON.stringify(saida.body));
   const r = limpo(ctx.requisicoesDeEscrita(saida.operacoes, saida.historicos, p, DOC));

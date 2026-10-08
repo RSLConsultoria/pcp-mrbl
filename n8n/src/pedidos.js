@@ -15,7 +15,7 @@ var ETAPAS_PADRAO = [
   { id: 'entregue', nome: 'Resolvido', ordem: 4 }
 ];
 var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
-var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo' };
+var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
 var ERRO_VERSAO = 'Alguém alterou esta caixa agora há pouco.';
 var CAMPOS_PEDIDO = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'];
 var NOMES_CAMPO = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
@@ -255,6 +255,12 @@ function qtdValida(v) {
   return n > 0 ? n : null;
 }
 
+// Fornecedor (ou cliente) e responsavel sao obrigatorios no pedido.
+var ERRO_SEM_RESPONSAVEL = 'Informe o responsável.';
+function erroQuemVazio(origem) {
+  return origem === 'CLIENTE' ? 'Informe o cliente.' : 'Informe o fornecedor.';
+}
+
 // Normaliza um campo do pedido; { ok, valor } ou { ok: false, erro }.
 function campoPedido(nome, v) {
   if (nome === 'etapa') {
@@ -356,6 +362,8 @@ function validarAcaoPedido(corpo) {
       if (!r.ok) return erroAcao(400, r.erro);
       acao.campos[nomes[i]] = r.valor;
     }
+    if (!acao.campos.quem) return erroAcao(400, erroQuemVazio(acao.campos.origem));
+    if (!acao.campos.responsavel) return erroAcao(400, ERRO_SEM_RESPONSAVEL);
     return { ok: true, acao: acao };
   }
 
@@ -606,14 +614,22 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   // editar_pedido
   var mudPedido = {};
   var resumoPedido = [];
+  var erroCampo = '';
   CAMPOS_PEDIDO.forEach(function (n) {
     if (!Object.prototype.hasOwnProperty.call(acao.campos, n)) return;
     var antes = valorAtualCampo(p.linha, n, new Date(agora).getFullYear());
     var depois = acao.campos[n];
     if (antes === depois) return;
+    // nao deixa limpar o fornecedor/cliente nem o responsavel
+    if (depois === '' && n === 'quem') {
+      erroCampo = erroQuemVazio(acao.campos.origem || valorAtualCampo(p.linha, 'origem', new Date(agora).getFullYear()));
+    } else if (depois === '' && n === 'responsavel') {
+      erroCampo = ERRO_SEM_RESPONSAVEL;
+    }
     mudPedido[n] = depois;
     resumoPedido.push(NOMES_CAMPO[n] + ': ' + mostrarCampo(n, antes, etapas) + ' → ' + mostrarCampo(n, depois, etapas));
   });
+  if (erroCampo) return erroAcao(400, erroCampo);
   if (mudPedido.etapa !== undefined && !existeEtapa(mudPedido.etapa)) return erroAcao(400, 'Etapa inválida.');
   var ano = new Date(agora).getFullYear();
   var previsaoPedidoDepois = mudPedido.previsao !== undefined ? mudPedido.previsao : valorAtualCampo(p.linha, 'previsao', ano);

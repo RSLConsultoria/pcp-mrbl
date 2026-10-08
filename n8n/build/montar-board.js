@@ -530,7 +530,7 @@ var ETAPAS_PADRAO = [
   { id: 'entregue', nome: 'Resolvido', ordem: 4 }
 ];
 var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
-var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo' };
+var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
 var ERRO_VERSAO = 'Alguém alterou esta caixa agora há pouco.';
 var CAMPOS_PEDIDO = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'];
 var NOMES_CAMPO = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
@@ -770,6 +770,12 @@ function qtdValida(v) {
   return n > 0 ? n : null;
 }
 
+// Fornecedor (ou cliente) e responsavel sao obrigatorios no pedido.
+var ERRO_SEM_RESPONSAVEL = 'Informe o responsável.';
+function erroQuemVazio(origem) {
+  return origem === 'CLIENTE' ? 'Informe o cliente.' : 'Informe o fornecedor.';
+}
+
 // Normaliza um campo do pedido; { ok, valor } ou { ok: false, erro }.
 function campoPedido(nome, v) {
   if (nome === 'etapa') {
@@ -871,6 +877,8 @@ function validarAcaoPedido(corpo) {
       if (!r.ok) return erroAcao(400, r.erro);
       acao.campos[nomes[i]] = r.valor;
     }
+    if (!acao.campos.quem) return erroAcao(400, erroQuemVazio(acao.campos.origem));
+    if (!acao.campos.responsavel) return erroAcao(400, ERRO_SEM_RESPONSAVEL);
     return { ok: true, acao: acao };
   }
 
@@ -1121,14 +1129,22 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   // editar_pedido
   var mudPedido = {};
   var resumoPedido = [];
+  var erroCampo = '';
   CAMPOS_PEDIDO.forEach(function (n) {
     if (!Object.prototype.hasOwnProperty.call(acao.campos, n)) return;
     var antes = valorAtualCampo(p.linha, n, new Date(agora).getFullYear());
     var depois = acao.campos[n];
     if (antes === depois) return;
+    // nao deixa limpar o fornecedor/cliente nem o responsavel
+    if (depois === '' && n === 'quem') {
+      erroCampo = erroQuemVazio(acao.campos.origem || valorAtualCampo(p.linha, 'origem', new Date(agora).getFullYear()));
+    } else if (depois === '' && n === 'responsavel') {
+      erroCampo = ERRO_SEM_RESPONSAVEL;
+    }
     mudPedido[n] = depois;
     resumoPedido.push(NOMES_CAMPO[n] + ': ' + mostrarCampo(n, antes, etapas) + ' → ' + mostrarCampo(n, depois, etapas));
   });
+  if (erroCampo) return erroAcao(400, erroCampo);
   if (mudPedido.etapa !== undefined && !existeEtapa(mudPedido.etapa)) return erroAcao(400, 'Etapa inválida.');
   var ano = new Date(agora).getFullYear();
   var previsaoPedidoDepois = mudPedido.previsao !== undefined ? mudPedido.previsao : valorAtualCampo(p.linha, 'previsao', ano);
@@ -1660,8 +1676,10 @@ var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha d
 
 // Abas lidas por ramo, na ordem do batchGet. { soCabecalho } le so a linha 1
 // (o ramo acao so precisa do cabecalho do HISTORICO_APP para o append).
+// FORNECEDORES e RESPONSAVEIS (opcoes do pedido) precisam existir na planilha:
+// aba que nao existe derruba o batchGet inteiro (400). Aba vazia tudo bem.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
-  'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO'];
+  'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS'];
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
 
@@ -2040,6 +2058,23 @@ function validarPedidoBoard(estado, cabecalho, agora) {
   return { ler: true };
 }
 
+// Nomes das abas FORNECEDORES e RESPONSAVEIS (opcoes do pedido): ativo vazio
+// ou SIM conta como ativo; sem repetir (ignora caixa e acento), em ordem pt-BR.
+function nomesAtivos(linhas) {
+  var vistos = {};
+  var out = [];
+  (linhas || []).forEach(function (l) {
+    if (!l) return;
+    var ativo = semAcento(l.ativo);
+    if (ativo !== '' && !VALORES_ATIVO[ativo]) return;
+    var nome = texto(l.nome);
+    if (nome === '' || vistos[semAcento(nome)]) return;
+    vistos[semAcento(nome)] = 1;
+    out.push(nome);
+  });
+  return out.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+}
+
 function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   extras = extras || {};
   var r = montarCaixas(faltantes, ganhas, new Date(agora), extras);
@@ -2048,9 +2083,12 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .map(function (u) { return texto(u.nome); })
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
   var ped = montarPedidos(extras, new Date(agora).getFullYear());
+  var fornecedores = nomesAtivos(extras.fornecedores);
+  var responsaveis = nomesAtivos(extras.responsaveis);
   var corpo = {
     geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos.concat(ped.avisos), usuarios: usuarios,
-    dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido
+    dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido,
+    fornecedores: fornecedores, responsaveis: responsaveis
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
@@ -2195,6 +2233,8 @@ var extras = {
   usuarios: abas['USUARIOS'],
   pedidos: abas['PEDIDOS'],
   pedidosItens: abas['PEDIDOS_ITENS'],
-  etapas: abas['ETAPAS_PEDIDO']
+  etapas: abas['ETAPAS_PEDIDO'],
+  fornecedores: abas['FORNECEDORES'],
+  responsaveis: abas['RESPONSAVEIS']
 };
 return [{ json: montarRespostaBoard(estado, abas['FALTANTES'], abas['CAIXAS GANHAS'], Date.now(), extras) }];

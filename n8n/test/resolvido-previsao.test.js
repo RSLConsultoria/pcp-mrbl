@@ -151,7 +151,7 @@ const GERAR = {
     { itemId: 'a', dealId: '600001', qtd: 20, fornecedor: '', previsao: '2026-10-25' },
     { itemId: 'c', dealId: '600002', qtd: 5 }
   ],
-  origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: ''
+  origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: 'Gi'
 };
 
 test('gerar_pedido: previsao por item gravada na PEDIDOS_ITENS (vazia = a do pedido)', () => {

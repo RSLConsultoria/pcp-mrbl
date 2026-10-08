@@ -90,6 +90,23 @@ function validarPedidoBoard(estado, cabecalho, agora) {
   return { ler: true };
 }
 
+// Nomes das abas FORNECEDORES e RESPONSAVEIS (opcoes do pedido): ativo vazio
+// ou SIM conta como ativo; sem repetir (ignora caixa e acento), em ordem pt-BR.
+function nomesAtivos(linhas) {
+  var vistos = {};
+  var out = [];
+  (linhas || []).forEach(function (l) {
+    if (!l) return;
+    var ativo = semAcento(l.ativo);
+    if (ativo !== '' && !VALORES_ATIVO[ativo]) return;
+    var nome = texto(l.nome);
+    if (nome === '' || vistos[semAcento(nome)]) return;
+    vistos[semAcento(nome)] = 1;
+    out.push(nome);
+  });
+  return out.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+}
+
 function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   extras = extras || {};
   var r = montarCaixas(faltantes, ganhas, new Date(agora), extras);
@@ -98,9 +115,12 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .map(function (u) { return texto(u.nome); })
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
   var ped = montarPedidos(extras, new Date(agora).getFullYear());
+  var fornecedores = nomesAtivos(extras.fornecedores);
+  var responsaveis = nomesAtivos(extras.responsaveis);
   var corpo = {
     geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos.concat(ped.avisos), usuarios: usuarios,
-    dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido
+    dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido,
+    fornecedores: fornecedores, responsaveis: responsaveis
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };

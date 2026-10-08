@@ -208,15 +208,15 @@ test('mover/editar/baixar: 403 quando o pedido tem item de deal nao editavel', (
 test('editar_pedido: resumo com nomes amigaveis e itens por OS', () => {
   const r = acao({
     tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1',
-    campos: { etapa: 'aguardando', origem: 'CLIENTE', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: '' },
+    campos: { etapa: 'aguardando', origem: 'CLIENTE', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: 'Gi' },
     itens: [{ itemId: 'a', qtd: 15, fornecedor: 'FITAS DELTA' }, { itemId: 'c', qtd: 30 }]
   }, LIN_P());
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
-    { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0043', etapa: 'aguardando', origem: 'CLIENTE', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: '', atualizado_em: ISO } },
+    { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0043', etapa: 'aguardando', origem: 'CLIENTE', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: 'Gi', atualizado_em: ISO } },
     { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', linha: { id: 'PED-0043|a', qtd: 15, fornecedor: 'FITAS DELTA' } }
   ]);
-  const comum = 'Etapa: Solicitado → Aguardando entrega, Origem: Fornecedor → Cliente, Local: Bragança → São Paulo, Previsão: 15/10 → 18/10, Responsável: Renata → —';
+  const comum = 'Etapa: Solicitado → Aguardando entrega, Origem: Fornecedor → Cliente, Local: Bragança → São Paulo, Previsão: 15/10 → 18/10, Responsável: Renata → Gi';
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
     ['600001', 'Lucca alterou PED-0043: ' + comum + ', qtd de VIÉS: 20 → 15, fornecedor de VIÉS: — → FITAS DELTA'],
     ['600002', 'Lucca alterou PED-0043: ' + comum]
@@ -443,7 +443,7 @@ test('baixar_pedido: pula SUBSTITUIDO e omite itens com dar 0 do historico', () 
 });
 
 test('gerar_pedido: item ja resolvido -> 409', () => {
-  const corpo = (id) => ({ tipo: 'gerar_pedido', origem: 'Fornecedor', local: 'Bragança', itens: [{ itemId: id, dealId: '600001', qtd: 1 }] });
+  const corpo = (id) => ({ tipo: 'gerar_pedido', origem: 'Fornecedor', quem: 'TECIDOS BETA', local: 'Bragança', responsavel: 'Gi', itens: [{ itemId: id, dealId: '600001', qtd: 1 }] });
   const lin = linhas({ faltantes: [falt({ id: 'v', status: 'RESOLVIDO' }), falt({ id: 'z', qtd_falta: 5, qtd_baixada: 5 }), falt({ id: 'a' })] });
   const esperado = { status: 409, body: { erro: 'Item já resolvido.' } };
   assert.deepEqual(acao(corpo('v'), lin), esperado);
@@ -463,4 +463,40 @@ test('editar_pedido: previsao dd/mm usa o ano corrente', () => {
   assert.equal(r.status, 200);
   assert.equal(r.operacoes[0].linha.previsao, undefined);
   assert.equal(r.operacoes[0].linha.quem, 'NOVO');
+});
+
+// ---------- fornecedor e responsavel obrigatorios; locais novos ----------
+
+test('gerar_pedido: fornecedor (ou cliente) e responsavel obrigatorios, no pre e no processar', () => {
+  const s = sessao();
+  const casos = [
+    [{ quem: '' }, 'Informe o fornecedor.'],
+    [{ quem: '   ' }, 'Informe o fornecedor.'],
+    [{ origem: 'CLIENTE', quem: '' }, 'Informe o cliente.'],
+    [{ responsavel: '' }, 'Informe o responsável.'],
+    [{ responsavel: undefined }, 'Informe o responsável.']
+  ];
+  for (const [extra, erro] of casos) {
+    const corpo = Object.assign({}, GERAR, extra);
+    assert.deepEqual(limpo(ctx.preValidarAcao(s.e, s.cab, corpo, T0)), { ok: false, status: 400, body: { erro } });
+    assert.deepEqual(acao(corpo), { status: 400, body: { erro } });
+  }
+});
+
+test('local de entrega: Oficina e Cliente', () => {
+  const r = acao(Object.assign({}, GERAR, { itens: [GERAR.itens[0]], local: 'OFICINA' }));
+  assert.equal(r.status, 200);
+  assert.equal(r.operacoes[0].linha.local, 'OFICINA');
+  assert.equal(acao(Object.assign({}, GERAR, { itens: [GERAR.itens[0]], local: 'Cliente' })).operacoes[0].linha.local, 'CLIENTE');
+  const e = acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { local: 'OFICINA' } }, LIN_P());
+  assert.equal(e.status, 200);
+  assert.equal(e.historicos[0].texto, 'Lucca alterou PED-0043: Local: Bragança → Oficina');
+});
+
+test('editar_pedido: nao deixa limpar fornecedor nem responsavel', () => {
+  const ed = (campos) => acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos }, LIN_P());
+  assert.deepEqual(ed({ quem: '' }), { status: 400, body: { erro: 'Informe o fornecedor.' } });
+  assert.deepEqual(ed({ origem: 'CLIENTE', quem: '' }), { status: 400, body: { erro: 'Informe o cliente.' } });
+  assert.deepEqual(ed({ responsavel: ' ' }), { status: 400, body: { erro: 'Informe o responsável.' } });
+  assert.equal(ed({ quem: 'AVIAMENTOS DELTA', responsavel: 'Gi' }).status, 200);
 });

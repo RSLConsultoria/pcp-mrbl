@@ -144,7 +144,7 @@ test('posse: item pode estar no pai e no filho; outra familia continua 409 no ge
     pedidos: [ped({}), ped({ id: 'PED-0002.1', pai: 'PED-0002', etapa: 'recebidos' })],
     pedidosItens: ITENS_P.concat([pit({ id: 'PED-0002.1|a', pedido_id: 'PED-0002.1', qtd: 20 })])
   });
-  const g = acao({ tipo: 'gerar_pedido', itens: [{ itemId: 'a', dealId: '600001', qtd: 1 }], origem: 'FORNECEDOR', local: 'BRAGANCA' }, lin);
+  const g = acao({ tipo: 'gerar_pedido', itens: [{ itemId: 'a', dealId: '600001', qtd: 1 }], origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', responsavel: 'Gi' }, lin);
   assert.deepEqual(g, { status: 409, body: { erro: 'Item já está no PED-0002.' } });
 });
 

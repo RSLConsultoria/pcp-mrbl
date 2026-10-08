@@ -88,3 +88,19 @@ test('board: avisos de pedido duplicado e item em dois pedidos abertos', () => {
   assert.equal(r.body.pedidos.filter((p) => p.id === 'PED-0044').length, 1);
   assert.equal(r.body.pedidos.find((p) => p.id === 'PED-0044').quem, 'TECIDOS BETA');
 });
+
+test('board: fornecedores e responsaveis ativos (vazio ou SIM), sem repetir, em ordem pt-BR', () => {
+  const r = limpo(ctx.montarRespostaBoard({}, [], [], T0, {
+    fornecedores: [
+      { id: '1', nome: 'Tecidos Beta', ativo: '' }, { id: '2', nome: 'Aviamentos Delta', ativo: 'SIM' },
+      { id: '3', nome: 'Ziper Antigo', ativo: 'NAO' }, { id: '4', nome: ' Tecidos Beta ', ativo: 'sim' },
+      { id: '5', nome: '', ativo: '' }, { id: '6', nome: 'Ácido Ltda', ativo: 'S' }
+    ],
+    responsaveis: [{ nome: 'Lucca', ativo: '' }, { nome: 'Fátima', ativo: 'SIM' }, { nome: 'Gi' }, { nome: 'Ex', ativo: 'NÃO' }, { nome: 'Cesar', ativo: 'TRUE' }]
+  }));
+  assert.deepEqual(r.body.fornecedores, ['Ácido Ltda', 'Aviamentos Delta', 'Tecidos Beta']);
+  assert.deepEqual(r.body.responsaveis, ['Cesar', 'Fátima', 'Gi', 'Lucca']);
+  const vazio = limpo(ctx.montarRespostaBoard({}, [], [], T0, {}));
+  assert.deepEqual(vazio.body.fornecedores, []);
+  assert.deepEqual(vazio.body.responsaveis, []);
+});

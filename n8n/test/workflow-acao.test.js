@@ -92,7 +92,7 @@ test('F3 gerar_pedido: PEDIDOS, PEDIDOS_ITENS e historico, nessa ordem', () => {
   const { proc, escritas } = acao({
     tipo: 'gerar_pedido',
     itens: [{ itemId: 'a', dealId: '600001', qtd: 20, fornecedor: '' }, { itemId: 'b', dealId: '600001', qtd: 6, fornecedor: 'X' }],
-    origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: ''
+    origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: 'Gi'
   });
   assert.equal(proc.status, 200, JSON.stringify(proc.body));
   assert.deepEqual(escritas.map(alvo), ["'PEDIDOS'!A1", "'PEDIDOS_ITENS'!A1", "'HISTORICO_APP'!A1"]);
@@ -124,12 +124,16 @@ test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets
     valueRanges: [
       vr('FALTANTES', FALT), vr('CAIXAS GANHAS', [['deal_id', 'os']]), vr('CAIXAS_PCP', []), vr('HISTORICO_APP', [CAB_HIST]),
       vr('USUARIOS', [['email', 'nome', 'perfil', 'senha_hash', 'ativo'], ['l@x.com', 'Lucca', 'ADM', 'h', 'SIM'], ['b@x.com', 'Bia', 'PCP', 'h', 'NAO']]),
-      vr('PEDIDOS', [['id']]), vr('PEDIDOS_ITENS', [['id']]), vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']])
+      vr('PEDIDOS', [['id']]), vr('PEDIDOS_ITENS', [['id']]), vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']]),
+      vr('FORNECEDORES', [['id', 'nome', 'ativo'], ['f1', 'TECIDOS BETA', ''], ['f2', 'ANTIGO', 'NAO']]),
+      { range: "'RESPONSAVEIS'!A1:Z1000", majorDimension: 'ROWS' } // aba vazia: a API nao manda values
     ]
   };
   const [saida] = rodarNode('montar-board', { $: cifrao({ 'Ler Planilha': [leitura] }), $getWorkflowStaticData: () => s.estado });
   assert.equal(saida.json.status, 200);
   assert.deepEqual(saida.json.body.usuarios, ['Lucca']);
+  assert.deepEqual(saida.json.body.fornecedores, ['TECIDOS BETA']);
+  assert.deepEqual(saida.json.body.responsaveis, []);
   assert.equal(saida.json.body.caixas.length, 1);
   assert.equal(saida.json.body.caixas[0].itens.length, 2);
 });
