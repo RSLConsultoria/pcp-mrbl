@@ -77,6 +77,20 @@ export function estadoDoPedido(p: Pedido): EstadoEditavel {
   };
 }
 
+// Formulário do painel = o pedido como está agora + só o que o usuário mudou. Assim, se o
+// pedido muda por fora com o painel aberto (arrastado, outra ação ainda na fila, recarga),
+// o formulário acompanha nos campos que ninguém mexeu, e salvar não devolve o pedido ao
+// estado de quando o painel abriu. Compara campo a campo, por igualdade simples.
+export function camposAlterados<T extends object>(base: T, valor: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(valor) as (keyof T)[]) if (valor[k] !== base[k]) out[k] = valor[k];
+  return out;
+}
+
+export function comAlterados<T extends object>(atual: T, alterados: Partial<T>): T {
+  return { ...atual, ...alterados };
+}
+
 const CAMPOS = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'] as const;
 
 // Corpo do editar_pedido só com o que mudou; null quando nada mudou.

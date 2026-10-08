@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EtapaPedido, Pedido } from '../api/tipos';
 import type { EstadoEditavel } from './pedidos';
 import {
-  acaoEditarPedido, estadoDoPedido, historicoDoPedido, motivoTravaEtapa, pedidoAtendeBusca, pedidoEditavel,
+  acaoEditarPedido, camposAlterados, comAlterados, estadoDoPedido, historicoDoPedido, motivoTravaEtapa, pedidoAtendeBusca, pedidoEditavel,
   itensQueSairam, itensSelecionados, pedidosForaDasEtapas, qtdOsDoPedido,
   textoContagemFaltas, textoItensQueSairam, vazioDaEtapa
 } from './pedidosQuadro';
@@ -131,5 +131,30 @@ describe('textoContagemFaltas', () => {
     expect(textoContagemFaltas(5, 3, 3)).toBe('3 selecionados');
     expect(textoContagemFaltas(2, 3, 1)).toBe('3 selecionados (2 fora da busca)');
     expect(textoContagemFaltas(0, 1, 0)).toBe('1 selecionado (1 fora da busca)');
+  });
+});
+
+describe('formulário do painel sobre o pedido atual', () => {
+  const base = { etapa: 'a', quem: 'BETA', responsavel: 'Maria' };
+  it('guarda só o que o usuário mudou', () => {
+    expect(camposAlterados(base, { ...base, responsavel: 'Lucca' })).toEqual({ responsavel: 'Lucca' });
+    expect(camposAlterados(base, base)).toEqual({});
+  });
+  it('voltar ao valor do pedido deixa de contar como alterado', () => {
+    const alt = camposAlterados(base, { ...base, etapa: 'b' });
+    expect(camposAlterados(base, { ...comAlterados(base, alt), etapa: 'a' })).toEqual({});
+  });
+  it('o pedido mudou por fora (arraste): o formulário acompanha nos campos não mexidos', () => {
+    const alt = camposAlterados(base, { ...base, responsavel: 'Lucca' });
+    const depoisDoArraste = { ...base, etapa: 'c' };
+    expect(comAlterados(depoisDoArraste, alt)).toEqual({ etapa: 'c', quem: 'BETA', responsavel: 'Lucca' });
+  });
+  it('salvar a partir do formulário refeito não manda a etapa antiga de volta', () => {
+    const p = ped({ etapa: 'a' });
+    const alt = camposAlterados(estadoDoPedido(p), { ...estadoDoPedido(p), responsavel: 'Lucca' });
+    const movido = ped({ etapa: 'c' });
+    const atual = estadoDoPedido(movido);
+    const acao = acaoEditarPedido(movido, atual, comAlterados(atual, alt));
+    expect(acao).toEqual({ tipo: 'editar_pedido', pedidoId: 'PED-0044', versao: 'v1', campos: { responsavel: 'Lucca' } });
   });
 });

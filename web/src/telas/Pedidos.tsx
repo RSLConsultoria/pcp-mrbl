@@ -50,7 +50,7 @@ export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela,
         <QuadroPedidos board={board} etapas={etapas} pedidos={pedidos} filtro={filtro} temBusca={q.trim() !== ''}
           selId={selId} executar={executar} onAbrir={setSelId} />
         {sel && (
-          <PainelPedido key={`${sel.id}:${sel.versao}`} pedido={sel} board={board} etapas={etapas}
+          <PainelPedido key={sel.id} pedido={sel} board={board} etapas={etapas}
             executar={executar} onFechar={fechar} />
         )}
       </div>

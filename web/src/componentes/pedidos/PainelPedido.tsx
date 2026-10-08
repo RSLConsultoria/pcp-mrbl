@@ -7,7 +7,7 @@ import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import { nomeLocal, nomeOrigem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel } from '../../regras/pedidos';
 import {
-  acaoEditarPedido, entraNaUltimaEtapa, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, textoConfirmarResolvido, textoFamilia
+  acaoEditarPedido, camposAlterados, comAlterados, entraNaUltimaEtapa, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, textoConfirmarResolvido, textoFamilia
 } from '../../regras/pedidosQuadro';
 import { formatarQtd, qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { Historico } from '../painel/Historico';
@@ -25,7 +25,9 @@ interface Props {
   onFechar: () => void;
 }
 
-// Painel do pedido: edição com o resumo exato do que será gravado. Remontado (key) a cada versão.
+// Painel do pedido: edição com o resumo exato do que será gravado. O formulário é o pedido
+// como está agora mais o que o usuário mudou: se o pedido mudar com o painel aberto (arraste,
+// ação na fila, recarga), os campos não mexidos acompanham e o que foi digitado fica.
 // Escolher a última etapa (Resolvido) e salvar pede confirmação: a baixa nas caixas não volta.
 // Salvar não espera o servidor: o board já mostra as alterações (e volta atrás se ele recusar).
 export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Props) {
@@ -36,10 +38,14 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     () => Object.fromEntries(antes.itens.map((i) => [i.itemId, { qtd: quantidadeParaCampo(i.qtd), fornecedor: i.fornecedor, previsao: i.previsao }])) as Record<string, TextoItem>,
     [antes]
   );
-  const [form, setForm] = useState<FormPedido>(() => ({
+  const formInicial: FormPedido = {
     etapa: pedido.etapa, origem: pedido.origem, quem: pedido.quem, local: pedido.local, previsao: pedido.previsao, responsavel: pedido.responsavel
-  }));
-  const [textos, setTextos] = useState(textosIniciais);
+  };
+  // Só o que o usuário mudou; o resto vem do pedido como está agora (regras/pedidosQuadro.ts).
+  const [formAlterado, setFormAlterado] = useState<Partial<FormPedido>>({});
+  const [textosAlterados, setTextosAlterados] = useState<Record<string, Partial<TextoItem>>>({});
+  const form = comAlterados(formInicial, formAlterado);
+  const textos = Object.fromEntries(Object.entries(textosIniciais).map(([k, t]) => [k, comAlterados(t, textosAlterados[k] ?? {})])) as Record<string, TextoItem>;
   const [confirmando, setConfirmando] = useState(false);
 
   const restaDe = (dealId: string, itemId: string) =>
@@ -64,6 +70,9 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     const acao = acaoEditarPedido(pedido, antes, depois);
     if (!acao || temErro) return;
     void executar(acao, paraUltima ? `${pedido.id} movido para ${nomeDestino} · baixa registrada nas caixas` : mensagemSucesso(acao));
+    // o pedido na tela já tem as alterações (board otimista): o formulário volta a segui-lo
+    setFormAlterado({});
+    setTextosAlterados({});
     setConfirmando(false);
   }
 
@@ -91,7 +100,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
       <div className="painel__corpo">
         {editavel ? (
           <>
-            <CamposPedido valor={form} onMudar={(v) => { setForm(v); setConfirmando(false); }} usuarios={board.usuarios ?? []} etapas={etapas} />
+            <CamposPedido valor={form} onMudar={(v) => { setFormAlterado(camposAlterados(formInicial, v)); setConfirmando(false); }} usuarios={board.usuarios ?? []} etapas={etapas} />
             <section className="secao">
               <h3 className="secao__titulo">Itens do pedido <span>{pedido.itens.length}</span></h3>
               <ul className="linhas-itens">
@@ -101,7 +110,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                     <LinhaItemPedido key={i.itemId} os={i.os} nome={i.nome} un={i.un}
                       detalhe={Number.isFinite(resta) ? `resta ${qtdComUn(resta, i.un)} na caixa` : ''}
                       valor={textos[i.itemId]} erro={erros[i.itemId]}
-                      onMudar={(v) => { setTextos((t) => ({ ...t, [i.itemId]: v })); setConfirmando(false); }} />
+                      onMudar={(v) => { setTextosAlterados((t) => ({ ...t, [i.itemId]: camposAlterados(textosIniciais[i.itemId], v) })); setConfirmando(false); }} />
                   );
                 })}
               </ul>
