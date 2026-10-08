@@ -65,15 +65,26 @@ export const NOME_LOCAL: Record<DadosPedido['local'], string> = { BRAGANCA: 'Bra
 export const nomeOrigem = (o: DadosPedido['origem']): string => NOME_ORIGEM[o];
 export const nomeLocal = (l: DadosPedido['local']): string => NOME_LOCAL[l] ?? l;
 
-// Fornecedor (ou cliente, quando "Solicitar a" = Cliente) e responsável são obrigatórios.
-// Mesma regra do servidor (n8n/src/pedidos.js); null = tudo certo.
-export function erroDadosPedido(d: Pick<DadosPedido, 'origem' | 'quem' | 'responsavel'>): string | null {
-  const quem = d.origem === 'CLIENTE' ? 'o cliente' : 'o fornecedor';
-  const semQuem = d.quem.trim() === '';
-  const semResp = d.responsavel.trim() === '';
-  if (semQuem && semResp) return `Escolha ${quem} e o responsável.`;
-  if (semQuem) return `Escolha ${quem}.`;
-  return semResp ? 'Escolha o responsável.' : null;
+// Campos obrigatórios do pedido: "Solicitar a", fornecedor (ou cliente, quando "Solicitar
+// a" = Cliente), local de entrega e responsável. No Gerar pedido as listas começam vazias
+// ("Selecionar"); local só é conferido quando vem no objeto. Mesma regra do servidor
+// (n8n/src/pedidos.js) para fornecedor e responsável; null = tudo certo.
+export interface CamposObrigatorios {
+  origem: DadosPedido['origem'] | '';
+  quem: string;
+  responsavel: string;
+  local?: DadosPedido['local'] | '';
+}
+
+export function erroDadosPedido(d: CamposObrigatorios): string | null {
+  const faltam: string[] = [];
+  if (d.origem === '') faltam.push('a quem solicitar');
+  else if (d.quem.trim() === '') faltam.push(d.origem === 'CLIENTE' ? 'o cliente' : 'o fornecedor');
+  if (d.local === '') faltam.push('o local de entrega');
+  if (d.responsavel.trim() === '') faltam.push('o responsável');
+  if (!faltam.length) return null;
+  const lista = faltam.length === 1 ? faltam[0] : `${faltam.slice(0, -1).join(', ')} e ${faltam[faltam.length - 1]}`;
+  return `Escolha ${lista}.`;
 }
 
 // Editar: só recusa limpar o que estava preenchido (pedido antigo sem fornecedor ou sem
@@ -98,7 +109,7 @@ export function clientesDasCaixas(caixas: Pick<Caixa, 'dealId' | 'cliente'>[], d
 }
 
 // Opções de "Fornecedor"/"Cliente" (e do fornecedor do item) conforme "Solicitar a".
-export const opcoesDeQuem = (origem: DadosPedido['origem'], fornecedores: string[], clientes: string[]): string[] =>
+export const opcoesDeQuem = (origem: DadosPedido['origem'] | '', fornecedores: string[], clientes: string[]): string[] =>
   origem === 'CLIENTE' ? clientes : fornecedores;
 
 // Ao trocar "Solicitar a", o nome escolhido só fica se existir na lista nova; com uma

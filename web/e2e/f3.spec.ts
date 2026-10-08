@@ -49,10 +49,13 @@ async function preparar(page: Page, hash: string, opts: Opcoes = {}): Promise<Mo
 }
 
 const aviso = (page: Page, texto: string | RegExp) => page.getByRole('status').filter({ hasText: texto });
-// Fornecedor e responsável são obrigatórios no Gerar pedido.
+// Obrigatórios no Gerar pedido (as listas começam em "Selecionar"): solicitar a,
+// fornecedor, local de entrega e responsável.
 async function preencherObrigatorios(page: Page, fornecedor = 'TECIDOS BETA', responsavel = 'Gi') {
   const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
-  await janela.getByLabel('Fornecedor', { exact: true }).selectOption(fornecedor);
+  await janela.getByLabel('Solicitar a').selectOption('FORNECEDOR');
+  await janela.getByLabel('Local de entrega').selectOption('BRAGANCA');
+  await janela.getByRole('combobox', { name: 'Fornecedor', exact: true }).selectOption(fornecedor);
   await janela.getByLabel('Responsável').selectOption(responsavel);
 }
 
@@ -72,7 +75,7 @@ test('gerar pedido com 2 itens de OS diferentes envia o corpo certo', async ({ p
   await janela.getByLabel('Fornecedor do item ZÍPER METAL MÉDIO FIXO CA 18CM').selectOption('ZIPERES GAMA');
   await janela.getByLabel('Previsão de ZÍPER METAL MÉDIO FIXO CA 18CM').fill('2026-10-25');
   await janela.getByLabel('Solicitar a').selectOption('FORNECEDOR');
-  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('TECIDOS BETA');
+  await janela.getByRole('combobox', { name: 'Fornecedor', exact: true }).selectOption('TECIDOS BETA');
   await janela.getByLabel('Local de entrega').selectOption('SAO_PAULO');
   await janela.getByLabel('Previsão de entrega').fill('2026-10-20');
   await janela.getByLabel('Responsável').selectOption('Gi');
@@ -521,7 +524,7 @@ test('dividir pedido: quantidade acima da do pedido mostra o erro no painel e n�
   expect(mock.bodies).toHaveLength(0);
 });
 
-test('Gerar pedido: fornecedor e responsável obrigatórios, escolhidos em listas', async ({ page }) => {
+test('Gerar pedido: obrigatórios começam em "Selecionar", com asterisco, e o fornecedor vem de uma lista', async ({ page }) => {
   const mock = await preparar(page, '#pedidos');
   const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
   await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
@@ -529,13 +532,21 @@ test('Gerar pedido: fornecedor e responsável obrigatórios, escolhidos em lista
   const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
   const confirmar = janela.getByRole('button', { name: 'Confirmar e gerar' });
   await expect(confirmar).toBeDisabled();
+  await expect(janela).toContainText('Escolha a quem solicitar, o local de entrega e o responsável.');
+  await expect(janela.locator('.obrigatorio')).toHaveCount(4);
+  for (const rotulo of ['Solicitar a', 'Local de entrega', 'Responsável']) {
+    await expect(janela.getByLabel(rotulo)).toHaveValue('');
+  }
+  await expect(janela.getByRole('combobox', { name: 'Fornecedor', exact: true })).toBeDisabled();
+  await janela.getByLabel('Solicitar a').selectOption('FORNECEDOR');
+  await janela.getByLabel('Local de entrega').selectOption('BRAGANCA');
   await expect(janela).toContainText('Escolha o fornecedor e o responsável.');
-  await expect(janela.getByLabel('Fornecedor', { exact: true }).locator('option')).toHaveText(['Selecione…', 'AVIAMENTOS DELTA', 'TECIDOS BETA', 'ZIPERES GAMA']);
+  await expect(janela.getByRole('combobox', { name: 'Fornecedor', exact: true }).locator('option')).toHaveText(['Selecionar', 'AVIAMENTOS DELTA', 'TECIDOS BETA', 'ZIPERES GAMA']);
   await expect(janela.getByLabel('Fornecedor do item TAG CUIDADOS PADRÃO').locator('option')).toHaveText(['Igual ao do pedido', 'AVIAMENTOS DELTA', 'TECIDOS BETA', 'ZIPERES GAMA']);
-  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('AVIAMENTOS DELTA');
+  await janela.getByRole('combobox', { name: 'Fornecedor', exact: true }).selectOption('AVIAMENTOS DELTA');
   await expect(janela).toContainText('Escolha o responsável.');
   await expect(confirmar).toBeDisabled();
-  await expect(janela.getByLabel('Responsável').locator('option')).toHaveText(['Selecione…', 'Cesar', 'Fátima', 'Gi', 'Luana', 'Lucca', 'Renata']);
+  await expect(janela.getByLabel('Responsável').locator('option')).toHaveText(['Selecionar', 'Cesar', 'Fátima', 'Gi', 'Luana', 'Lucca', 'Renata']);
   await janela.getByLabel('Responsável').selectOption('Fátima');
   await expect(janela).toContainText('1 item de 1 OS · as ações entram no registro do Ploomes de cada OS.');
   await expect(janela.getByLabel('Local de entrega').locator('option')).toHaveText(['Bragança', 'São Paulo', 'Oficina', 'Cliente']);
@@ -551,11 +562,13 @@ test('Gerar pedido para o cliente: as opções são os clientes das OSs marcadas
   await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
   await page.getByRole('button', { name: 'Gerar pedido' }).click();
   const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
-  await janela.getByLabel('Fornecedor', { exact: true }).selectOption('TECIDOS BETA');
+  await janela.getByLabel('Solicitar a').selectOption('FORNECEDOR');
+  await janela.getByLabel('Local de entrega').selectOption('CLIENTE');
+  await janela.getByRole('combobox', { name: 'Fornecedor', exact: true }).selectOption('TECIDOS BETA');
   await janela.getByLabel('Solicitar a').selectOption('CLIENTE');
   // uma OS só: o cliente dela já vem escolhido
-  await expect(janela.getByLabel('Cliente', { exact: true })).toHaveValue('CLIENTE BETA');
-  await expect(janela.getByLabel('Cliente', { exact: true }).locator('option')).toHaveText(['CLIENTE BETA']);
+  await expect(janela.getByRole('combobox', { name: 'Cliente', exact: true })).toHaveValue('CLIENTE BETA');
+  await expect(janela.getByRole('combobox', { name: 'Cliente', exact: true }).locator('option')).toHaveText(['CLIENTE BETA']);
   await expect(janela.getByLabel('Fornecedor do item TAG CUIDADOS PADRÃO').locator('option')).toHaveText(['Igual ao do pedido', 'CLIENTE BETA']);
   await janela.getByLabel('Responsável').selectOption('Gi');
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
@@ -571,8 +584,8 @@ test('painel: Responsável vem da lista de responsáveis e mostra o atual mesmo 
   const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
   await expect(painel.getByLabel('Responsável')).toHaveValue('Maria');
   await expect(painel.getByLabel('Responsável').locator('option')).toHaveText(['Maria', 'Cesar', 'Fátima', 'Gi', 'Luana', 'Lucca', 'Renata']);
-  await expect(painel.getByLabel('Fornecedor', { exact: true })).toHaveValue('TECIDOS BETA');
+  await expect(painel.getByRole('combobox', { name: 'Fornecedor', exact: true })).toHaveValue('TECIDOS BETA');
   // trocar para Cliente: o cliente da única OS do pedido já vem escolhido
   await painel.getByLabel('Solicitar a').selectOption('CLIENTE');
-  await expect(painel.getByLabel('Cliente', { exact: true })).toHaveValue('CLIENTE BETA');
+  await expect(painel.getByRole('combobox', { name: 'Cliente', exact: true })).toHaveValue('CLIENTE BETA');
 });

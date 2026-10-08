@@ -2,7 +2,12 @@ import { useId } from 'react';
 import type { DadosPedido, EtapaPedido, LocalPedido, OrigemPedido } from '../../api/tipos';
 import { NOME_LOCAL, opcoesComAtual, opcoesDeQuem, quemAoTrocarOrigem } from '../../regras/pedidos';
 
-export type FormPedido = DadosPedido & { etapa?: string };
+// No Gerar pedido "Solicitar a" e "Local de entrega" começam vazios ("Selecionar").
+export type FormPedido = Omit<DadosPedido, 'origem' | 'local'> & {
+  origem: OrigemPedido | '';
+  local: LocalPedido | '';
+  etapa?: string;
+};
 
 interface Props {
   valor: FormPedido;
@@ -13,9 +18,19 @@ interface Props {
   etapas?: EtapaPedido[]; // presente só no painel do pedido
 }
 
+// Asterisco vermelho dos campos obrigatórios (o select também leva required).
+function Rotulo({ para, texto, obrigatorio }: { para: string; texto: string; obrigatorio?: boolean }) {
+  return (
+    <label htmlFor={para}>
+      {texto}
+      {obrigatorio && <span className="obrigatorio" aria-hidden="true"> *</span>}
+    </label>
+  );
+}
+
 // Dados do pedido: etapa (no painel), solicitar a, fornecedor/cliente, local, previsão e
-// responsável. Fornecedor/cliente e responsável são obrigatórios: com o valor vazio, o
-// select mostra "Selecione…".
+// responsável. Obrigatórios (asterisco): solicitar a, fornecedor/cliente, local e
+// responsável; vazios, os selects mostram "Selecionar".
 export function CamposPedido({ valor, onMudar, fornecedores, clientes, responsaveis, etapas }: Props) {
   const id = useId();
   const mudar = (parcial: Partial<FormPedido>) => onMudar({ ...valor, ...parcial });
@@ -35,26 +50,28 @@ export function CamposPedido({ valor, onMudar, fornecedores, clientes, responsav
         </div>
       )}
       <div className="campo">
-        <label htmlFor={`${id}-origem`}>Solicitar a</label>
-        <select id={`${id}-origem`} value={valor.origem} onChange={(e) => {
+        <Rotulo para={`${id}-origem`} texto="Solicitar a" obrigatorio />
+        <select id={`${id}-origem`} value={valor.origem} required onChange={(e) => {
           const origem = e.target.value as OrigemPedido;
           mudar({ origem, quem: quemAoTrocarOrigem(valor.quem, opcoesDeQuem(origem, fornecedores, clientes)) });
         }}>
+          {valor.origem === '' && <option value="" disabled>Selecionar</option>}
           <option value="FORNECEDOR">Fornecedor</option>
           <option value="CLIENTE">Cliente</option>
         </select>
       </div>
       <div className="campo">
-        <label htmlFor={`${id}-quem`}>{nomeQuem}</label>
-        <select id={`${id}-quem`} value={valor.quem} required
+        <Rotulo para={`${id}-quem`} texto={nomeQuem} obrigatorio />
+        <select id={`${id}-quem`} value={valor.quem} required disabled={valor.origem === ''}
           onChange={(e) => mudar({ quem: e.target.value })}>
-          {valor.quem === '' && <option value="" disabled>Selecione…</option>}
+          {valor.quem === '' && <option value="" disabled>Selecionar</option>}
           {opcoesQuem.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </div>
       <div className="campo">
-        <label htmlFor={`${id}-local`}>Local de entrega</label>
-        <select id={`${id}-local`} value={valor.local} onChange={(e) => mudar({ local: e.target.value as LocalPedido })}>
+        <Rotulo para={`${id}-local`} texto="Local de entrega" obrigatorio />
+        <select id={`${id}-local`} value={valor.local} required onChange={(e) => mudar({ local: e.target.value as LocalPedido })}>
+          {valor.local === '' && <option value="" disabled>Selecionar</option>}
           {(Object.keys(NOME_LOCAL) as LocalPedido[]).map((l) => <option key={l} value={l}>{NOME_LOCAL[l]}</option>)}
         </select>
       </div>
@@ -63,10 +80,10 @@ export function CamposPedido({ valor, onMudar, fornecedores, clientes, responsav
         <input id={`${id}-prev`} type="date" value={valor.previsao} onChange={(e) => mudar({ previsao: e.target.value })} />
       </div>
       <div className="campo">
-        <label htmlFor={`${id}-resp`}>Responsável</label>
+        <Rotulo para={`${id}-resp`} texto="Responsável" obrigatorio />
         <select id={`${id}-resp`} value={valor.responsavel} required
           onChange={(e) => mudar({ responsavel: e.target.value })}>
-          {valor.responsavel === '' && <option value="" disabled>Selecione…</option>}
+          {valor.responsavel === '' && <option value="" disabled>Selecionar</option>}
           {opcoesResp.map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
       </div>

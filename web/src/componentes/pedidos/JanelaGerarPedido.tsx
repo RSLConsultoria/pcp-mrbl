@@ -30,7 +30,8 @@ export function JanelaGerarPedido({ itens, fornecedores, responsaveis, executar,
   const [removidos, setRemovidos] = useState<Set<string>>(() => new Set());
   const lista = useRef<HTMLUListElement>(null);
   const gerado = useRef(false);
-  const [form, setForm] = useState<FormPedido>({ origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '' });
+  // Listas obrigatórias começam em "Selecionar": nada vem escolhido por padrão.
+  const [form, setForm] = useState<FormPedido>({ origem: '', quem: '', local: '', previsao: '', responsavel: '' });
   const [textos, setTextos] = useState<Record<string, TextoItem>>(() => Object.fromEntries(itens.map((x) => [chaveDe(x), textoInicial(x)])));
   const [tentou, setTentou] = useState(false);
   const idErro = useId();
@@ -57,7 +58,7 @@ export function JanelaGerarPedido({ itens, fornecedores, responsaveis, executar,
   }
 
   function gerar() {
-    if (erroDados) return;
+    if (erroDados || form.origem === '' || form.local === '') return;
     setTentou(true);
     if (temErro) {
       lista.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus();

@@ -128,6 +128,7 @@
 .janela__rodape { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--borda); }
 .janela__nota { margin-right: auto; font-size: 12.5px; color: var(--suave); }
 .janela__nota--erro { color: var(--erro-text); font-weight: 600; }
+.obrigatorio { color: var(--erro-text); font-weight: 700; }
 .janela__ajuda { margin: 0; font-size: 13px; line-height: 1.5; color: var(--suave); }
 .janela--larga .campos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @keyframes janela-fundo { from { opacity: 0; } to { opacity: 1; } }

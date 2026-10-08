@@ -56,7 +56,8 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
   const erros = validarGerarPedido(mexidos.map((i) => ({ itemId: i.itemId, un: i.un, resta: restaDe(i.dealId, i.itemId) })),
     Object.fromEntries(mexidos.map((i) => [i.itemId, textos[i.itemId].qtd])));
   const depois: EstadoEditavel = {
-    etapa: form.etapa ?? pedido.etapa, origem: form.origem, quem: form.quem.trim(), local: form.local,
+    // no painel origem e local sempre vêm do pedido (nunca "Selecionar")
+    etapa: form.etapa ?? pedido.etapa, origem: form.origem || pedido.origem, quem: form.quem.trim(), local: form.local || pedido.local,
     previsao: form.previsao, responsavel: form.responsavel,
     itens: antes.itens.map((i) => {
       const q = erros[i.itemId] ? null : lerQuantidade(textos[i.itemId].qtd);

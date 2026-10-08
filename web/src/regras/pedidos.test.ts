@@ -129,6 +129,14 @@ describe('fornecedor, cliente, responsável e local do pedido', () => {
     expect(erroDadosPedido({ origem: 'FORNECEDOR', quem: '', responsavel: '' })).toBe('Escolha o fornecedor e o responsável.');
     expect(erroDadosPedido({ origem: 'CLIENTE', quem: 'ALFA', responsavel: 'Gi' })).toBeNull();
   });
+
+  it('no Gerar pedido as listas começam em "Selecionar": cobra a quem solicitar e o local', () => {
+    expect(erroDadosPedido({ origem: '', quem: '', local: '', responsavel: '' }))
+      .toBe('Escolha a quem solicitar, o local de entrega e o responsável.');
+    expect(erroDadosPedido({ origem: 'FORNECEDOR', quem: '', local: '', responsavel: 'Gi' }))
+      .toBe('Escolha o fornecedor e o local de entrega.');
+    expect(erroDadosPedido({ origem: 'FORNECEDOR', quem: 'BETA', local: 'OFICINA', responsavel: 'Gi' })).toBeNull();
+  });
   it('editar: não deixa limpar, mas pedido antigo sem fornecedor/responsável pode seguir assim', () => {
     const a = { origem: 'FORNECEDOR' as const, quem: 'BETA', responsavel: 'Gi' };
     expect(erroEdicaoPedido(a, { ...a, quem: '' })).toBe('Escolha o fornecedor.');
