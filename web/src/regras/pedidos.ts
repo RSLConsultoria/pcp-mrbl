@@ -7,6 +7,10 @@ import { formatarNumero, qtdComUn } from './quantidade';
 
 export type FiltroPedidos = 'aberto' | 'finalizado' | 'todos';
 
+// Pedido gerado na tela e ainda não gravado: id provisório até a recarga trazer o número.
+export const PREFIXO_NOVO = 'novo:';
+export const rotuloDoPedido = (id: string): string => (id.startsWith(PREFIXO_NOVO) ? 'Novo pedido' : id);
+
 export function filtrarPedidos(pedidos: Pedido[], filtro: FiltroPedidos): Pedido[] {
   if (filtro === 'todos') return pedidos;
   return pedidos.filter((p) => (filtro === 'finalizado' ? p.finalizado : !p.finalizado));
