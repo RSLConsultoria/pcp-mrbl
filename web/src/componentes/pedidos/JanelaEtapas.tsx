@@ -23,7 +23,6 @@ export function JanelaEtapas({ etapas, pedidos, executar, onFechar }: Props) {
   const lista = useRef<HTMLOListElement>(null);
   const [rascunho, setRascunho] = useState<Rascunho[]>(() => etapas.map((e, i) => ({ chave: i, id: e.id, nome: e.nome })));
   const [erro, setErro] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
 
   const mudar = (chave: number, nome: string) => {
     setErro(null);
@@ -36,22 +35,21 @@ export function JanelaEtapas({ etapas, pedidos, executar, onFechar }: Props) {
     requestAnimationFrame(() => lista.current?.querySelector<HTMLInputElement>(`li[data-chave="${chave}"] input`)?.focus());
   };
 
-  async function salvar() {
+  // Fecha na hora: o quadro já mostra as etapas novas enquanto o servidor grava.
+  function salvar() {
     const corpo = rascunho.map((x) => ({ ...(x.id ? { id: x.id } : {}), nome: x.nome.trim() }));
     const e = validarEtapas(corpo, pedidos, etapas);
     if (e) { setErro(e); return; }
     const acao: Acao = { tipo: 'salvar_etapas', etapas: corpo };
-    setEnviando(true);
-    const ok = await executar(acao, mensagemSucesso(acao));
-    setEnviando(false);
-    if (ok) onFechar();
+    void executar(acao, mensagemSucesso(acao));
+    onFechar();
   }
 
   return (
     <Janela titulo="Etapas do quadro" sobretitulo="Quadro de pedidos" onFechar={onFechar}
       rodape={<>
         <button type="button" className="botao botao--leve" onClick={onFechar}>Cancelar</button>
-        <button type="button" className="botao botao--navy" disabled={enviando} onClick={salvar}>Salvar etapas</button>
+        <button type="button" className="botao botao--navy" onClick={salvar}>Salvar etapas</button>
       </>}>
       <p className="janela__ajuda">A primeira etapa recebe os pedidos gerados. A última fica sempre no fim: mover um pedido para ela dá baixa nas caixas. Etapa com pedido aberto não pode ser removida.</p>
       <ol ref={lista} className="etapas">

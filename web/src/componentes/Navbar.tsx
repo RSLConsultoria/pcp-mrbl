@@ -13,9 +13,9 @@ const GUIAS: { nome: string; icone: NomeIcone; tela?: Tela }[] = [
   { nome: 'Visão das peças', icone: 'doc' }
 ];
 
-interface Props { nome: string; geradoEm?: string; tela: Tela; onTela: (t: Tela) => void; onSair: () => void }
+interface Props { nome: string; geradoEm?: string; salvando?: boolean; tela: Tela; onTela: (t: Tela) => void; onSair: () => void }
 
-export function Navbar({ nome, geradoEm, tela, onTela, onSair }: Props) {
+export function Navbar({ nome, geradoEm, salvando = false, tela, onTela, onSair }: Props) {
   const [menu, setMenu] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -54,6 +54,8 @@ export function Navbar({ nome, geradoEm, tela, onTela, onSair }: Props) {
         ))}
       </nav>
       <div className="navbar__direita">
+        {/* Ações ainda indo para o servidor (a tela já mostra o efeito delas). */}
+        <span className="salvando" aria-live="polite">{salvando ? 'Salvando…' : ''}</span>
         <span className="sync" title="Leitura da planilha de faltas">
           <span className="sync__ponto" />
           Ploomes · sincronizado {geradoEm ? horaMinuto(geradoEm) : '--:--'}

@@ -1,7 +1,7 @@
 import type { CSSProperties, DragEvent } from 'react';
 import type { Pedido } from '../../api/tipos';
 import { ddmm } from '../../regras/datas';
-import { nomeLocal, nomeOrigem, quemDoPedido } from '../../regras/pedidos';
+import { nomeLocal, nomeOrigem, quemDoPedido, rotuloDoPedido } from '../../regras/pedidos';
 import { previsaoMaisProxima, previsoesDiferentes, qtdOsDoPedido, textoFamilia } from '../../regras/pedidosQuadro';
 import { qtdComUn } from '../../regras/quantidade';
 
@@ -17,7 +17,9 @@ interface Props {
 }
 
 // Card do pedido: o botão do título abre o painel (e cobre o card todo). A previsão mostrada
-// é a mais próxima dos itens; com datas diferentes, o selo "previsões diferentes".
+// é a mais próxima dos itens; com datas diferentes, o selo "previsões diferentes". Pedido
+// provisório (gerado ou dividido agora, ainda indo para o servidor) aparece "salvando…" e
+// só abre depois que a recarga trouxer o pedido gravado.
 export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir, onArrastar }: Props) {
   const visiveis = p.itens.slice(0, ITENS_NO_CARD);
   const ocultos = p.itens.length - visiveis.length;
@@ -26,9 +28,11 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir
   const familia = textoFamilia(p, partes);
   const previsao = previsaoMaisProxima(p);
   const diferentes = previsoesDiferentes(p);
+  const rotulo = rotuloDoPedido(p.id);
   return (
-    <article aria-label={`Pedido ${p.id}`}
-      className={selecionado ? 'card card--pedido card--selecionado' : 'card card--pedido'} draggable={arrastavel}
+    <article aria-label={`Pedido ${rotulo}`} aria-busy={p.provisorio ? true : undefined}
+      className={['card card--pedido', selecionado && 'card--selecionado', p.provisorio && 'card--salvando'].filter(Boolean).join(' ')}
+      draggable={arrastavel}
       style={{ '--cor-tipo': cliente ? 'var(--signal)' : 'var(--navy)' } as CSSProperties}
       onDragStart={(e: DragEvent<HTMLElement>) => {
         e.dataTransfer.setData('text/plain', p.id);
@@ -37,8 +41,9 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir
       }}
       onDragEnd={() => onArrastar(null)}>
       <div className="card__cabeca">
-        <button type="button" className="card__abrir card__os" aria-pressed={selecionado} aria-label={`Pedido ${p.id}`} onClick={onAbrir}>
-          {p.id}
+        <button type="button" className="card__abrir card__os" aria-pressed={selecionado} aria-label={`Pedido ${rotulo}`}
+          disabled={p.provisorio} onClick={onAbrir}>
+          {rotulo}
         </button>
         <span className={cliente ? 'selo-origem selo-origem--cliente' : 'selo-origem'}>{nomeOrigem(p.origem)}</span>
       </div>
@@ -63,7 +68,12 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir
         <span>{nomeLocal(p.local)}</span>
         <span title="Registro de interação gravado em cada OS do pedido">Ploomes · {qtdOsDoPedido(p)} OS</span>
       </div>
-      {p.baixadoEm && (
+      {p.provisorio && (
+        <footer className="card__acoes">
+          <span className="card__estado card__estado--salvando">salvando…</span>
+        </footer>
+      )}
+      {p.baixadoEm && !p.provisorio && (
         <footer className="card__acoes">
           <span className="card__estado card__estado--ok">Baixa registrada nas caixas em {ddmm(p.baixadoEm)}</span>
         </footer>

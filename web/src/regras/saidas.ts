@@ -1,7 +1,7 @@
 import type { Board, Caixa, EtapaPedido, Item, Pedido } from '../api/tipos';
 import { itensAbertos } from './colunas';
 import { ddmm, diasEntre, textoDias } from './datas';
-import { pedidosDoItem, podeEntrarEmPedido } from './pedidos';
+import { pedidosDoItem, podeEntrarEmPedido, rotuloDoPedido } from './pedidos';
 
 // Colunas de Saídas: "Sem pedido" (só quando há caixa nela), as etapas do quadro de
 // Solicitações de faltas menos a última (na ordem dele), "Resolvido" (a última etapa:
@@ -176,7 +176,7 @@ export function textoPedidoDoItem(i: Pick<Item, 'pedidoId'> & { pedidoIds?: stri
   return ids.map((id) => {
     const p = pedidos.find((x) => x.id === id);
     const etapa = p && etapas.find((e) => e.id === p.etapa)?.nome;
-    return `${id} · ${etapa ?? 'Outra etapa'}`;
+    return `${rotuloDoPedido(id)} · ${etapa ?? 'Outra etapa'}`;
   }).join(', ');
 }
 

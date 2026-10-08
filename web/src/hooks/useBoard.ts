@@ -5,13 +5,17 @@ import { criarSequencia } from './sequencia';
 
 const INTERVALO_MS = 60_000;
 
-export function useBoard(token: string, aoExpirar: () => void) {
-  const [board, setBoard] = useState<Board | null>(null);
+// marcoAtual: marco da fila de ações quando a leitura começa (hooks/filaAcoes.ts). Vai junto
+// com o board para a tela saber quais ações confirmadas ele já traz.
+export function useBoard(token: string, aoExpirar: () => void, marcoAtual: () => number = () => 0) {
+  const [lido, setLido] = useState<{ board: Board | null; marco: number }>({ board: null, marco: 0 });
   const [erroDesde, setErroDesde] = useState<Date | null>(null);
   const [carregando, setCarregando] = useState(true);
   const aoExpirarRef = useRef(aoExpirar);
   aoExpirarRef.current = aoExpirar;
 
+  const marcoRef = useRef(marcoAtual);
+  marcoRef.current = marcoAtual;
   const geracaoRef = useRef(0);
   const [sequencia] = useState(criarSequencia);
 
@@ -20,10 +24,11 @@ export function useBoard(token: string, aoExpirar: () => void) {
     const maisRecente = sequencia.nova();
     // Vale só a resposta da recarga mais nova, e só enquanto o token é o mesmo.
     const vale = () => minha === geracaoRef.current && maisRecente();
+    const marco = marcoRef.current();
     try {
       const b = await buscarBoard(token);
       if (!vale()) return;
-      setBoard(b);
+      setLido({ board: b, marco });
       setErroDesde(null);
     } catch (e) {
       if (!vale()) return;
@@ -52,5 +57,5 @@ export function useBoard(token: string, aoExpirar: () => void) {
     };
   }, [recarregar]);
 
-  return { board, erroDesde, carregando, recarregar };
+  return { board: lido.board, marco: lido.marco, erroDesde, carregando, recarregar };
 }

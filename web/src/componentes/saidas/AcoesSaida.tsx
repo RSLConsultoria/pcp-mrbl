@@ -18,7 +18,6 @@ interface Props {
 // Enviar à oficina só aparece na coluna Resolvido: tudo baixado ou todo o material na última etapa.
 export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecionarParaPedido }: Props) {
   const [confirmando, setConfirmando] = useState(false);
-  const [enviando, setEnviando] = useState(false);
   const confirmarRef = useRef<HTMLButtonElement>(null);
   const reabrirRef = useRef<HTMLButtonElement>(null);
   const voltarFoco = useRef(false);
@@ -34,11 +33,8 @@ export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecio
   const enviada = caixa.tratativa === 'ENVIADO';
   const podeEnviar = !enviada && podeEnviarOficina(caixa, pedidos, etapas);
 
-  async function agir(acao: Acao) {
-    setEnviando(true);
-    await executar(acao, mensagemSucesso(acao));
-    setEnviando(false);
-  }
+  // O board já mostra a caixa na coluna nova; a gravação segue na fila.
+  const agir = (acao: Acao) => void executar(acao, mensagemSucesso(acao));
 
   return (
     <section className="secao">
@@ -52,12 +48,12 @@ export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecio
         )}
         {podeEnviar && (
           <button type="button" className="botao botao--signal"
-            disabled={enviando} onClick={() => agir({ tipo: 'enviar_oficina', dealId: caixa.dealId, versao: caixa.versao })}>
+            onClick={() => agir({ tipo: 'enviar_oficina', dealId: caixa.dealId, versao: caixa.versao })}>
             Enviar à oficina
           </button>
         )}
         {enviada && !confirmando && (
-          <button ref={reabrirRef} type="button" className="botao botao--navy" disabled={enviando} onClick={() => setConfirmando(true)}>
+          <button ref={reabrirRef} type="button" className="botao botao--navy" onClick={() => setConfirmando(true)}>
             Oficina recebeu
           </button>
         )}
@@ -70,14 +66,14 @@ export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecio
             A oficina recebeu o material? Isso dá baixa total {abertos > 1 ? `nos ${abertos} itens abertos` : 'no item aberto'} desta caixa.
           </p>
           <div className="acoes">
-            <button ref={confirmarRef} type="button" className="botao botao--navy" disabled={enviando}
-              onClick={async () => {
-                await agir({ tipo: 'oficina_recebeu', dealId: caixa.dealId, versao: caixa.versao });
+            <button ref={confirmarRef} type="button" className="botao botao--navy"
+              onClick={() => {
+                agir({ tipo: 'oficina_recebeu', dealId: caixa.dealId, versao: caixa.versao });
                 setConfirmando(false);
               }}>
               Confirmar recebimento
             </button>
-            <button type="button" className="botao botao--leve" disabled={enviando}
+            <button type="button" className="botao botao--leve"
               onClick={() => { voltarFoco.current = true; setConfirmando(false); }}>
               Cancelar
             </button>

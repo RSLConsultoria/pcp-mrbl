@@ -84,6 +84,7 @@ export interface Pedido {
   versao: string;
   finalizado: boolean;
   itens: ItemPedido[];
+  provisorio?: boolean; // só no site: pedido previsto na tela enquanto o servidor grava (regras/otimista.ts)
 }
 
 export interface EtapaPedido {

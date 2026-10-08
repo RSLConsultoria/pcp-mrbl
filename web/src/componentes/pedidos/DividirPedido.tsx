@@ -28,7 +28,6 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
   const [etapa, setEtapa] = useState(padrao);
   const iniciais = (): LinhaDivisao[] => pedido.itens.map((i) => ({ itemId: i.itemId, chegou: false, qtd: quantidadeParaCampo(i.qtd) }));
   const [linhas, setLinhas] = useState<LinhaDivisao[]>(iniciais);
-  const [enviando, setEnviando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const abrirRef = useRef<HTMLButtonElement>(null);
   const primeiroRef = useRef<HTMLInputElement>(null);
@@ -65,12 +64,10 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
 
   if (modo === 'previsao') {
     const partes = partesPorPrevisao(pedido, pedidos);
-    async function confirmarPrevisao() {
+    function confirmarPrevisao() {
       const acao: Acao = { tipo: 'dividir_por_previsao', pedidoId: pedido.id, versao: pedido.versao };
-      setEnviando(true);
-      const ok = await executar(acao, (r) => mensagemSucesso(acao, undefined, { partes: r.partes?.length ?? partes.length }));
-      setEnviando(false);
-      if (ok) setModo('fechado');
+      void executar(acao, (r) => mensagemSucesso(acao, undefined, { partes: r.partes?.length ?? partes.length }));
+      setModo('fechado');
     }
     return (
       <section className="secao divisao" aria-label={`Dividir ${pedido.id} por previsão`}>
@@ -80,10 +77,10 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
           {resumoDivisaoPorPrevisao(pedido, partes).map((l) => <li key={l} className="divisao__resumo">{l}</li>)}
         </ul>
         <div className="acoes">
-          <button ref={porPrevisaoRef} type="button" className="botao botao--signal" disabled={enviando} onClick={confirmarPrevisao}>
+          <button ref={porPrevisaoRef} type="button" className="botao botao--signal" onClick={confirmarPrevisao}>
             Confirmar divisão por previsão
           </button>
-          <button type="button" className="botao botao--leve" disabled={enviando} onClick={fechar}>Cancelar</button>
+          <button type="button" className="botao botao--leve" onClick={fechar}>Cancelar</button>
         </div>
       </section>
     );
@@ -103,14 +100,12 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
   const paraUltima = entraNaUltimaEtapa(pedido.etapa, etapa, etapas);
   const itensDaParte = pedido.itens.filter((i) => v.itens.some((x) => x.itemId === i.itemId));
 
-  async function confirmar() {
+  function confirmar() {
     if (!pronto) return;
     const acao: Acao = { tipo: 'dividir_pedido', pedidoId: pedido.id, versao: pedido.versao, etapa, itens: v.itens };
-    setEnviando(true);
-    const ok = await executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId, etapa: nomeEtapa }));
-    setEnviando(false);
+    void executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId, etapa: nomeEtapa }));
     setConfirmando(false);
-    if (ok) setModo('fechado');
+    setModo('fechado');
   }
 
   return (
@@ -157,15 +152,15 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
       )}
       {confirmando ? (
         <ConfirmarResolvido rotulo={`Confirmar ${nomeEtapa} da divisão do ${pedido.id}`}
-          texto={textoConfirmarResolvido(itensDaParte, nomeEtapa)} ocupado={enviando}
-          onConfirmar={() => void confirmar()} onCancelar={() => setConfirmando(false)} />
+          texto={textoConfirmarResolvido(itensDaParte, nomeEtapa)} ocupado={false}
+          onConfirmar={confirmar} onCancelar={() => setConfirmando(false)} />
       ) : (
         <div className="acoes">
-          <button type="button" className="botao botao--signal" disabled={!pronto || enviando}
-            onClick={() => (paraUltima ? setConfirmando(true) : void confirmar())}>
+          <button type="button" className="botao botao--signal" disabled={!pronto}
+            onClick={() => (paraUltima ? setConfirmando(true) : confirmar())}>
             Confirmar divisão
           </button>
-          <button type="button" className="botao botao--leve" disabled={enviando} onClick={fechar}>
+          <button type="button" className="botao botao--leve" onClick={fechar}>
             Cancelar
           </button>
         </div>

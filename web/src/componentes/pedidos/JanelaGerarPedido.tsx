@@ -15,7 +15,7 @@ interface Props {
   usuarios: string[];
   executar: Executar;
   onRemover: (chave: string) => void;
-  onGerado: () => void;
+  onGerado: (chaves: string[]) => void; // o servidor gravou: tira estes itens da marcação
   onFechar: () => void;
 }
 
@@ -23,8 +23,8 @@ const chaveDe = ({ caixa, item }: ItemSelecionado) => chaveItem(caixa.dealId, it
 const textoInicial = ({ item }: ItemSelecionado): TextoItem => ({ qtd: quantidadeParaCampo(item.resta), fornecedor: '', previsao: '' });
 
 export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGerado, onFechar }: Props) {
-  // Itens que estavam na lista ao abrir: se uma recusa do servidor recarrega o board e algum
-  // deles entrou em outro pedido (ou foi resolvido), ele sai da lista com uma nota.
+  // Itens que estavam na lista ao abrir: se a recarga do board mostra que algum deles entrou
+  // em outro pedido (ou foi resolvido) com a janela aberta, ele sai da lista com uma nota.
   const [iniciais] = useState(() => itens.map(chaveDe));
   const [removidos, setRemovidos] = useState<Set<string>>(() => new Set());
   const lista = useRef<HTMLUListElement>(null);
@@ -32,7 +32,6 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
   const [form, setForm] = useState<FormPedido>({ origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '' });
   const [textos, setTextos] = useState<Record<string, TextoItem>>(() => Object.fromEntries(itens.map((x) => [chaveDe(x), textoInicial(x)])));
   const [tentou, setTentou] = useState(false);
-  const [enviando, setEnviando] = useState(false);
 
   const textoDe = (x: ItemSelecionado) => textos[chaveDe(x)] ?? textoInicial(x);
   const selecao = itens.map(({ caixa, item }) => ({ itemId: chaveItem(caixa.dealId, item.id), un: item.un, resta: item.resta }));
@@ -52,7 +51,7 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
     });
   }
 
-  async function gerar() {
+  function gerar() {
     setTentou(true);
     if (temErro) {
       lista.current?.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus();
@@ -67,14 +66,12 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
       }),
       origem: form.origem, quem: form.quem.trim(), local: form.local, previsao: form.previsao, responsavel: form.responsavel
     };
-    setEnviando(true);
-    const ok = await executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId }));
-    setEnviando(false);
-    if (ok) {
-      gerado.current = true; // o botão Gerar pedido fica desabilitado; o foco vai para Faltas sem pedido
-      onGerado();
-      onFechar();
-    }
+    // Fecha na hora: o pedido entra no quadro como "salvando…" e os itens saem das faltas.
+    // A marcação só sai quando o servidor confirma; se ele recusar, os itens voltam marcados.
+    const chaves = itens.map(chaveDe);
+    void executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId })).then((ok) => { if (ok) onGerado(chaves); });
+    gerado.current = true; // o botão Gerar pedido fica desabilitado; o foco vai para Faltas sem pedido
+    onFechar();
   }
 
   const nOs = new Set(itens.map((i) => i.caixa.dealId)).size;
@@ -86,7 +83,7 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
           {itens.length} {itens.length === 1 ? 'item' : 'itens'} de {nOs} OS · cada OS recebe um registro no Ploomes.
         </span>
         <button type="button" className="botao botao--leve" onClick={onFechar}>Cancelar</button>
-        <button type="button" className="botao botao--signal" disabled={enviando || itens.length === 0} onClick={gerar}>Confirmar e gerar</button>
+        <button type="button" className="botao botao--signal" disabled={itens.length === 0} onClick={gerar}>Confirmar e gerar</button>
       </>}>
       {sairam && <p className="janela__aviso" role="status">{sairam}</p>}
       {itens.length === 0 ? <p className="vazio">Nenhum item selecionado. Marque itens em Faltas sem pedido.</p> : (

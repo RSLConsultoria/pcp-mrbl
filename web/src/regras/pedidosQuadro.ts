@@ -52,9 +52,9 @@ export function textoConfirmarResolvido(itens: Pick<ItemPedido, 'dealId'>[], nom
   return `Mover para ${nomeUltima} dá baixa de ${n} ${n === 1 ? 'item' : 'itens'} em ${os} OS. A baixa não pode ser desfeita.`;
 }
 
-// Pedido editável no app: não finalizado e todas as OS liberadas para edição.
+// Pedido editável no app: não finalizado, já gravado (não provisório) e todas as OS liberadas para edição.
 export function pedidoEditavel(board: Pick<Board, 'dealsEditaveis'>, p: Pedido): boolean {
-  return !p.finalizado && p.itens.every((i) => caixaEditavelNoApp(board, { dealId: i.dealId }));
+  return !p.finalizado && !p.provisorio && p.itens.every((i) => caixaEditavelNoApp(board, { dealId: i.dealId }));
 }
 
 export function vazioDaEtapa(filtro: FiltroPedidos, indice: number, total: number, temBusca: boolean): string {

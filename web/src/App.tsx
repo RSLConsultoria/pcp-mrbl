@@ -7,6 +7,7 @@ import { Legenda } from './componentes/Legenda';
 import { Navbar } from './componentes/Navbar';
 import { AcoesPedidos } from './componentes/pedidos/AcoesPedidos';
 import { Subnav } from './componentes/Subnav';
+import { criarFila } from './hooks/filaAcoes';
 import { useAcao } from './hooks/useAcao';
 import { useBoard } from './hooks/useBoard';
 import type { FiltroPedidos } from './regras/pedidos';
@@ -35,9 +36,10 @@ function useTela(): [Tela, (t: Tela) => void] {
 }
 
 function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () => void; onSair: () => void }) {
-  const { board, erroDesde, carregando, recarregar } = useBoard(sessao.token, aoExpirar);
+  const [fila] = useState(criarFila);
+  const { board: doServidor, marco, erroDesde, carregando, recarregar } = useBoard(sessao.token, aoExpirar, fila.marco);
   const avisar = useAviso();
-  const executar = useAcao({ token: sessao.token, recarregar, aoExpirar, avisar });
+  const { board, executar, salvando } = useAcao({ fila, token: sessao.token, board: doServidor, marco, recarregar, aoExpirar, avisar });
   const [tela, irPara] = useTela();
   const [buscas, setBuscas] = useState<Record<Tela, string>>({ ploomes: '', saidas: '', pedidos: '' });
   const [filtro, setFiltro] = useState<FiltroPedidos>('aberto');
@@ -57,7 +59,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
 
   return (
     <div className="app">
-      <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} tela={tela} onTela={irPara} onSair={onSair} />
+      <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair} />
       <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
         {tela === 'pedidos'
           ? <AcoesPedidos filtro={filtro} onFiltro={setFiltro} selecionados={selecionados} podeEditarEtapas={ehAdm}
