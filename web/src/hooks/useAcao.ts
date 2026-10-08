@@ -1,60 +1,71 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { enviarAcao } from '../api/client';
-import type { Acao, RespostaAcao } from '../api/tipos';
+import type { Acao, Board, RespostaAcao } from '../api/tipos';
 import type { Avisar } from '../componentes/Aviso';
-import { chaveDaAcao, desfechoDoErro, gravarRecente, versaoAtual } from '../regras/acoes';
+import { desfechoDoErro } from '../regras/acoes';
+import { diaIso } from '../regras/datas';
+import { aplicarPendentes, pendentesVivos } from '../regras/otimista';
+import type { Fila } from './filaAcoes';
 
+// Põe a ação na fila e devolve na hora: o board da tela já mostra o efeito dela. A promessa
+// resolve quando o servidor responde (true = gravou; false = recusou e a tela voltou atrás).
+// Formulários não esperam por ela: fecham logo e deixam a próxima ação livre.
 export type Executar = (acao: Acao, mensagemSucesso: string | ((r: RespostaAcao) => string)) => Promise<boolean>;
 
 interface Opcoes {
+  fila: Fila;
   token: string;
+  board: Board | null; // o do servidor
+  marco: number; // marco da fila quando esse board foi pedido
   recarregar: () => Promise<void>;
   aoExpirar: () => void;
   avisar: Avisar;
 }
 
-// Envia as ações em fila, uma por vez, e espera o board recarregar entre elas.
-// Assim, salvar uma observação ao sair do campo e clicar num botão logo em seguida
-// não perde o clique nem gera conflito com a nossa própria gravação.
-// Devolve false quando não salvou, para o campo voltar ao valor anterior.
-// O clique duplo em botões é barrado em cada formulário (estado "enviando" local).
-export function useAcao({ token, recarregar, aoExpirar, avisar }: Opcoes) {
-  const fila = useRef<Promise<unknown>>(Promise.resolve());
-  const trocas = useRef(new Map<string, Map<string, string>>());
-  const aoExpirarRef = useRef(aoExpirar);
-  aoExpirarRef.current = aoExpirar;
+// Liga a fila de ações à tela. A fila envia uma por vez, em segundo plano (a versão de cada
+// ação depende da anterior), e o board só é relido uma vez, quando ela esvazia. Enquanto isso
+// a tela mostra o board do servidor com as ações pendentes por cima; a recarga do minuto
+// não apaga o que ainda não chegou ao servidor. Recusa: a ação sai da tela e o aviso de erro
+// aparece; conflito (409) relê o board; sessão expirada sai do app.
+export function useAcao({ fila, token, board, marco, recarregar, aoExpirar, avisar }: Opcoes) {
+  const atual = useRef({ token, recarregar, aoExpirar, avisar });
+  atual.current = { token, recarregar, aoExpirar, avisar };
 
-  const enviar = useCallback(async (acao: Acao, mensagemSucesso: string | ((r: RespostaAcao) => string)): Promise<boolean> => {
-    const chave = chaveDaAcao(acao);
-    const versao = 'versao' in acao ? versaoAtual(acao.versao, trocas.current.get(chave)) : '';
-    try {
-      const r = await enviarAcao(token, 'versao' in acao ? { ...acao, versao } : acao);
-      if (r.versao !== versao) {
-        // Só as ~50 trocas mais recentes importam: as antigas já chegaram pela recarga.
-        const t = trocas.current.get(chave) ?? new Map<string, string>();
-        gravarRecente(t, versao, r.versao);
-        gravarRecente(trocas.current, chave, t);
-      }
-      avisar(typeof mensagemSucesso === 'function' ? mensagemSucesso(r) : mensagemSucesso);
-      await recarregar();
-      return true;
-    } catch (e) {
+  useState(() => fila.configurar({
+    enviar: (acao) => enviarAcao(atual.current.token, acao),
+    aoFalhar: (e) => {
       const d = desfechoDoErro(e);
       if (d.tipo === 'expirou') {
-        aoExpirarRef.current();
-      } else if (d.tipo === 'conflito') {
-        avisar(d.texto, 'erro');
-        await recarregar();
-      } else {
-        avisar(d.texto, 'erro');
+        atual.current.aoExpirar();
+        return 'parar';
       }
-      return false;
-    }
-  }, [token, recarregar, avisar]);
+      atual.current.avisar(d.texto, 'erro');
+      if (d.tipo === 'conflito') void atual.current.recarregar();
+      return 'seguir';
+    },
+    aoEsvaziar: () => void atual.current.recarregar()
+  }));
 
-  return useCallback<Executar>((acao, mensagemSucesso) => {
-    const vez = fila.current.then(() => enviar(acao, mensagemSucesso));
-    fila.current = vez;
-    return vez;
-  }, [enviar]);
+  const pendentes = useSyncExternalStore(fila.assinar, fila.pendentes);
+
+  // Board novo: as confirmadas que ele já traz saem da fila.
+  useEffect(() => {
+    if (board) fila.podar(board, marco);
+  }, [fila, board, marco]);
+
+  const hoje = diaIso(new Date());
+  const tela = useMemo(
+    () => (board ? aplicarPendentes(board, pendentesVivos(pendentes, board, marco), hoje) : null),
+    [board, pendentes, marco, hoje]
+  );
+
+  const executar = useCallback<Executar>(async (acao, mensagemSucesso) => {
+    const r = await fila.adicionar(acao);
+    if (!r) return false;
+    atual.current.avisar(typeof mensagemSucesso === 'function' ? mensagemSucesso(r) : mensagemSucesso);
+    return true;
+  }, [fila]);
+
+  const salvando = pendentes.some((p) => p.estado !== 'confirmada');
+  return { board: tela, executar, salvando };
 }

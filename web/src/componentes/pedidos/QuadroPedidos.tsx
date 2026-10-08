@@ -23,45 +23,36 @@ interface Props {
 
 // Quadro de pedidos por etapa, com arrastar e soltar entre as colunas. A última etapa é a
 // "Resolvido": soltar um card nela pede confirmação, porque dá a baixa nas caixas. Pedido
-// finalizado (com baixa) fica sempre nela.
+// finalizado (com baixa) fica sempre nela. O card muda de coluna na hora (board otimista);
+// a gravação segue na fila, sem travar o próximo arraste.
 export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId, executar, onAbrir }: Props) {
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [sobre, setSobre] = useState<string | null>(null);
-  const [movidos, setMovidos] = useState<Record<string, string>>({}); // etapa mostrada enquanto o servidor grava
   const [pendente, setPendente] = useState<string | null>(null); // pedido aguardando a confirmação do Resolvido
-  const [gravando, setGravando] = useState(false);
   const ultima = etapas[etapas.length - 1];
-  const etapaDe = (p: Pedido) => movidos[p.id] ?? etapaNoQuadro(p, etapas);
+  const etapaDe = (p: Pedido) => etapaNoQuadro(p, etapas);
   const origem = arrastando ? pedidos.find((p) => p.id === arrastando) : undefined;
   const etapaDeOrigem = origem ? etapaDe(origem) : null;
   const pedPendente = pendente ? pedidos.find((p) => p.id === pendente) : undefined;
 
-  async function mover(id: string, etapaId: string) {
+  function mover(id: string, etapaId: string) {
     const p = pedidos.find((x) => x.id === id);
     if (!p || etapaDe(p) === etapaId || !pedidoEditavel(board, p)) return;
     const acao: Acao = { tipo: 'mover_pedido', pedidoId: p.id, versao: p.versao, etapa: etapaId };
     const baixa = etapaId === ultima?.id;
-    setMovidos((m) => ({ ...m, [id]: etapaId }));
-    await executar(acao, mensagemSucesso(acao, undefined, { etapa: etapas.find((e) => e.id === etapaId)?.nome, baixa }));
-    setMovidos((m) => {
-      const resto = { ...m };
-      delete resto[id];
-      return resto;
-    });
+    void executar(acao, mensagemSucesso(acao, undefined, { etapa: etapas.find((e) => e.id === etapaId)?.nome, baixa }));
   }
 
   function soltar(id: string, etapaId: string) {
     const p = pedidos.find((x) => x.id === id);
     if (!p || etapaDe(p) === etapaId || !pedidoEditavel(board, p)) return;
     if (entraNaUltimaEtapa(etapaDe(p), etapaId, etapas)) { setPendente(id); return; }
-    void mover(id, etapaId);
+    mover(id, etapaId);
   }
 
-  async function confirmar() {
+  function confirmar() {
     if (!pedPendente || !ultima) return;
-    setGravando(true);
-    await mover(pedPendente.id, ultima.id);
-    setGravando(false);
+    mover(pedPendente.id, ultima.id);
     setPendente(null);
   }
 
@@ -104,7 +95,7 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
               soltar={soltarEm(et.id)}>
               {ehUltima && pedPendente && (
                 <ConfirmarResolvido rotulo={`Confirmar ${et.nome} do ${pedPendente.id}`}
-                  texto={textoConfirmarResolvido(pedPendente.itens, et.nome)} ocupado={gravando}
+                  texto={textoConfirmarResolvido(pedPendente.itens, et.nome)} ocupado={false}
                   onConfirmar={confirmar} onCancelar={() => setPendente(null)} />
               )}
               {ps.map(card)}

@@ -27,6 +27,7 @@ interface Props {
 
 // Painel do pedido: edição com o resumo exato do que será gravado. Remontado (key) a cada versão.
 // Escolher a última etapa (Resolvido) e salvar pede confirmação: a baixa nas caixas não volta.
+// Salvar não espera o servidor: o board já mostra as alterações (e volta atrás se ele recusar).
 export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Props) {
   useTeclaEsc(onFechar);
   const editavel = pedidoEditavel(board, pedido);
@@ -39,7 +40,6 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     etapa: pedido.etapa, origem: pedido.origem, quem: pedido.quem, local: pedido.local, previsao: pedido.previsao, responsavel: pedido.responsavel
   }));
   const [textos, setTextos] = useState(textosIniciais);
-  const [enviando, setEnviando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
 
   const restaDe = (dealId: string, itemId: string) =>
@@ -60,18 +60,16 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
   const paraUltima = entraNaUltimaEtapa(antes.etapa, depois.etapa, etapas);
   const nomeDestino = etapas.find((e) => e.id === depois.etapa)?.nome ?? depois.etapa;
 
-  async function gravar() {
+  function gravar() {
     const acao = acaoEditarPedido(pedido, antes, depois);
     if (!acao || temErro) return;
-    setEnviando(true);
-    const ok = await executar(acao, paraUltima ? `${pedido.id} movido para ${nomeDestino} · baixa registrada nas caixas` : mensagemSucesso(acao));
-    setEnviando(false);
-    if (!ok) setConfirmando(false);
+    void executar(acao, paraUltima ? `${pedido.id} movido para ${nomeDestino} · baixa registrada nas caixas` : mensagemSucesso(acao));
+    setConfirmando(false);
   }
 
   function salvar() {
     if (paraUltima) setConfirmando(true);
-    else void gravar();
+    else gravar();
   }
 
   const historico = historicoDoPedido(board.caixas, pedido.id);
@@ -111,11 +109,11 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
             <ResumoAlteracoes linhas={linhas} />
             {confirmando ? (
               <ConfirmarResolvido rotulo={`Confirmar ${nomeDestino} do ${pedido.id}`}
-                texto={textoConfirmarResolvido(pedido.itens, nomeDestino)} ocupado={enviando}
-                onConfirmar={() => void gravar()} onCancelar={() => setConfirmando(false)} />
+                texto={textoConfirmarResolvido(pedido.itens, nomeDestino)} ocupado={false}
+                onConfirmar={gravar} onCancelar={() => setConfirmando(false)} />
             ) : (
               <div className="acoes">
-                <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro || enviando} onClick={salvar}>
+                <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro} onClick={salvar}>
                   {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
                 </button>
               </div>

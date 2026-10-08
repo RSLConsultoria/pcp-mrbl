@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import type { Board } from '../api/tipos';
 import { FaltasSemPedido } from '../componentes/pedidos/FaltasSemPedido';
 import { JanelaEtapas } from '../componentes/pedidos/JanelaEtapas';
@@ -20,7 +20,7 @@ interface Props {
   selecao: Set<string>;
   executar: Executar;
   onJanela: (j: JanelaPedidos) => void;
-  onSelecao: (s: Set<string>) => void;
+  onSelecao: Dispatch<SetStateAction<Set<string>>>;
 }
 
 export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela, onSelecao }: Props) {
@@ -56,7 +56,11 @@ export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela,
       </div>
       {janela === 'gerar' && (
         <JanelaGerarPedido itens={selecionados} usuarios={board.usuarios ?? []} executar={executar}
-          onRemover={(k) => marcar([k], false)} onGerado={() => onSelecao(new Set())} onFechar={fecharJanela} />
+          onRemover={(k) => marcar([k], false)} onGerado={(chaves) => onSelecao((s) => {
+            const resto = new Set(s);
+            for (const k of chaves) resto.delete(k);
+            return resto;
+          })} onFechar={fecharJanela} />
       )}
       {janela === 'etapas' && <JanelaEtapas etapas={etapas} pedidos={todos} executar={executar} onFechar={fecharJanela} />}
     </div>

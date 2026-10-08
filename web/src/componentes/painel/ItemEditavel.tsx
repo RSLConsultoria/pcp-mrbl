@@ -15,12 +15,10 @@ function Baixa({ item, dealId, executar }: Props) {
   const campo = useRef<HTMLInputElement>(null);
   const [qtd, setQtd] = useState('');
   const [erro, setErro] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
-  const travado = useRef(false); // barra o clique duplo antes de o estado renderizar
 
-  async function registrar(e: FormEvent) {
+  // Registra e limpa o campo na hora: o resta do item já cai no board (otimista).
+  function registrar(e: FormEvent) {
     e.preventDefault();
-    if (travado.current) return;
     const er = validarBaixa(qtd, item);
     if (er) {
       setErro(er);
@@ -28,12 +26,8 @@ function Baixa({ item, dealId, executar }: Props) {
       return;
     }
     const acao: Acao = { tipo: 'baixa', dealId, itemId: item.id, valor: arredondar3(lerQuantidade(qtd)!), versao: item.versao };
-    travado.current = true;
-    setEnviando(true);
-    const ok = await executar(acao, mensagemSucesso(acao, item));
-    travado.current = false;
-    setEnviando(false);
-    if (ok) setQtd('');
+    void executar(acao, mensagemSucesso(acao, item));
+    setQtd('');
   }
 
   return (
@@ -47,7 +41,7 @@ function Baixa({ item, dealId, executar }: Props) {
             onChange={(e) => { setQtd(e.target.value); setErro(null); }} />
           {item.un && <span className="baixa__un" aria-hidden="true">{item.un}</span>}
         </div>
-        <button type="submit" className="botao botao--signal" disabled={enviando}>Registrar baixa</button>
+        <button type="submit" className="botao botao--signal">Registrar baixa</button>
       </div>
       {erro && <p id={idErro} className="campo__erro">{erro}</p>}
     </form>
