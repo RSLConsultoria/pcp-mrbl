@@ -95,7 +95,11 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .filter(function (u) { return u && !!VALORES_ATIVO[semAcento(u.ativo)] && texto(u.nome) !== ''; })
     .map(function (u) { return texto(u.nome); })
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-  var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios, dealsEditaveis: DEALS_EDITAVEIS.slice() };
+  var ped = montarPedidos(extras, new Date(agora).getFullYear());
+  var corpo = {
+    geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios,
+    dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido
+  };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
 }
@@ -106,18 +110,69 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
 function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
+    if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
+      return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
+    }
+    var vp = validarAcaoPedido(corpo);
+    if (!vp.ok) return { ok: false, status: vp.status, body: { erro: vp.erro } };
+    return { ok: true };
+  }
   if (!dealEditavel(corpo && corpo.dealId)) return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
   var v = validarAcao(corpo, sessao.perfil);
   if (!v.ok) return { ok: false, status: v.status, body: { erro: v.erro } };
   return { ok: true };
 }
 
-// POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas? } (linhas da planilha).
-// Em sucesso devolve tambem "gravacao" e "historico" para os nodes de
-// escrita do workflow; o corpo da resposta ao front fica em "body".
+function historicoDaResposta(h) {
+  return { quando: h.quando, usuario: h.usuario, texto: h.texto, ploomes: 'PENDENTE' };
+}
+
+// Saida de sucesso comum: operacoes[] e historicos[] para o workflow (F3) e
+// gravacao/historico (primeira operacao / primeira linha) para os
+// adaptadores da F2 enquanto o workflow novo nao entra.
+function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
+  delete estado.board;
+  var body = { ok: true, versao: versao, historico: historicos.length ? historicoDaResposta(historicos[0]) : null };
+  Object.keys(extrasBody || {}).forEach(function (k) { body[k] = extrasBody[k]; });
+  var o = operacoes[0];
+  var saida = { status: 200, body: body, operacoes: operacoes, historicos: historicos };
+  saida.gravacao = o ? { aba: o.aba, chave: { coluna: o.chave, valor: o.linha[o.chave] }, campos: o.linha } : null;
+  saida.historico = historicos.length ? historicos[0] : null;
+  return saida;
+}
+
+function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
+  if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
+    return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
+  }
+  var v = validarAcaoPedido(corpo);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var r = aplicarAcaoPedido(v.acao, linhas || {}, {
+    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId
+  });
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+  var extras = {
+    historicos: r.historicos.map(function (h) {
+      var x = historicoDaResposta(h);
+      x.dealId = h.deal_id;
+      return x;
+    })
+  };
+  if (r.pedidoId) extras.pedidoId = r.pedidoId;
+  return respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
+}
+
+// POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
+// pedidosItens?, etapas?, historico? } (linhas da planilha).
+// Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
+// historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
+    return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);
+  }
   if (!dealEditavel(corpo && corpo.dealId)) return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
 
   var v = validarAcao(corpo, sessao.perfil);
@@ -162,16 +217,8 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   });
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
 
-  delete estado.board;
   var campos = r.gravacao.campos;
-  return {
-    status: 200,
-    body: {
-      ok: true,
-      versao: campos.atualizado_em_app || campos.atualizado_em,
-      historico: { quando: r.historico.quando, usuario: r.historico.usuario, texto: r.historico.texto, ploomes: 'PENDENTE' }
-    },
-    gravacao: r.gravacao,
-    historico: r.historico
-  };
+  var saida = respostaDeAcao(estado, campos.atualizado_em_app || campos.atualizado_em, r.operacoes, r.historicos);
+  saida.gravacao = r.gravacao;
+  return saida;
 }

@@ -216,6 +216,8 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     if (id) cpPorDeal[id] = c;
   });
   var ano = hoje.getFullYear();
+  // F3: item -> pedido aberto que o contem.
+  var abertoPorItem = pedidoAbertoPorItem(lerPedidos(extras.pedidos, extras.pedidosItens));
   var avisos = [];
   var grupos = {};
   var ordem = [];
@@ -253,6 +255,9 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     caixa.observacao = cp ? texto(cp.observacao) : '';
     caixa.versao = cp ? texto(cp.atualizado_em) : '';
     if (cp) caixa.responsavel = texto(cp.responsavel);
+    caixa.tratativa = cp ? semAcento(cp.tratativa) : '';
+    caixa.tratativaEm = cp ? texto(cp.tratativa_em) : '';
+    caixa.itens.forEach(function (it) { it.pedidoId = abertoPorItem[it.id] || ''; });
     caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);
     return caixa;
   }
@@ -492,7 +497,636 @@ function aplicarAcao(acao, alvo, contexto) {
     erro: ''
   };
 
-  return { ok: true, gravacao: gravacao, historico: historico };
+  // F3: a mesma gravacao como lista de operacoes (FALTANTES = update por id;
+  // CAIXAS_PCP = appendOrUpdate por deal_id). gravacao/historico ficam por
+  // compatibilidade com os adaptadores da F2.
+  var operacao = {
+    aba: gravacao.aba,
+    operacao: ehItem ? 'update' : 'appendOrUpdate',
+    chave: gravacao.chave.coluna,
+    linha: linhaDeGravacao(gravacao)
+  };
+  return { ok: true, gravacao: gravacao, historico: historico, operacoes: [operacao], historicos: [historico] };
+}
+
+// ----- src/pedidos.js -----
+// ===== src/pedidos.js =====
+// F3: solicitacoes de faltas (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO) e a
+// tratativa das caixas que sairam com falta (enviar a oficina / oficina
+// recebeu). Funcoes puras; sem import/export. Depende de util.js e acoes.js.
+// Cada acao devolve { operacoes: [{ aba, operacao, chave, linha }], historicos }.
+
+var TIPOS_PEDIDO = ['gerar_pedido', 'editar_pedido', 'mover_pedido', 'baixar_pedido',
+  'salvar_etapas', 'enviar_oficina', 'oficina_recebeu'];
+var ETAPAS_PADRAO = [
+  { id: 'a_pedir', nome: 'A pedir', ordem: 1 },
+  { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
+  { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 },
+  { id: 'entregue', nome: 'Entregue', ordem: 4 }
+];
+var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
+var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo' };
+var ERRO_VERSAO = 'Alguém alterou esta caixa agora há pouco.';
+var CAMPOS_PEDIDO = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'];
+var NOMES_CAMPO = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
+
+// ---------- leitura das abas ----------
+
+function numeroDoPedido(id) {
+  var m = /^PED-(\d+)$/.exec(texto(id));
+  return m ? Number(m[1]) : 0;
+}
+
+// Pedido valido: id PED-nnnn com numero > 0 (PED-0000 e a linha-semente).
+function pedidoValido(id) {
+  return numeroDoPedido(id) > 0;
+}
+
+function proximoIdPedido(pedidos) {
+  var max = 0;
+  (pedidos || []).forEach(function (p) {
+    var n = numeroDoPedido(p && p.id);
+    if (n > max) max = n;
+  });
+  var s = String(max + 1);
+  while (s.length < 4) s = '0' + s;
+  return 'PED-' + s;
+}
+
+// Etapas validas (com id e nome), ordenadas; aba vazia = padrao.
+function lerEtapas(linhas) {
+  var lidas = (linhas || []).filter(function (e) { return e && texto(e.id) !== '' && texto(e.nome) !== ''; })
+    .map(function (e) {
+      var o = numero(e.ordem);
+      return { id: texto(e.id), nome: texto(e.nome), ordem: o === null || isNaN(o) ? Infinity : o };
+    })
+    .sort(function (a, b) {
+      if (a.ordem !== b.ordem) return a.ordem < b.ordem ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  if (!lidas.length) return ETAPAS_PADRAO.map(function (e) { return { id: e.id, nome: e.nome, ordem: e.ordem }; });
+  return lidas.map(function (e, i) { return { id: e.id, nome: e.nome, ordem: e.ordem === Infinity ? i + 1 : e.ordem }; });
+}
+
+// [{ linha, id, itens: [linhas de PEDIDOS_ITENS] }], sem sementes.
+function lerPedidos(pedidos, itens) {
+  var porId = {};
+  var lista = [];
+  (pedidos || []).forEach(function (p) {
+    if (!p || !pedidoValido(p.id)) return;
+    var id = texto(p.id);
+    if (porId[id]) return;
+    porId[id] = { linha: p, id: id, itens: [] };
+    lista.push(porId[id]);
+  });
+  (itens || []).forEach(function (it) {
+    if (!it) return;
+    var pid = texto(it.pedido_id);
+    if (!porId[pid] || texto(it.item_id) === '' || texto(it.deal_id) === '' || texto(it.deal_id) === '0') return;
+    porId[pid].itens.push(it);
+  });
+  return lista;
+}
+
+function pedidoAberto(p) {
+  return texto(p.linha.baixado_em) === '';
+}
+
+// item_id -> id do pedido aberto que o contem.
+function pedidoAbertoPorItem(lista) {
+  var m = {};
+  lista.forEach(function (p) {
+    if (!pedidoAberto(p)) return;
+    p.itens.forEach(function (it) { if (!m[texto(it.item_id)]) m[texto(it.item_id)] = p.id; });
+  });
+  return m;
+}
+
+// Board: pedidos, etapasPedido e o mapa item -> pedido aberto.
+function montarPedidos(extras, ano) {
+  extras = extras || {};
+  var etapas = lerEtapas(extras.etapas);
+  var ultima = etapas[etapas.length - 1].id;
+  var lista = lerPedidos(extras.pedidos, extras.pedidosItens);
+  var pedidos = lista.slice().sort(function (a, b) { return numeroDoPedido(a.id) - numeroDoPedido(b.id); })
+    .map(function (p) {
+      var l = p.linha;
+      var baixadoEm = texto(l.baixado_em);
+      var etapa = texto(l.etapa);
+      return {
+        id: p.id,
+        etapa: etapa,
+        origem: semAcento(l.origem),
+        quem: texto(l.quem),
+        local: semAcento(l.local).replace(/\s+/g, '_'),
+        previsao: dataISO(l.previsao, ano),
+        responsavel: texto(l.responsavel),
+        criadoEm: texto(l.criado_em),
+        baixadoEm: baixadoEm,
+        versao: texto(l.atualizado_em),
+        finalizado: etapa === ultima && baixadoEm !== '',
+        itens: p.itens.map(function (it) {
+          var q = numero(it.qtd);
+          return {
+            itemId: texto(it.item_id),
+            dealId: texto(it.deal_id),
+            os: texto(it.os),
+            nome: texto(it.nome),
+            un: texto(it.un),
+            qtd: q === null || isNaN(q) ? null : q,
+            fornecedor: texto(it.fornecedor)
+          };
+        })
+      };
+    });
+  return { pedidos: pedidos, etapasPedido: etapas, abertoPorItem: pedidoAbertoPorItem(lista) };
+}
+
+// ---------- validacao do corpo ----------
+
+function textoCurto(v, max, erro) {
+  if (v === undefined || v === null) return { ok: true, valor: '' };
+  if (typeof v !== 'string') return { ok: false, erro: erro };
+  var t = v.trim().replace(/(\r\n|\n|\r)+/g, ' ');
+  if (t.length > max) return { ok: false, erro: erro };
+  return { ok: true, valor: t };
+}
+
+function qtdValida(v) {
+  var n = typeof v === 'number' ? v : numero(v);
+  if (n === null || !isFinite(n)) return null;
+  n = arredondar(n);
+  return n > 0 ? n : null;
+}
+
+// Normaliza um campo do pedido; { ok, valor } ou { ok: false, erro }.
+function campoPedido(nome, v) {
+  if (nome === 'etapa') {
+    var e = texto(v);
+    return e ? { ok: true, valor: e } : { ok: false, erro: 'Etapa inválida.' };
+  }
+  if (nome === 'origem') {
+    var o = semAcento(v);
+    return ORIGENS[o] ? { ok: true, valor: o } : { ok: false, erro: 'Origem inválida.' };
+  }
+  if (nome === 'local') {
+    var l = semAcento(v).replace(/\s+/g, '_');
+    return LOCAIS[l] ? { ok: true, valor: l } : { ok: false, erro: 'Local inválido.' };
+  }
+  if (nome === 'previsao') {
+    var p = v === null || v === undefined ? '' : texto(v);
+    return p === '' || dataValida(p) ? { ok: true, valor: p } : { ok: false, erro: 'Data inválida.' };
+  }
+  if (nome === 'quem') return textoCurto(v, 100, 'Fornecedor/cliente inválido.');
+  return textoCurto(v, 100, 'Responsável inválido.');
+}
+
+// Deals citados no proprio corpo (para o 403 antes de ler a planilha).
+function dealsDoCorpo(corpo) {
+  if (!corpo || typeof corpo !== 'object') return [];
+  if (corpo.tipo === 'gerar_pedido') {
+    return (Array.isArray(corpo.itens) ? corpo.itens : []).map(function (i) { return texto(i && i.dealId); })
+      .filter(function (d) { return d !== ''; });
+  }
+  if (corpo.tipo === 'enviar_oficina' || corpo.tipo === 'oficina_recebeu') {
+    var d = texto(corpo.dealId);
+    return d ? [d] : [];
+  }
+  return [];
+}
+
+function validarAcaoPedido(corpo) {
+  if (!corpo || typeof corpo !== 'object') return erroAcao(400, 'Corpo inválido.');
+  var tipo = corpo.tipo;
+  if (TIPOS_PEDIDO.indexOf(tipo) < 0) return erroAcao(400, 'Tipo de ação inválido.');
+  var acao = { tipo: tipo };
+  var r;
+  var i;
+
+  if (tipo === 'enviar_oficina' || tipo === 'oficina_recebeu') {
+    acao.dealId = texto(corpo.dealId);
+    if (!acao.dealId) return erroAcao(400, 'Caixa não informada.');
+    acao.versao = texto(corpo.versao);
+    return { ok: true, acao: acao };
+  }
+
+  if (tipo === 'salvar_etapas') {
+    if (!Array.isArray(corpo.etapas)) return erroAcao(400, 'Etapas inválidas.');
+    var vistosNome = {};
+    var vistosId = {};
+    acao.etapas = [];
+    for (i = 0; i < corpo.etapas.length; i++) {
+      var e = corpo.etapas[i] || {};
+      var nome = typeof e.nome === 'string' ? e.nome.trim() : '';
+      if (!nome) return erroAcao(400, 'Toda etapa precisa de um nome.');
+      if (nome.length > 60) return erroAcao(400, 'Nome de etapa muito longo.');
+      var chave = semAcento(nome);
+      if (vistosNome[chave]) return erroAcao(400, 'Já existe uma etapa com o nome ' + nome + '.');
+      vistosNome[chave] = 1;
+      var id = texto(e.id);
+      if (id) {
+        if (vistosId[id]) return erroAcao(400, 'Etapa repetida.');
+        vistosId[id] = 1;
+      }
+      acao.etapas.push({ id: id, nome: nome });
+    }
+    if (acao.etapas.length < 2) return erroAcao(400, 'O quadro precisa de pelo menos 2 etapas.');
+    return { ok: true, acao: acao };
+  }
+
+  if (tipo === 'gerar_pedido') {
+    if (!Array.isArray(corpo.itens) || !corpo.itens.length) return erroAcao(400, 'Selecione ao menos um item.');
+    acao.itens = [];
+    var vistos = {};
+    for (i = 0; i < corpo.itens.length; i++) {
+      var it = corpo.itens[i] || {};
+      var itemId = texto(it.itemId);
+      var dealId = texto(it.dealId);
+      if (!itemId || !dealId) return erroAcao(400, 'Item não informado.');
+      if (vistos[itemId]) return erroAcao(400, 'Item repetido no pedido.');
+      vistos[itemId] = 1;
+      var q = qtdValida(it.qtd);
+      if (q === null) return erroAcao(400, 'Informe uma quantidade maior que zero');
+      r = textoCurto(it.fornecedor, 100, 'Fornecedor inválido.');
+      if (!r.ok) return erroAcao(400, r.erro);
+      acao.itens.push({ itemId: itemId, dealId: dealId, qtd: q, fornecedor: r.valor });
+    }
+    acao.campos = {};
+    var nomes = ['origem', 'quem', 'local', 'previsao', 'responsavel'];
+    for (i = 0; i < nomes.length; i++) {
+      r = campoPedido(nomes[i], corpo[nomes[i]]);
+      if (!r.ok) return erroAcao(400, r.erro);
+      acao.campos[nomes[i]] = r.valor;
+    }
+    return { ok: true, acao: acao };
+  }
+
+  acao.pedidoId = texto(corpo.pedidoId);
+  if (!acao.pedidoId) return erroAcao(400, 'Pedido não informado.');
+  acao.versao = texto(corpo.versao);
+
+  if (tipo === 'mover_pedido') {
+    acao.etapa = texto(corpo.etapa);
+    if (!acao.etapa) return erroAcao(400, 'Etapa inválida.');
+  } else if (tipo === 'editar_pedido') {
+    var campos = corpo.campos && typeof corpo.campos === 'object' ? corpo.campos : {};
+    acao.campos = {};
+    for (i = 0; i < CAMPOS_PEDIDO.length; i++) {
+      var n = CAMPOS_PEDIDO[i];
+      if (!Object.prototype.hasOwnProperty.call(campos, n)) continue;
+      r = campoPedido(n, campos[n]);
+      if (!r.ok) return erroAcao(400, r.erro);
+      acao.campos[n] = r.valor;
+    }
+    acao.itens = [];
+    if (corpo.itens !== undefined && !Array.isArray(corpo.itens)) return erroAcao(400, 'Itens inválidos.');
+    var vistosE = {};
+    for (i = 0; i < (corpo.itens || []).length; i++) {
+      var ie = corpo.itens[i] || {};
+      var iid = texto(ie.itemId);
+      if (!iid) return erroAcao(400, 'Item não informado.');
+      if (vistosE[iid]) return erroAcao(400, 'Item repetido no pedido.');
+      vistosE[iid] = 1;
+      var mud = { itemId: iid };
+      if (ie.qtd !== undefined) {
+        var qe = qtdValida(ie.qtd);
+        if (qe === null) return erroAcao(400, 'Informe uma quantidade maior que zero');
+        mud.qtd = qe;
+      }
+      if (ie.fornecedor !== undefined) {
+        r = textoCurto(ie.fornecedor, 100, 'Fornecedor inválido.');
+        if (!r.ok) return erroAcao(400, r.erro);
+        mud.fornecedor = r.valor;
+      }
+      acao.itens.push(mud);
+    }
+    if (!Object.keys(acao.campos).length && !acao.itens.length) return erroAcao(400, 'Nada alterado.');
+  }
+  return { ok: true, acao: acao };
+}
+
+// ---------- aplicacao ----------
+
+function restaDaLinha(l) {
+  var falta = numero(l.qtd_falta);
+  var bx = numero(l.qtd_baixada);
+  if (falta === null || isNaN(falta) || (bx !== null && isNaN(bx))) return null;
+  return arredondar(Math.max(0, falta - (bx || 0)));
+}
+
+function linhaHistorico(ctx, dealId, os, itemId, tipo, txt) {
+  return {
+    id: ctx.gerarId(),
+    quando: ctx.agora,
+    usuario: ctx.usuario,
+    email: ctx.email,
+    deal_id: dealId,
+    os: os,
+    item_id: itemId || '',
+    acao: tipo,
+    texto: txt,
+    ploomes_status: 'PENDENTE',
+    ploomes_id: '',
+    tentativas: 0,
+    erro: ''
+  };
+}
+
+// Agrupa por deal_id, na ordem em que aparecem: [{ dealId, os, itens }].
+function porOS(itens, dealDe, osDe) {
+  var grupos = {};
+  var ordem = [];
+  itens.forEach(function (it) {
+    var d = dealDe(it);
+    if (!grupos[d]) { grupos[d] = { dealId: d, os: osDe(it), itens: [] }; ordem.push(d); }
+    grupos[d].itens.push(it);
+  });
+  return ordem.map(function (d) { return grupos[d]; });
+}
+
+function op(aba, operacao, chave, linha) {
+  return { aba: aba, operacao: operacao, chave: chave, linha: linha };
+}
+
+function primeiroNaoEditavel(deals) {
+  for (var i = 0; i < deals.length; i++) if (!dealEditavel(deals[i])) return deals[i];
+  return null;
+}
+
+function mostrarCampo(nome, v, etapas) {
+  if (v === '') return '—';
+  if (nome === 'etapa') {
+    var e = etapas.filter(function (x) { return x.id === v; })[0];
+    return e ? e.nome : v;
+  }
+  if (nome === 'origem') return ORIGENS[v] || v;
+  if (nome === 'local') return LOCAIS[v] || v;
+  if (nome === 'previsao') return dataValida(v) ? dataCurta(v) : v;
+  return v;
+}
+
+function valorAtualCampo(linha, nome) {
+  if (nome === 'origem') return semAcento(linha.origem);
+  if (nome === 'local') return semAcento(linha.local).replace(/\s+/g, '_');
+  if (nome === 'previsao') return dataISO(linha.previsao, 2000) || texto(linha.previsao);
+  return texto(linha[nome]);
+}
+
+// linhas = { faltantes, caixasPcp, ganhas, pedidos, pedidosItens, etapas }
+// ctx = { usuario, email, agora (ISO), gerarId }
+function aplicarAcaoPedido(acao, linhas, ctx) {
+  linhas = linhas || {};
+  var u = ctx.usuario;
+  var agora = ctx.agora;
+  var faltantesPorId = {};
+  (linhas.faltantes || []).forEach(function (l) {
+    if (l && texto(l.id) && !faltantesPorId[texto(l.id)]) faltantesPorId[texto(l.id)] = l;
+  });
+  var etapas = lerEtapas(linhas.etapas);
+  var lista = lerPedidos(linhas.pedidos, linhas.pedidosItens);
+  var abertos = pedidoAbertoPorItem(lista);
+  var tipo = acao.tipo;
+
+  if (tipo === 'enviar_oficina' || tipo === 'oficina_recebeu') return aplicarTratativa(acao, linhas, ctx);
+  if (tipo === 'salvar_etapas') return aplicarEtapas(acao, linhas, ctx, lista);
+
+  if (tipo === 'gerar_pedido') {
+    var deals = acao.itens.map(function (i) { return i.dealId; });
+    if (primeiroNaoEditavel(deals) !== null) return erroAcao(403, ERRO_NAO_EDITAVEL);
+    var pid = proximoIdPedido(linhas.pedidos);
+    var linhasItens = [];
+    for (var i = 0; i < acao.itens.length; i++) {
+      var it = acao.itens[i];
+      var l = faltantesPorId[it.itemId];
+      if (!l || texto(l.deal_id) !== it.dealId || semAcento(l.status) === 'SUBSTITUIDO') {
+        return erroAcao(409, 'Item não encontrado.');
+      }
+      if (abertos[it.itemId]) return erroAcao(409, 'Item já está no ' + abertos[it.itemId] + '.');
+      var resta = restaDaLinha(l);
+      if (resta === null) return erroAcao(400, 'Item sem quantidade faltante registrada.');
+      if (it.qtd > resta) {
+        return erroAcao(400, 'Falta só ' + formatarQtd(resta) + ' ' + texto(l.unidade) + ' de ' + texto(l.descricao_item));
+      }
+      linhasItens.push({
+        id: pid + '|' + it.itemId, pedido_id: pid, item_id: it.itemId, deal_id: it.dealId, os: texto(l.os),
+        nome: texto(l.descricao_item), un: texto(l.unidade), qtd: it.qtd, fornecedor: it.fornecedor
+      });
+    }
+    var c = acao.campos;
+    var operacoes = [op('PEDIDOS', 'append', 'id', {
+      id: pid, etapa: etapas[0].id, origem: c.origem, quem: c.quem, local: c.local, previsao: c.previsao,
+      responsavel: c.responsavel, criado_em: agora, criado_por: u, baixado_em: '', atualizado_em: agora
+    })].concat(linhasItens.map(function (li) { return op('PEDIDOS_ITENS', 'append', 'id', li); }));
+    var historicos = porOS(linhasItens, function (x) { return x.deal_id; }, function (x) { return x.os; })
+      .map(function (g) {
+        var n = g.itens.length;
+        var txt = u + ' gerou ' + pid + ' · ' + n + (n === 1 ? ' item' : ' itens') + ' desta OS · ' +
+          ORIGENS[c.origem] + (c.quem ? ' ' + c.quem : '');
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, txt);
+      });
+    return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: pid };
+  }
+
+  // editar / mover / baixar: pedido existente
+  var p = lista.filter(function (x) { return x.id === acao.pedidoId; })[0];
+  if (!p) return erroAcao(404, 'Pedido não encontrado.');
+  var dealsP = p.itens.map(function (x) { return texto(x.deal_id); });
+  if (primeiroNaoEditavel(dealsP) !== null) return erroAcao(403, ERRO_NAO_EDITAVEL);
+  if (!pedidoAberto(p)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
+  if (acao.versao !== texto(p.linha.atualizado_em)) return erroAcao(409, ERRO_VERSAO);
+  var grupos = porOS(p.itens, function (x) { return texto(x.deal_id); }, function (x) { return texto(x.os); });
+  function existeEtapa(id) { return etapas.some(function (e) { return e.id === id; }); }
+
+  if (tipo === 'mover_pedido') {
+    if (!existeEtapa(acao.etapa)) return erroAcao(400, 'Etapa inválida.');
+    if (acao.etapa === texto(p.linha.etapa)) return erroAcao(400, 'O pedido já está nessa etapa.');
+    var nomeEtapa = mostrarCampo('etapa', acao.etapa, etapas);
+    return {
+      ok: true,
+      operacoes: [op('PEDIDOS', 'update', 'id', { id: p.id, etapa: acao.etapa, atualizado_em: agora })],
+      historicos: grupos.map(function (g) {
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' moveu ' + p.id + ' para ' + nomeEtapa);
+      }),
+      versao: agora,
+      pedidoId: p.id
+    };
+  }
+
+  if (tipo === 'baixar_pedido') {
+    if (texto(p.linha.etapa) !== etapas[etapas.length - 1].id) return erroAcao(400, 'Dar baixa só na última etapa.');
+    var opsF = [];
+    var partes = {};
+    for (var k = 0; k < p.itens.length; k++) {
+      var pi = p.itens[k];
+      var lf = faltantesPorId[texto(pi.item_id)];
+      if (!lf) continue;
+      var falta = numero(lf.qtd_falta);
+      var bx = numero(lf.qtd_baixada);
+      if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
+      if (falta === null || isNaN(falta)) continue;
+      bx = bx || 0;
+      var r0 = arredondar(Math.max(0, falta - bx));
+      var q = numero(pi.qtd);
+      q = q === null || isNaN(q) ? 0 : q;
+      var dar = arredondar(Math.min(q, r0));
+      if (dar > 0) {
+        opsF.push(op('FALTANTES', 'update', 'id', { id: texto(lf.id), qtd_baixada: arredondar(bx + dar), atualizado_em_app: agora }));
+      }
+      var un = texto(lf.unidade);
+      var d = texto(pi.deal_id);
+      (partes[d] = partes[d] || []).push(formatarQtd(dar) + ' ' + un + ' de ' + texto(lf.descricao_item) +
+        ' (resta ' + formatarQtd(arredondar(r0 - dar)) + ' ' + un + ')');
+    }
+    return {
+      ok: true,
+      operacoes: opsF.concat([op('PEDIDOS', 'update', 'id', { id: p.id, baixado_em: agora, atualizado_em: agora })]),
+      historicos: grupos.filter(function (g) { return partes[g.dealId]; }).map(function (g) {
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' deu baixa do ' + p.id + ': ' + partes[g.dealId].join('; '));
+      }),
+      versao: agora,
+      pedidoId: p.id
+    };
+  }
+
+  // editar_pedido
+  var mudPedido = {};
+  var resumoPedido = [];
+  CAMPOS_PEDIDO.forEach(function (n) {
+    if (!Object.prototype.hasOwnProperty.call(acao.campos, n)) return;
+    var antes = valorAtualCampo(p.linha, n);
+    var depois = acao.campos[n];
+    if (antes === depois) return;
+    mudPedido[n] = depois;
+    resumoPedido.push(NOMES_CAMPO[n] + ': ' + mostrarCampo(n, antes, etapas) + ' → ' + mostrarCampo(n, depois, etapas));
+  });
+  if (mudPedido.etapa !== undefined && !existeEtapa(mudPedido.etapa)) return erroAcao(400, 'Etapa inválida.');
+  var opsItens = [];
+  var resumoItens = {};
+  for (var j = 0; j < acao.itens.length; j++) {
+    var mi = acao.itens[j];
+    var linhaPi = p.itens.filter(function (x) { return texto(x.item_id) === mi.itemId; })[0];
+    if (!linhaPi) return erroAcao(400, 'Item não está no pedido.');
+    var nomeItem = texto(linhaPi.nome);
+    var mud = {};
+    var res = [];
+    var qAntes = numero(linhaPi.qtd);
+    if (mi.qtd !== undefined && mi.qtd !== qAntes) {
+      var lfe = faltantesPorId[mi.itemId];
+      if (!lfe) return erroAcao(409, 'Item não encontrado.');
+      var re = restaDaLinha(lfe);
+      if (re === null) return erroAcao(400, 'Item sem quantidade faltante registrada.');
+      if (mi.qtd > re) return erroAcao(400, 'Falta só ' + formatarQtd(re) + ' ' + texto(lfe.unidade) + ' de ' + nomeItem);
+      mud.qtd = mi.qtd;
+      res.push('qtd de ' + nomeItem + ': ' + (qAntes === null || isNaN(qAntes) ? '—' : formatarQtd(qAntes)) + ' → ' + formatarQtd(mi.qtd));
+    }
+    var fAntes = texto(linhaPi.fornecedor);
+    if (mi.fornecedor !== undefined && mi.fornecedor !== fAntes) {
+      mud.fornecedor = mi.fornecedor;
+      res.push('fornecedor de ' + nomeItem + ': ' + (fAntes || '—') + ' → ' + (mi.fornecedor || '—'));
+    }
+    if (!res.length) continue;
+    opsItens.push(op('PEDIDOS_ITENS', 'update', 'id', Object.assign({ id: texto(linhaPi.id) || p.id + '|' + mi.itemId }, mud)));
+    var dd = texto(linhaPi.deal_id);
+    resumoItens[dd] = (resumoItens[dd] || []).concat(res);
+  }
+  if (!resumoPedido.length && !opsItens.length) return erroAcao(400, 'Nada alterado.');
+  var linhaPed = Object.assign({ id: p.id }, mudPedido, { atualizado_em: agora });
+  return {
+    ok: true,
+    operacoes: [op('PEDIDOS', 'update', 'id', linhaPed)].concat(opsItens),
+    historicos: grupos.map(function (g) {
+      var resumo = resumoPedido.concat(resumoItens[g.dealId] || []);
+      return resumo.length ? linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' alterou ' + p.id + ': ' + resumo.join(', ')) : null;
+    }).filter(function (h) { return h; }),
+    versao: agora,
+    pedidoId: p.id
+  };
+}
+
+function slugEtapa(nome) {
+  var s = semAcento(nome).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return s || 'etapa';
+}
+
+function aplicarEtapas(acao, linhas, ctx, lista) {
+  var temLinhas = (linhas.etapas || []).some(function (e) { return e && texto(e.id) !== '' && texto(e.nome) !== ''; });
+  var atuais = lerEtapas(linhas.etapas);
+  var idsAtuais = {};
+  atuais.forEach(function (e) { idsAtuais[e.id] = e; });
+  var usados = {};
+  atuais.forEach(function (e) { usados[e.id] = 1; });
+  var i;
+  for (i = 0; i < acao.etapas.length; i++) {
+    if (acao.etapas[i].id && !idsAtuais[acao.etapas[i].id]) return erroAcao(400, 'Etapa inválida.');
+  }
+  var mantidas = {};
+  acao.etapas.forEach(function (e) { if (e.id) mantidas[e.id] = 1; });
+  var removidas = atuais.filter(function (e) { return !mantidas[e.id]; });
+  for (i = 0; i < removidas.length; i++) {
+    var rid = removidas[i].id;
+    var comPedido = lista.some(function (p) { return pedidoAberto(p) && texto(p.linha.etapa) === rid; });
+    if (comPedido) return erroAcao(409, 'A etapa ' + removidas[i].nome + ' tem pedidos abertos.');
+  }
+  var operacoes = acao.etapas.map(function (e, idx) {
+    var id = e.id;
+    if (!id) {
+      var base = slugEtapa(e.nome);
+      id = base;
+      var n = 2;
+      while (usados[id]) id = base + '_' + (n++);
+      usados[id] = 1;
+    }
+    return op('ETAPAS_PEDIDO', 'appendOrUpdate', 'id', { id: id, nome: e.nome, ordem: idx + 1 });
+  });
+  // Removidas: a linha fica com nome e ordem vazios (a leitura ignora).
+  if (temLinhas) {
+    removidas.forEach(function (e) {
+      operacoes.push(op('ETAPAS_PEDIDO', 'update', 'id', { id: e.id, nome: '', ordem: '' }));
+    });
+  }
+  return { ok: true, operacoes: operacoes, historicos: [], versao: ctx.agora };
+}
+
+function aplicarTratativa(acao, linhas, ctx) {
+  if (!dealEditavel(acao.dealId)) return erroAcao(403, ERRO_NAO_EDITAVEL);
+  var faltantes = (linhas.faltantes || []).filter(function (l) { return l && texto(l.deal_id) === acao.dealId; });
+  var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === acao.dealId; })[0] || null;
+  var g = (linhas.ganhas || []).filter(function (x) { return x && texto(x.deal_id) === acao.dealId; })[0] || null;
+  if (!faltantes.length && !g) return erroAcao(404, 'Caixa não encontrada.');
+  if (acao.versao !== (cpRow ? texto(cpRow.atualizado_em) : '')) return erroAcao(409, ERRO_VERSAO);
+
+  var os = faltantes.length ? texto(faltantes[0].os) : '';
+  if (!os && cpRow) os = texto(cpRow.os);
+  if (!os && g) os = texto(g.os);
+  var agora = ctx.agora;
+  var recebeu = acao.tipo === 'oficina_recebeu';
+
+  var linhaCp = { deal_id: acao.dealId, os: os, tratativa: recebeu ? 'RECEBIDO' : 'ENVIADO', tratativa_em: agora, atualizado_em: agora };
+  if (!cpRow) {
+    var resp = '';
+    faltantes.forEach(function (l) { if (!resp) resp = texto(l.responsavel); });
+    linhaCp.responsavel = resp;
+  }
+  var operacoes = [op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', linhaCp)];
+  if (recebeu) {
+    faltantes.forEach(function (l) {
+      if (!STATUS_ABERTOS[semAcento(l.status)]) return;
+      var falta = numero(l.qtd_falta);
+      if (falta === null || isNaN(falta)) return;
+      var bx = numero(l.qtd_baixada);
+      if (bx !== null && !isNaN(bx) && bx >= falta) return;
+      operacoes.push(op('FALTANTES', 'update', 'id', { id: texto(l.id), qtd_baixada: arredondar(falta), atualizado_em_app: agora }));
+    });
+  }
+  var txt = recebeu
+    ? ctx.usuario + ' registrou que a oficina recebeu o material'
+    : ctx.usuario + ' enviou o material faltante à oficina';
+  return {
+    ok: true,
+    operacoes: operacoes,
+    historicos: [linhaHistorico(ctx, acao.dealId, os, '', acao.tipo, txt)],
+    versao: agora
+  };
 }
 
 // ----- src/envioPloomes.js -----
@@ -698,7 +1332,11 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .filter(function (u) { return u && !!VALORES_ATIVO[semAcento(u.ativo)] && texto(u.nome) !== ''; })
     .map(function (u) { return texto(u.nome); })
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-  var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios, dealsEditaveis: DEALS_EDITAVEIS.slice() };
+  var ped = montarPedidos(extras, new Date(agora).getFullYear());
+  var corpo = {
+    geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios,
+    dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido
+  };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
 }
@@ -709,18 +1347,69 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
 function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
+    if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
+      return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
+    }
+    var vp = validarAcaoPedido(corpo);
+    if (!vp.ok) return { ok: false, status: vp.status, body: { erro: vp.erro } };
+    return { ok: true };
+  }
   if (!dealEditavel(corpo && corpo.dealId)) return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
   var v = validarAcao(corpo, sessao.perfil);
   if (!v.ok) return { ok: false, status: v.status, body: { erro: v.erro } };
   return { ok: true };
 }
 
-// POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas? } (linhas da planilha).
-// Em sucesso devolve tambem "gravacao" e "historico" para os nodes de
-// escrita do workflow; o corpo da resposta ao front fica em "body".
+function historicoDaResposta(h) {
+  return { quando: h.quando, usuario: h.usuario, texto: h.texto, ploomes: 'PENDENTE' };
+}
+
+// Saida de sucesso comum: operacoes[] e historicos[] para o workflow (F3) e
+// gravacao/historico (primeira operacao / primeira linha) para os
+// adaptadores da F2 enquanto o workflow novo nao entra.
+function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
+  delete estado.board;
+  var body = { ok: true, versao: versao, historico: historicos.length ? historicoDaResposta(historicos[0]) : null };
+  Object.keys(extrasBody || {}).forEach(function (k) { body[k] = extrasBody[k]; });
+  var o = operacoes[0];
+  var saida = { status: 200, body: body, operacoes: operacoes, historicos: historicos };
+  saida.gravacao = o ? { aba: o.aba, chave: { coluna: o.chave, valor: o.linha[o.chave] }, campos: o.linha } : null;
+  saida.historico = historicos.length ? historicos[0] : null;
+  return saida;
+}
+
+function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
+  if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
+    return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
+  }
+  var v = validarAcaoPedido(corpo);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var r = aplicarAcaoPedido(v.acao, linhas || {}, {
+    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId
+  });
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+  var extras = {
+    historicos: r.historicos.map(function (h) {
+      var x = historicoDaResposta(h);
+      x.dealId = h.deal_id;
+      return x;
+    })
+  };
+  if (r.pedidoId) extras.pedidoId = r.pedidoId;
+  return respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
+}
+
+// POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
+// pedidosItens?, etapas?, historico? } (linhas da planilha).
+// Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
+// historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
+    return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);
+  }
   if (!dealEditavel(corpo && corpo.dealId)) return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
 
   var v = validarAcao(corpo, sessao.perfil);
@@ -765,18 +1454,10 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   });
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
 
-  delete estado.board;
   var campos = r.gravacao.campos;
-  return {
-    status: 200,
-    body: {
-      ok: true,
-      versao: campos.atualizado_em_app || campos.atualizado_em,
-      historico: { quando: r.historico.quando, usuario: r.historico.usuario, texto: r.historico.texto, ploomes: 'PENDENTE' }
-    },
-    gravacao: r.gravacao,
-    historico: r.historico
-  };
+  var saida = respostaDeAcao(estado, campos.atualizado_em_app || campos.atualizado_em, r.operacoes, r.historicos);
+  saida.gravacao = r.gravacao;
+  return saida;
 }
 
 // ===== adaptador: Marcar Invalidas =====

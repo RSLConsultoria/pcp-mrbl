@@ -163,5 +163,14 @@ function aplicarAcao(acao, alvo, contexto) {
     erro: ''
   };
 
-  return { ok: true, gravacao: gravacao, historico: historico };
+  // F3: a mesma gravacao como lista de operacoes (FALTANTES = update por id;
+  // CAIXAS_PCP = appendOrUpdate por deal_id). gravacao/historico ficam por
+  // compatibilidade com os adaptadores da F2.
+  var operacao = {
+    aba: gravacao.aba,
+    operacao: ehItem ? 'update' : 'appendOrUpdate',
+    chave: gravacao.chave.coluna,
+    linha: linhaDeGravacao(gravacao)
+  };
+  return { ok: true, gravacao: gravacao, historico: historico, operacoes: [operacao], historicos: [historico] };
 }
