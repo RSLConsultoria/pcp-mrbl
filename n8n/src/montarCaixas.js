@@ -136,7 +136,7 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
   });
   var ano = hoje.getFullYear();
   // F3: item -> pedido aberto que o contem.
-  var abertoPorItem = pedidoAbertoPorItem(lerPedidos(extras.pedidos, extras.pedidosItens));
+  var abertosPorItem = pedidosAbertosPorItem(lerPedidos(extras.pedidos, extras.pedidosItens));
   var avisos = [];
   var grupos = {};
   var ordem = [];
@@ -176,7 +176,10 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     if (cp) caixa.responsavel = texto(cp.responsavel);
     caixa.tratativa = cp ? semAcento(cp.tratativa) : '';
     caixa.tratativaEm = cp ? texto(cp.tratativa_em) : '';
-    caixa.itens.forEach(function (it) { it.pedidoId = abertoPorItem[it.id] || ''; });
+    caixa.itens.forEach(function (it) {
+      it.pedidoIds = (abertosPorItem[it.id] || []).slice();
+      it.pedidoId = it.pedidoIds[0] || '';
+    });
     caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);
     return caixa;
   }

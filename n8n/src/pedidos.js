@@ -5,7 +5,7 @@
 // Cada acao devolve { operacoes: [{ aba, operacao, chave, linha }], historicos }.
 
 var TIPOS_PEDIDO = ['gerar_pedido', 'editar_pedido', 'mover_pedido', 'baixar_pedido',
-  'salvar_etapas', 'enviar_oficina', 'oficina_recebeu'];
+  'dividir_pedido', 'salvar_etapas', 'enviar_oficina', 'oficina_recebeu'];
 var ETAPAS_PADRAO = [
   { id: 'a_pedir', nome: 'A pedir', ordem: 1 },
   { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
@@ -20,25 +20,57 @@ var NOMES_CAMPO = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Loca
 
 // ---------- leitura das abas ----------
 
+// PED-nnnn (pedido original) ou PED-nnnn.k (parte k de uma divisao).
+var RE_PEDIDO = /^PED-(\d+)(?:\.(\d+))?$/;
+
 function numeroDoPedido(id) {
-  var m = /^PED-(\d+)$/.exec(texto(id));
+  var m = RE_PEDIDO.exec(texto(id));
   return m ? Number(m[1]) : 0;
 }
 
-// Pedido valido: id PED-nnnn com numero > 0 (PED-0000 e a linha-semente).
+// Numero da parte (PED-0002.3 -> 3); 0 no pedido original.
+function parteDoPedido(id) {
+  var m = RE_PEDIDO.exec(texto(id));
+  return m && m[2] !== undefined ? Number(m[2]) : 0;
+}
+
+// Pedido valido: numero > 0 (PED-0000 e a linha-semente) e, se for parte, k > 0.
 function pedidoValido(id) {
-  return numeroDoPedido(id) > 0;
+  var m = RE_PEDIDO.exec(texto(id));
+  return !!m && Number(m[1]) > 0 && (m[2] === undefined || Number(m[2]) > 0);
+}
+
+// Familia: PED-0002.3 -> PED-0002.
+function raizDoPedido(id) {
+  return texto(id).split('.')[0];
+}
+
+function compararPedidos(a, b) {
+  return (numeroDoPedido(a) - numeroDoPedido(b)) || (parteDoPedido(a) - parteDoPedido(b));
 }
 
 function proximoIdPedido(pedidos) {
   var max = 0;
   (pedidos || []).forEach(function (p) {
+    // a parte PED-0005.1 conta como 5: o proximo original nunca colide com uma familia
     var n = numeroDoPedido(p && p.id);
     if (n > max) max = n;
   });
   var s = String(max + 1);
   while (s.length < 4) s = '0' + s;
   return 'PED-' + s;
+}
+
+// Proxima parte da familia: maior k existente (aberta ou nao) + 1.
+function proximoIdFilho(pedidos, raiz) {
+  var max = 0;
+  (pedidos || []).forEach(function (p) {
+    var id = texto(p && p.id);
+    if (!pedidoValido(id) || raizDoPedido(id) !== raiz) return;
+    var k = parteDoPedido(id);
+    if (k > max) max = k;
+  });
+  return raiz + '.' + (max + 1);
 }
 
 // Etapas validas (com id e nome), ordenadas; aba vazia = padrao.
@@ -71,6 +103,8 @@ function lerPedidos(pedidos, itens) {
     if (!it) return;
     var pid = texto(it.pedido_id);
     if (!porId[pid] || texto(it.item_id) === '' || texto(it.deal_id) === '' || texto(it.deal_id) === '0') return;
+    // qtd 0 = item que foi todo para uma parte do pedido (dividir_pedido).
+    if (numero(it.qtd) === 0) return;
     porId[pid].itens.push(it);
   });
   return lista;
@@ -96,8 +130,9 @@ function avisosPedidos(pedidos, itens, lista) {
     if (!pedidoAberto(p)) return;
     p.itens.forEach(function (it) {
       var k = texto(it.item_id);
+      var fam = raizDoPedido(p.id);
       if (!porItem[k]) { porItem[k] = { ids: {}, n: 0, it: it }; ordem.push(k); }
-      if (!porItem[k].ids[p.id]) { porItem[k].ids[p.id] = 1; porItem[k].n++; }
+      if (!porItem[k].ids[fam]) { porItem[k].ids[fam] = 1; porItem[k].n++; }
     });
   });
   ordem.forEach(function (k) {
@@ -112,13 +147,26 @@ function pedidoAberto(p) {
   return texto(p.linha.baixado_em) === '';
 }
 
-// item_id -> id do pedido aberto que o contem.
-function pedidoAbertoPorItem(lista) {
+// item_id -> ids dos pedidos abertos que o contem, em ordem de numero
+// (o pedido original e as partes dele podem ter o mesmo item).
+function pedidosAbertosPorItem(lista) {
   var m = {};
-  lista.forEach(function (p) {
+  lista.slice().sort(function (a, b) { return compararPedidos(a.id, b.id); }).forEach(function (p) {
     if (!pedidoAberto(p)) return;
-    p.itens.forEach(function (it) { if (!m[texto(it.item_id)]) m[texto(it.item_id)] = p.id; });
+    p.itens.forEach(function (it) {
+      var k = texto(it.item_id);
+      m[k] = m[k] || [];
+      if (m[k].indexOf(p.id) < 0) m[k].push(p.id);
+    });
   });
+  return m;
+}
+
+// item_id -> primeiro pedido aberto que o contem.
+function pedidoAbertoPorItem(lista) {
+  var todos = pedidosAbertosPorItem(lista);
+  var m = {};
+  Object.keys(todos).forEach(function (k) { m[k] = todos[k][0]; });
   return m;
 }
 
@@ -127,13 +175,14 @@ function montarPedidos(extras, ano) {
   extras = extras || {};
   var etapas = lerEtapas(extras.etapas);
   var lista = lerPedidos(extras.pedidos, extras.pedidosItens);
-  var pedidos = lista.slice().sort(function (a, b) { return numeroDoPedido(a.id) - numeroDoPedido(b.id); })
+  var pedidos = lista.slice().sort(function (a, b) { return compararPedidos(a.id, b.id); })
     .map(function (p) {
       var l = p.linha;
       var baixadoEm = texto(l.baixado_em);
       var etapa = texto(l.etapa);
       return {
         id: p.id,
+        pai: texto(l.pai),
         etapa: etapa,
         origem: semAcento(l.origem),
         quem: texto(l.quem),
@@ -288,6 +337,23 @@ function validarAcaoPedido(corpo) {
   if (tipo === 'mover_pedido') {
     acao.etapa = texto(corpo.etapa);
     if (!acao.etapa) return erroAcao(400, 'Etapa inválida.');
+  } else if (tipo === 'dividir_pedido') {
+    acao.etapa = texto(corpo.etapa);
+    if (!acao.etapa) return erroAcao(400, 'Etapa inválida.');
+    if (corpo.itens !== undefined && !Array.isArray(corpo.itens)) return erroAcao(400, 'Itens inválidos.');
+    if (!corpo.itens || !corpo.itens.length) return erroAcao(400, 'Marque ao menos um item que chegou.');
+    acao.itens = [];
+    var vistosD = {};
+    for (i = 0; i < corpo.itens.length; i++) {
+      var idv = corpo.itens[i] || {};
+      var did = texto(idv.itemId);
+      if (!did) return erroAcao(400, 'Item não informado.');
+      if (vistosD[did]) return erroAcao(400, 'Item repetido no pedido.');
+      vistosD[did] = 1;
+      var qd = qtdValida(idv.qtd);
+      if (qd === null) return erroAcao(400, 'Informe uma quantidade maior que zero');
+      acao.itens.push({ itemId: did, qtd: qd });
+    }
   } else if (tipo === 'editar_pedido') {
     var campos = corpo.campos && typeof corpo.campos === 'object' ? corpo.campos : {};
     acao.campos = {};
@@ -460,6 +526,8 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var grupos = porOS(p.itens, function (x) { return texto(x.deal_id); }, function (x) { return texto(x.os); });
   function existeEtapa(id) { return etapas.some(function (e) { return e.id === id; }); }
 
+  if (tipo === 'dividir_pedido') return aplicarDivisao(acao, linhas, ctx, p, etapas);
+
   if (tipo === 'mover_pedido') {
     if (!existeEtapa(acao.etapa)) return erroAcao(400, 'Etapa inválida.');
     if (acao.etapa === texto(p.linha.etapa)) return erroAcao(400, 'O pedido já está nessa etapa.');
@@ -565,6 +633,62 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     versao: agora,
     pedidoId: p.id
   };
+}
+
+// dividir_pedido: parte dos itens (ou parte da quantidade) vira um pedido
+// novo da mesma familia (PED-0002 -> PED-0002.k), na etapa escolhida. O
+// pedido dividido fica com o resto; linha com qtd 0 e ignorada na leitura.
+// Dividir uma parte (PED-0002.1) cria outra parte da raiz (PED-0002.k).
+function aplicarDivisao(acao, linhas, ctx, p, etapas) {
+  var u = ctx.usuario;
+  var agora = ctx.agora;
+  var etapa = etapas.filter(function (e) { return e.id === acao.etapa; })[0];
+  if (!etapa) return erroAcao(400, 'Etapa inválida.');
+  var porItem = {};
+  p.itens.forEach(function (x) { if (!porItem[texto(x.item_id)]) porItem[texto(x.item_id)] = x; });
+  var movidos = [];
+  for (var i = 0; i < acao.itens.length; i++) {
+    var mi = acao.itens[i];
+    var li = porItem[mi.itemId];
+    if (!li) return erroAcao(400, 'Item não está no pedido.');
+    var q = numero(li.qtd);
+    if (q === null || isNaN(q)) return erroAcao(400, 'Item sem quantidade no pedido.');
+    if (mi.qtd > q) return erroAcao(400, 'O pedido tem só ' + formatarQtd(q) + ' ' + texto(li.un) + ' de ' + texto(li.nome) + '.');
+    movidos.push({ linha: li, qtd: mi.qtd, resta: arredondar(q - mi.qtd) });
+  }
+  var sobra = p.itens.some(function (x) {
+    var m = movidos.filter(function (y) { return y.linha === x; })[0];
+    return !m || m.resta > 0;
+  });
+  if (!sobra) return erroAcao(400, 'Para mover o pedido inteiro, arraste o card.');
+
+  var raiz = raizDoPedido(p.id);
+  var filho = proximoIdFilho(linhas.pedidos, raiz);
+  var l = p.linha;
+  var ano = new Date(agora).getFullYear();
+  var operacoes = [op('PEDIDOS', 'append', 'id', {
+    id: filho, etapa: etapa.id, origem: valorAtualCampo(l, 'origem', ano), quem: texto(l.quem),
+    local: valorAtualCampo(l, 'local', ano), previsao: valorAtualCampo(l, 'previsao', ano), responsavel: texto(l.responsavel),
+    criado_em: agora, criado_por: u, baixado_em: '', atualizado_em: agora, pai: raiz
+  })];
+  movidos.forEach(function (m) {
+    var x = m.linha;
+    operacoes.push(op('PEDIDOS_ITENS', 'append', 'id', {
+      id: filho + '|' + texto(x.item_id), pedido_id: filho, item_id: texto(x.item_id), deal_id: texto(x.deal_id), os: texto(x.os),
+      nome: texto(x.nome), un: texto(x.un), qtd: m.qtd, fornecedor: texto(x.fornecedor)
+    }));
+  });
+  movidos.forEach(function (m) {
+    operacoes.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(m.linha.id) || p.id + '|' + texto(m.linha.item_id), qtd: m.resta }));
+  });
+  operacoes.push(op('PEDIDOS', 'update', 'id', { id: p.id, atualizado_em: agora }));
+  var historicos = porOS(movidos, function (m) { return texto(m.linha.deal_id); }, function (m) { return texto(m.linha.os); })
+    .map(function (g) {
+      var partes = g.itens.map(function (m) { return formatarQtd(m.qtd) + ' ' + texto(m.linha.un) + ' de ' + texto(m.linha.nome); });
+      return linhaHistorico(ctx, g.dealId, g.os, '', acao.tipo,
+        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + etapa.nome + ')');
+    });
+  return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: filho };
 }
 
 function slugEtapa(nome) {

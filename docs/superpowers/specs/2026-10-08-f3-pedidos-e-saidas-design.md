@@ -1,3 +1,5 @@
+> **08/10/2026 (dividir pedido):** quando parte de um pedido chega (entrega parcial do fornecedor ou do cliente), o painel do pedido tem **Dividir pedido**: marca os itens que chegaram, opcionalmente só parte da quantidade (ex.: 20 de 52 UN), e a etapa de destino. Isso vira um pedido novo `<PAI>.<n>` (`PED-0002.1`; n = maior parte existente da família + 1) ligado ao original pela coluna `pai` da PEDIDOS, com origem/quem/local/previsão/responsável copiados. O original fica com o resto na etapa dele (item que foi todo vira `qtd` 0 na PEDIDOS_ITENS e é ignorado na leitura). Mover o pedido inteiro continua sendo arrastar o card (400 `Para mover o pedido inteiro, arraste o card.`). Dividir uma parte cria outra parte da mesma raiz. Ação `dividir_pedido { pedidoId, versao, etapa, itens: [{ itemId, qtd }] }`, resposta com `pedidoId` = id da parte nova; histórico por OS: `Lucca dividiu PED-0002: 20 UN de ZÍPER METAL foram para PED-0002.1 (Recebidos)` (vários itens separados por `; `). Cada parte tem baixa própria. Um item pode estar em vários pedidos abertos **da mesma família**; de outra família continua 409. No board, o pedido ganha `pai` ('' no original) e o item ganha `pedidoIds` (todos os pedidos abertos com o item; `pedidoId` = o primeiro).
+
 > **08/10/2026:** finalizado = pedido com baixa registrada (baixado_em), independente da etapa — evita reabrir pedidos ao mudar as etapas.
 
 # F3: Solicitações de faltas e Saídas com falta
@@ -46,7 +48,7 @@ Terceira de cinco fases. Usa a base da F2: `pcp-acao`, HISTORICO_APP, envio ass�
 
 **CAIXAS_PCP** ganha `tratativa` (`''` | `ENVIADO` | `RECEBIDO`) e `tratativa_em`.
 
-Um item da FALTANTES pertence a no máximo **um** pedido aberto. Os pedidos finalizados (com `baixado_em`) não contam.
+Um item da FALTANTES pertence a no máximo **um** pedido aberto, ou a várias partes da mesma família (`PED-0002`, `PED-0002.1`…). Os pedidos finalizados (com `baixado_em`) não contam.
 
 ## Board (GET pcp-board) devolve também
 
@@ -64,6 +66,7 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
 | `gerar_pedido` | `{ itens: [{ itemId, dealId, qtd, fornecedor }], origem, quem, local, previsao, responsavel }` | Cria o PEDIDOS na primeira etapa e as linhas de PEDIDOS_ITENS. O id é o maior PED existente + 1. | `Lucca gerou PED-0044 · 2 itens desta OS · Fornecedor <quem>` |
 | `editar_pedido` | `{ pedidoId, versao, campos: { etapa?, origem?, quem?, local?, previsao?, responsavel? }, itens?: [{ itemId, qtd, fornecedor }] }` | Atualiza o pedido e seus itens. | `Lucca alterou PED-0044: <resumo das mudanças>` |
 | `mover_pedido` | `{ pedidoId, versao, etapa }` | Muda a etapa. | `Lucca moveu PED-0044 para <etapa>` |
+| `dividir_pedido` | `{ pedidoId, versao, etapa, itens: [{ itemId, qtd }] }` | Cria a parte `<PAI>.<n>` na etapa escolhida com os itens/quantidades que chegaram; o original fica com o resto. | `Lucca dividiu PED-0002: 20 UN de ZÍPER METAL foram para PED-0002.1 (Recebidos)` |
 | `baixar_pedido` | `{ pedidoId, versao }` | Só na última etapa. Dá baixa da `qtd` de cada item na FALTANTES (soma em `qtd_baixada`, limitada ao que resta) e grava `baixado_em`. | `Lucca deu baixa do PED-0044: 20 MT de VIÉS… (resta 80 MT)` |
 | `salvar_etapas` | `{ etapas: [{ id?, nome }] }` | Regrava a ETAPAS_PEDIDO. Valida: no mínimo 2 etapas, nomes não vazios e únicos, e não remove etapa que tenha pedido aberto. | Não gera histórico de OS. |
 | `enviar_oficina` | `{ dealId, versao }` | Grava `tratativa = ENVIADO`. | `Lucca enviou o material faltante à oficina` |

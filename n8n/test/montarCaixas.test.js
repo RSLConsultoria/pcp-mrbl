@@ -56,7 +56,7 @@ test('agrupa as linhas de um negocio numa caixa so', () => {
   assert.deepEqual(c.itens[0], {
     id: 'a', nome: 'ZIPER METAL MEDIO', cor: 'preto', un: 'UN', necessaria: 52, separada: 0,
     falta: 52, faltaG: null, status: 'ABERTO', baixada: 0, resta: 52, restaG: null,
-    obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '', versao: '', editavel: true, pedidoId: ''
+    obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '', versao: '', editavel: true, pedidoIds: [], pedidoId: ''
   });
   assert.equal(c.itens[1].cor, '');
 });
@@ -183,7 +183,7 @@ test('caixa so em GANHAS com falta e sem itens detalhados ganha item generico ab
     id: '700009|ganha|0', nome: 'Itens não detalhados na planilha', cor: '', un: '',
     necessaria: null, separada: null, falta: null, faltaG: null, status: 'ABERTO',
     baixada: 0, resta: null, restaG: null, obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '',
-    versao: '', editavel: false, pedidoId: ''
+    versao: '', editavel: false, pedidoIds: [], pedidoId: ''
   }]);
 });
 

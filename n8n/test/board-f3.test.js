@@ -31,7 +31,7 @@ test('board: pedidos (sem semente/malformados), ordenados, finalizado derivado',
   const r = limpo(ctx.montarRespostaBoard({}, [falt({})], [], T0, { pedidos: PEDIDOS, pedidosItens: ITENS }));
   assert.deepEqual(r.body.pedidos.map((p) => [p.id, p.finalizado]), [['PED-0007', true], ['PED-0010', false], ['PED-0044', false]]);
   assert.deepEqual(r.body.pedidos[2], {
-    id: 'PED-0044', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-15',
+    id: 'PED-0044', pai: '', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-15',
     responsavel: 'Renata', criadoEm: '2026-10-01T10:00:00.000Z', baixadoEm: '', versao: 'P44', finalizado: false,
     itens: [{ itemId: 'a', dealId: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 20, fornecedor: 'FITAS DELTA' }]
   });
