@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { Board } from '../api/tipos';
 import { FaltasSemPedido } from '../componentes/pedidos/FaltasSemPedido';
 import { JanelaEtapas } from '../componentes/pedidos/JanelaEtapas';
@@ -25,12 +25,15 @@ interface Props {
 
 export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela, onSelecao }: Props) {
   const [selId, setSelId] = useState<string | null>(null);
+  const [faltasExpandidas, setFaltasExpandidas] = useState(false);
   const fechar = useCallback(() => setSelId(null), []);
   const fecharJanela = useCallback(() => onJanela(null), [onJanela]);
-  const etapas = etapasOrdenadas(board.etapasPedido ?? []);
-  const todos = board.pedidos ?? [];
-  const pedidos = filtrarPedidos(todos, filtro).filter((p) => pedidoAtendeBusca(p, q));
-  const grupos = faltasSemPedido(board).filter((g) => caixaAtendeBusca(g.caixa, q));
+  const etapas = useMemo(() => etapasOrdenadas(board.etapasPedido ?? []), [board.etapasPedido]);
+  const todos = useMemo(() => board.pedidos ?? [], [board.pedidos]);
+  const pedidos = useMemo(() => filtrarPedidos(todos, filtro).filter((p) => pedidoAtendeBusca(p, q)), [todos, filtro, q]);
+  const faltas = useMemo(() => faltasSemPedido(board), [board]);
+  const grupos = useMemo(() => faltas.filter((g) => caixaAtendeBusca(g.caixa, q)), [faltas, q]);
+  const selecionados = useMemo(() => itensSelecionados(board, selecao), [board, selecao]);
   const sel = todos.find((p) => p.id === selId) ?? null;
 
   const marcar = (chaves: string[], sim: boolean) => {
@@ -41,7 +44,8 @@ export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela,
 
   return (
     <div className="pedidos">
-      <FaltasSemPedido grupos={grupos} selecao={selecao} temBusca={q.trim() !== ''} onMarcar={marcar} />
+      <FaltasSemPedido grupos={grupos} selecao={selecao} marcados={selecionados.length} temBusca={q.trim() !== ''}
+        recolhivel={sel !== null} expandida={faltasExpandidas} onExpandir={setFaltasExpandidas} onMarcar={marcar} />
       <div className="quadro">
         <QuadroPedidos board={board} etapas={etapas} pedidos={pedidos} filtro={filtro} temBusca={q.trim() !== ''}
           selId={selId} executar={executar} onAbrir={setSelId} />
@@ -51,8 +55,8 @@ export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela,
         )}
       </div>
       {janela === 'gerar' && (
-        <JanelaGerarPedido itens={itensSelecionados(board, selecao)} usuarios={board.usuarios ?? []} executar={executar}
-          onGerado={() => onSelecao(new Set())} onFechar={fecharJanela} />
+        <JanelaGerarPedido itens={selecionados} usuarios={board.usuarios ?? []} executar={executar}
+          onRemover={(k) => marcar([k], false)} onGerado={() => onSelecao(new Set())} onFechar={fecharJanela} />
       )}
       {janela === 'etapas' && <JanelaEtapas etapas={etapas} pedidos={todos} executar={executar} onFechar={fecharJanela} />}
     </div>

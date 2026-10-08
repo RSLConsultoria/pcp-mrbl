@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
-import type { Board, EtapaPedido, Pedido } from '../../api/tipos';
+import type { Acao, Board, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { useTeclaEsc } from '../../hooks/useTeclaEsc';
 import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import { nomeLocal, nomeOrigem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel } from '../../regras/pedidos';
-import { acaoEditarPedido, estadoDoPedido, historicoDoPedido, pedidoEditavel } from '../../regras/pedidosQuadro';
+import { acaoEditarPedido, estadoDoPedido, historicoDoPedido, pedidoEditavel, podeDarBaixa } from '../../regras/pedidosQuadro';
 import { formatarQtd, qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { Historico } from '../painel/Historico';
 import { CamposPedido, type FormPedido } from './CamposPedido';
+import { ConfirmarBaixa } from './ConfirmarBaixa';
 import { LinhaItemPedido, type TextoItem } from './LinhaItemPedido';
 import { ResumoAlteracoes } from './ResumoAlteracoes';
 
@@ -35,6 +36,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
   }));
   const [textos, setTextos] = useState(textosIniciais);
   const [enviando, setEnviando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
 
   const restaDe = (dealId: string, itemId: string) =>
     board.caixas.find((c) => c.dealId === dealId)?.itens.find((i) => i.id === itemId)?.resta ?? Number.POSITIVE_INFINITY;
@@ -58,6 +60,13 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     setEnviando(true);
     await executar(acao, mensagemSucesso(acao));
     setEnviando(false);
+  }
+
+  async function baixar() {
+    const acao: Acao = { tipo: 'baixar_pedido', pedidoId: pedido.id, versao: pedido.versao };
+    setBaixando(true);
+    await executar(acao, mensagemSucesso(acao));
+    setBaixando(false);
   }
 
   const historico = historicoDoPedido(board.caixas, pedido.id);
@@ -97,6 +106,12 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                 {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
               </button>
             </div>
+            {podeDarBaixa(pedido, etapas) && (
+              <section className="secao">
+                <h3 className="secao__titulo">Material chegou</h3>
+                <ConfirmarBaixa pedido={pedido} baixando={baixando} onBaixar={baixar} />
+              </section>
+            )}
           </>
         ) : (
           <>

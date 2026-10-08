@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { Board, Caixa } from '../api/tipos';
 import { ColunaQuadro } from '../componentes/ColunaQuadro';
 import { CardSaida } from '../componentes/saidas/CardSaida';
@@ -6,7 +6,7 @@ import { PainelSaida } from '../componentes/saidas/PainelSaida';
 import type { Executar } from '../hooks/useAcao';
 import { caixaAtendeBusca } from '../regras/busca';
 import { caixaEditavelNoApp } from '../regras/edicao';
-import { caixasDeSaida, colunaSaida, COLUNAS_SAIDA } from '../regras/saidas';
+import { COLUNAS_SAIDA, saidasComColuna } from '../regras/saidas';
 
 interface Props {
   board: Board;
@@ -22,9 +22,12 @@ export function Saidas({ board, q, hoje, executar, onSelecionarParaPedido }: Pro
   const fechar = useCallback(() => setSelId(null), []);
   const pedidos = board.pedidos ?? [];
   const etapas = board.etapasPedido ?? [];
-  const caixas = caixasDeSaida(board, hoje)
-    .filter((c) => caixaAtendeBusca(c, q))
-    .map((c) => ({ caixa: c, coluna: colunaSaida(c, pedidos, etapas) }));
+  // O dia (e não o instante) entra na chave: hoje muda a cada render do App.
+  const dia = hoje.toDateString();
+  const caixas = useMemo(
+    () => saidasComColuna(board, new Date(dia)).filter((x) => caixaAtendeBusca(x.caixa, q)),
+    [board, q, dia]
+  );
   const sel = caixas.find((x) => x.caixa.id === selId) ?? null;
   return (
     <div className="quadro">

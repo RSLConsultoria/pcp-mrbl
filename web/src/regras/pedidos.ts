@@ -17,12 +17,18 @@ export interface FaltaSemPedido {
   itens: Item[];
 }
 
+// Item aberto que pode entrar num pedido: editável, sem pedido e com o quanto falta conhecido
+// (sem resta não há quantidade para validar, e a janela Gerar pedido travaria nele).
+export function podeEntrarEmPedido(i: Item): boolean {
+  return i.editavel && i.pedidoId === '' && i.resta !== null;
+}
+
 // Itens abertos, editáveis no app e sem pedido, agrupados por caixa.
 export function faltasSemPedido(board: Board): FaltaSemPedido[] {
   const grupos: FaltaSemPedido[] = [];
   for (const caixa of board.caixas) {
     if (!caixaEditavelNoApp(board, caixa)) continue;
-    const itens = itensAbertos(caixa).filter((i) => i.editavel && i.pedidoId === '');
+    const itens = itensAbertos(caixa).filter(podeEntrarEmPedido);
     if (itens.length > 0) grupos.push({ caixa, itens });
   }
   return grupos;
@@ -92,7 +98,7 @@ export function validarEtapas(
   for (const e of etapas) {
     const n = e.nome.trim();
     if (n === '') return 'Dê um nome a todas as etapas.';
-    const chave = n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const chave = n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     if (vistos.has(chave)) return `Já existe uma etapa chamada ${n}.`;
     vistos.add(chave);
   }

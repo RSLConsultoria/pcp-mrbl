@@ -4,6 +4,7 @@ import { ddmm } from '../../regras/datas';
 import { nomeLocal, nomeOrigem, quemDoPedido } from '../../regras/pedidos';
 import { qtdOsDoPedido } from '../../regras/pedidosQuadro';
 import { qtdComUn } from '../../regras/quantidade';
+import { ConfirmarBaixa } from './ConfirmarBaixa';
 
 const ITENS_NO_CARD = 3;
 
@@ -15,28 +16,30 @@ interface Props {
   baixando: boolean;
   onAbrir: () => void;
   onArrastar: (id: string | null) => void;
-  onBaixar: () => void;
+  onBaixar: () => Promise<void>;
 }
 
+// Card do pedido: o botão do título abre o painel (e cobre o card todo); a baixa fica no
+// rodapé, fora desse botão.
 export function CardPedido({ pedido: p, selecionado, arrastavel, podeBaixar, baixando, onAbrir, onArrastar, onBaixar }: Props) {
   const visiveis = p.itens.slice(0, ITENS_NO_CARD);
   const ocultos = p.itens.length - visiveis.length;
   const quem = quemDoPedido(p);
   const cliente = p.origem === 'CLIENTE';
   return (
-    <div role="button" tabIndex={0} aria-pressed={selecionado} aria-label={`Pedido ${p.id}`}
-      className={selecionado ? 'card card--selecionado' : 'card'} draggable={arrastavel}
+    <article aria-label={`Pedido ${p.id}`}
+      className={selecionado ? 'card card--pedido card--selecionado' : 'card card--pedido'} draggable={arrastavel}
       style={{ '--cor-tipo': cliente ? 'var(--signal)' : 'var(--navy)' } as CSSProperties}
-      onClick={onAbrir}
-      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onAbrir(); } }}
-      onDragStart={(e: DragEvent<HTMLDivElement>) => {
+      onDragStart={(e: DragEvent<HTMLElement>) => {
         e.dataTransfer.setData('text/plain', p.id);
         e.dataTransfer.effectAllowed = 'move';
         onArrastar(p.id);
       }}
       onDragEnd={() => onArrastar(null)}>
       <div className="card__cabeca">
-        <span className="card__os">{p.id}</span>
+        <button type="button" className="card__abrir card__os" aria-pressed={selecionado} aria-label={`Pedido ${p.id}`} onClick={onAbrir}>
+          {p.id}
+        </button>
         <span className={cliente ? 'selo-origem selo-origem--cliente' : 'selo-origem'}>{nomeOrigem(p.origem)}</span>
       </div>
       {quem && <div className="card__peca">{quem}</div>}
@@ -54,13 +57,12 @@ export function CardPedido({ pedido: p, selecionado, arrastavel, podeBaixar, bai
         <span>{nomeLocal(p.local)}</span>
         <span title="Registro de interação gravado em cada OS do pedido">Ploomes · {qtdOsDoPedido(p)} OS</span>
       </div>
-      {podeBaixar && (
-        <button type="button" className="botao botao--signal card__acao" disabled={baixando}
-          onClick={(e) => { e.stopPropagation(); onBaixar(); }} onKeyDown={(e) => e.stopPropagation()}>
-          Dar baixa nas caixas
-        </button>
+      {(podeBaixar || p.baixadoEm) && (
+        <footer className="card__acoes">
+          {podeBaixar && <ConfirmarBaixa pedido={p} baixando={baixando} onBaixar={onBaixar} />}
+          {p.baixadoEm && <span className="card__estado card__estado--ok">Baixa registrada nas caixas em {ddmm(p.baixadoEm)}</span>}
+        </footer>
       )}
-      {p.baixadoEm && <span className="card__estado card__estado--ok">Baixa registrada nas caixas em {ddmm(p.baixadoEm)}</span>}
-    </div>
+    </article>
   );
 }

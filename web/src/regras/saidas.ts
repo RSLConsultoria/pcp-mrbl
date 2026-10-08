@@ -1,6 +1,7 @@
 import type { Board, Caixa, EtapaPedido, Item, Pedido } from '../api/tipos';
 import { itensAbertos } from './colunas';
 import { ddmm, diasEntre, textoDias } from './datas';
+import { podeEntrarEmPedido } from './pedidos';
 
 export type ColunaSaidaId = 'sem_tratativa' | 'aguardando' | 'almoxarifado' | 'enviado' | 'resolvido';
 
@@ -48,16 +49,28 @@ function ultimaAtividade(c: Caixa): string {
   return u;
 }
 
-// Caixas que saíram com falta; as resolvidas somem 30 dias depois da última ação.
-export function caixasDeSaida(board: Board, hoje: Date): Caixa[] {
+export interface SaidaComColuna { caixa: Caixa; coluna: ColunaDaSaida }
+
+// Caixas que saíram com falta, já com a coluna (calculada uma vez só); as resolvidas
+// somem 30 dias depois da última ação.
+export function saidasComColuna(board: Board, hoje: Date): SaidaComColuna[] {
   const pedidos = board.pedidos ?? [];
   const etapas = board.etapasPedido ?? [];
-  return board.caixas.filter((c) => {
-    if (!c.saiu || !c.saiuComFalta) return false;
-    if (colunaSaida(c, pedidos, etapas).coluna !== 'resolvido') return true;
-    const d = diasEntre(ultimaAtividade(c), hoje);
-    return d === null || d <= DIAS_RESOLVIDO_VISIVEL;
-  });
+  const out: SaidaComColuna[] = [];
+  for (const c of board.caixas) {
+    if (!c.saiu || !c.saiuComFalta) continue;
+    const coluna = colunaSaida(c, pedidos, etapas);
+    if (coluna.coluna === 'resolvido') {
+      const d = diasEntre(ultimaAtividade(c), hoje);
+      if (d !== null && d > DIAS_RESOLVIDO_VISIVEL) continue;
+    }
+    out.push({ caixa: c, coluna });
+  }
+  return out;
+}
+
+export function caixasDeSaida(board: Board, hoje: Date): Caixa[] {
+  return saidasComColuna(board, hoje).map((x) => x.caixa);
 }
 
 export function diasDesdeSaida(c: Pick<Caixa, 'saiuEm'>, hoje: Date): number | null {
@@ -95,5 +108,5 @@ export function textoTratativa(c: Pick<Caixa, 'tratativa' | 'tratativaEm'>): str
 
 // Itens da caixa que podem entrar num pedido novo: abertos, editáveis e sem pedido.
 export function itensParaPedido(c: Caixa): Item[] {
-  return itensAbertos(c).filter((i) => i.editavel && i.pedidoId === '');
+  return itensAbertos(c).filter(podeEntrarEmPedido);
 }

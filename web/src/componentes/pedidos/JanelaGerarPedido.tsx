@@ -3,33 +3,54 @@ import type { Acao } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { arredondar3, lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { validarGerarPedido } from '../../regras/pedidos';
-import { chaveItem, type ItemSelecionado } from '../../regras/pedidosQuadro';
+import { chaveItem, itensQueSairam, textoItensQueSairam, type ItemSelecionado } from '../../regras/pedidosQuadro';
 import { formatarQtd, quantidadeParaCampo } from '../../regras/quantidade';
 import { Janela } from '../Janela';
 import { CamposPedido, type FormPedido } from './CamposPedido';
+import { focoDepoisDeGerar } from './FaltasSemPedido';
 import { LinhaItemPedido, type TextoItem } from './LinhaItemPedido';
 
 interface Props {
-  itens: ItemSelecionado[];
+  itens: ItemSelecionado[]; // refeitos a cada recarga do board: só os marcados que ainda podem entrar num pedido
   usuarios: string[];
   executar: Executar;
+  onRemover: (chave: string) => void;
   onGerado: () => void;
   onFechar: () => void;
 }
 
-export function JanelaGerarPedido({ itens: itensAoAbrir, usuarios, executar, onGerado, onFechar }: Props) {
-  // A lista fica fixa enquanto a janela está aberta; o servidor recusa item que já entrou em outro pedido.
-  const [itens] = useState(itensAoAbrir);
+const chaveDe = ({ caixa, item }: ItemSelecionado) => chaveItem(caixa.dealId, item.id);
+const textoInicial = ({ item }: ItemSelecionado): TextoItem => ({ qtd: quantidadeParaCampo(item.resta), fornecedor: '' });
+
+export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGerado, onFechar }: Props) {
+  // Itens que estavam na lista ao abrir: se uma recusa do servidor recarrega o board e algum
+  // deles entrou em outro pedido (ou foi resolvido), ele sai da lista com uma nota.
+  const [iniciais] = useState(() => itens.map(chaveDe));
+  const [removidos, setRemovidos] = useState<Set<string>>(() => new Set());
   const lista = useRef<HTMLUListElement>(null);
+  const gerado = useRef(false);
   const [form, setForm] = useState<FormPedido>({ origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '' });
-  const [textos, setTextos] = useState<Record<string, TextoItem>>(() =>
-    Object.fromEntries(itens.map(({ caixa, item }) => [chaveItem(caixa.dealId, item.id), { qtd: quantidadeParaCampo(item.resta), fornecedor: '' }])));
+  const [textos, setTextos] = useState<Record<string, TextoItem>>(() => Object.fromEntries(itens.map((x) => [chaveDe(x), textoInicial(x)])));
   const [tentou, setTentou] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
+  const textoDe = (x: ItemSelecionado) => textos[chaveDe(x)] ?? textoInicial(x);
   const selecao = itens.map(({ caixa, item }) => ({ itemId: chaveItem(caixa.dealId, item.id), un: item.un, resta: item.resta }));
-  const erros = validarGerarPedido(selecao, Object.fromEntries(Object.entries(textos).map(([k, v]) => [k, v.qtd])));
+  const erros = validarGerarPedido(selecao, Object.fromEntries(itens.map((x) => [chaveDe(x), textoDe(x).qtd])));
   const temErro = Object.keys(erros).length > 0;
+  const sairam = textoItensQueSairam(itensQueSairam(iniciais, itens, removidos));
+
+  function remover(chave: string, indice: number) {
+    const janela = lista.current?.closest<HTMLElement>('[role="dialog"]');
+    setRemovidos((r) => new Set(r).add(chave));
+    onRemover(chave);
+    // O botão some com a linha: o foco vai para o Remover da linha que ficou no lugar.
+    requestAnimationFrame(() => {
+      const botoes = lista.current?.querySelectorAll<HTMLButtonElement>('.linha-item__remover') ?? [];
+      const alvo = botoes[Math.min(indice, botoes.length - 1)] ?? janela?.querySelector<HTMLElement>('select, input');
+      alvo?.focus();
+    });
+  }
 
   async function gerar() {
     setTentou(true);
@@ -39,9 +60,9 @@ export function JanelaGerarPedido({ itens: itensAoAbrir, usuarios, executar, onG
     }
     const acao: Acao = {
       tipo: 'gerar_pedido',
-      itens: itens.map(({ caixa, item }) => {
-        const t = textos[chaveItem(caixa.dealId, item.id)];
-        return { itemId: item.id, dealId: caixa.dealId, qtd: arredondar3(lerQuantidade(t.qtd)!), fornecedor: t.fornecedor.trim() };
+      itens: itens.map((x) => {
+        const t = textoDe(x);
+        return { itemId: x.item.id, dealId: x.caixa.dealId, qtd: arredondar3(lerQuantidade(t.qtd)!), fornecedor: t.fornecedor.trim() };
       }),
       origem: form.origem, quem: form.quem.trim(), local: form.local, previsao: form.previsao, responsavel: form.responsavel
     };
@@ -49,6 +70,7 @@ export function JanelaGerarPedido({ itens: itensAoAbrir, usuarios, executar, onG
     const ok = await executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId }));
     setEnviando(false);
     if (ok) {
+      gerado.current = true; // o botão Gerar pedido fica desabilitado; o foco vai para Faltas sem pedido
       onGerado();
       onFechar();
     }
@@ -57,6 +79,7 @@ export function JanelaGerarPedido({ itens: itensAoAbrir, usuarios, executar, onG
   const nOs = new Set(itens.map((i) => i.caixa.dealId)).size;
   return (
     <Janela titulo="Gerar pedido" sobretitulo="Novo pedido" larga onFechar={onFechar}
+      voltarFoco={() => (gerado.current ? focoDepoisDeGerar() : null)}
       rodape={<>
         <span className="janela__nota">
           {itens.length} {itens.length === 1 ? 'item' : 'itens'} de {nOs} OS · cada OS recebe um registro no Ploomes.
@@ -64,15 +87,18 @@ export function JanelaGerarPedido({ itens: itensAoAbrir, usuarios, executar, onG
         <button type="button" className="botao botao--leve" onClick={onFechar}>Cancelar</button>
         <button type="button" className="botao botao--signal" disabled={enviando || itens.length === 0} onClick={gerar}>Confirmar e gerar</button>
       </>}>
+      {sairam && <p className="janela__aviso" role="status">{sairam}</p>}
       {itens.length === 0 ? <p className="vazio">Nenhum item selecionado. Marque itens em Faltas sem pedido.</p> : (
         <ul ref={lista} className="linhas-itens">
-          {itens.map(({ caixa, item }) => {
-            const k = chaveItem(caixa.dealId, item.id);
+          {itens.map((x, indice) => {
+            const k = chaveDe(x);
+            const { caixa, item } = x;
             return (
               <LinhaItemPedido key={k} os={caixa.os} nome={item.nome} cor={item.cor} un={item.un}
                 detalhe={`falta ${formatarQtd(item.resta, item.un, item.restaG)}`}
-                valor={textos[k]} erro={tentou ? erros[k] : undefined}
-                onMudar={(v) => setTextos((t) => ({ ...t, [k]: v }))} />
+                valor={textoDe(x)} erro={tentou ? erros[k] : undefined}
+                onMudar={(v) => setTextos((t) => ({ ...t, [k]: v }))}
+                onRemover={() => remover(k, indice)} />
             );
           })}
         </ul>

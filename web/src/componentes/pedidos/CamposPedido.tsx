@@ -35,7 +35,7 @@ export function CamposPedido({ valor, onMudar, usuarios, etapas }: Props) {
       </div>
       <div className="campo">
         <label htmlFor={`${id}-quem`}>{nomeQuem}</label>
-        <input id={`${id}-quem`} type="text" maxLength={120} value={valor.quem} placeholder="Opcional · vale para todos os itens"
+        <input id={`${id}-quem`} type="text" maxLength={100} value={valor.quem} placeholder="Opcional · vale para todos os itens"
           onChange={(e) => mudar({ quem: e.target.value })} />
       </div>
       <div className="campo">

@@ -108,3 +108,36 @@ export function motivoTravaEtapa(id: string | undefined, totalNoRascunho: number
   if (totalNoRascunho <= 2) return 'O quadro precisa de pelo menos 2 etapas';
   return null;
 }
+
+// Pedidos cuja etapa não existe mais no quadro (vão para a coluna "Outra etapa").
+export function pedidosForaDasEtapas(pedidos: Pedido[], etapas: EtapaPedido[], etapaDe: (p: Pedido) => string = (p) => p.etapa): Pedido[] {
+  const ids = new Set(etapas.map((e) => e.id));
+  return pedidos.filter((p) => !ids.has(etapaDe(p)));
+}
+
+// Pergunta da confirmação de Dar baixa nas caixas.
+export function textoConfirmarBaixa(p: Pick<Pedido, 'itens'>): string {
+  const n = p.itens.length;
+  return `Dar baixa de ${n} ${n === 1 ? 'item' : 'itens'} em ${qtdOsDoPedido(p)} OS? A baixa não pode ser desfeita.`;
+}
+
+// Itens que estavam na janela Gerar pedido ao abrir e saíram dela sem o usuário remover
+// (entraram em outro pedido ou foram resolvidos na recarga).
+export function itensQueSairam(iniciais: string[], atuais: ItemSelecionado[], removidos: Set<string>): number {
+  const ficam = new Set(atuais.map((x) => chaveItem(x.caixa.dealId, x.item.id)));
+  return iniciais.filter((k) => !ficam.has(k) && !removidos.has(k)).length;
+}
+
+export function textoItensQueSairam(n: number): string {
+  if (n <= 0) return '';
+  return n === 1
+    ? '1 item saiu da lista porque já está em pedido ou foi resolvido.'
+    : `${n} itens saíram da lista porque já estão em pedido ou foram resolvidos.`;
+}
+
+// Contagem no topo de Faltas sem pedido: os marcados contam todos, mesmo fora da busca.
+export function textoContagemFaltas(totalVisivel: number, marcados: number, marcadosVisiveis: number): string {
+  if (marcados === 0) return `${totalVisivel} ${totalVisivel === 1 ? 'item' : 'itens'}`;
+  const fora = marcados - marcadosVisiveis;
+  return `${marcados} ${marcados > 1 ? 'selecionados' : 'selecionado'}${fora > 0 ? ` (${fora} fora da busca)` : ''}`;
+}

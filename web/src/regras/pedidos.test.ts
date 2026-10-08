@@ -28,8 +28,8 @@ describe('filtrarPedidos', () => {
 });
 
 describe('faltasSemPedido', () => {
-  it('agrupa itens abertos, editáveis e sem pedido por caixa; respeita dealsEditaveis', () => {
-    const c1 = caixa({ dealId: '1', itens: [item({ id: 'a' }), item({ id: 'b', pedidoId: 'PED-0001' }), item({ id: 'c', status: 'RESOLVIDO', resta: 0 }), item({ id: 'd', editavel: false })] });
+  it('agrupa itens abertos, editáveis, sem pedido e com resta conhecida por caixa; respeita dealsEditaveis', () => {
+    const c1 = caixa({ dealId: '1', itens: [item({ id: 'a' }), item({ id: 'b', pedidoId: 'PED-0001' }), item({ id: 'c', status: 'RESOLVIDO', resta: 0 }), item({ id: 'd', editavel: false }), item({ id: 'g', resta: null })] });
     const c2 = caixa({ dealId: '2', itens: [item({ id: 'e' })] });
     const c3 = caixa({ dealId: '3', itens: [item({ id: 'f', pedidoId: 'PED-0001' })] });
     const board: Board = { geradoEm: '', avisos: [], usuarios: [], caixas: [c1, c2, c3], dealsEditaveis: ['1', '3'] };

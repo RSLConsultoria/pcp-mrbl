@@ -92,7 +92,7 @@ test('trocar o responsável envia o tipo responsavel', async ({ page }) => {
 });
 
 test('resposta 409 mostra o aviso de conflito e recarrega o board', async ({ page }) => {
-  const mock = await preparar(page, { resposta: () => ({ status: 409, json: { erro: 'Conflito de versão.' } }) });
+  const mock = await preparar(page, { resposta: () => ({ status: 409, json: { erro: 'Alguém alterou esta caixa agora há pouco.' } }) });
   const painel = await abrir(page);
   const antes = mock.boardGets();
   await painel.getByLabel('Responsável').selectOption('Lucca');

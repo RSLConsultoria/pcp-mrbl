@@ -11,21 +11,24 @@ interface Props {
   sobretitulo?: string;
   larga?: boolean;
   onFechar: () => void;
+  voltarFoco?: () => HTMLElement | null; // destino do foco ao fechar, no lugar de onde estava
   rodape: ReactNode;
   children: ReactNode;
 }
 
 // Janela modal: foca o primeiro campo, prende o Tab dentro, Esc fecha e o foco volta
 // para onde estava.
-export function Janela({ titulo, sobretitulo, larga, onFechar, rodape, children }: Props) {
+export function Janela({ titulo, sobretitulo, larga, onFechar, voltarFoco, rodape, children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const voltarFocoRef = useRef(voltarFoco);
+  voltarFocoRef.current = voltarFoco;
   const idTitulo = useId();
 
   useEffect(() => {
     const antes = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const campo = ref.current?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
     (campo ?? focaveis(ref.current)[0])?.focus();
-    return () => antes?.focus();
+    return () => (voltarFocoRef.current?.() ?? antes)?.focus();
   }, []);
 
   function aoTecla(e: KeyboardEvent<HTMLDivElement>) {

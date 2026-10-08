@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Board, EtapaPedido, Pedido } from '../api/tipos';
-import { caixasDeSaida, colunaSaida, diasDesdeSaida, itensParaPedido, seloSaidaVermelho, textoParcial, textoPedidoDoItem, textoSaiu, textoTratativa } from './saidas';
+import { caixasDeSaida, colunaSaida, saidasComColuna, diasDesdeSaida, itensParaPedido, seloSaidaVermelho, textoParcial, textoPedidoDoItem, textoSaiu, textoTratativa } from './saidas';
 import { caixa, item } from './teste-util';
 
 const etapas: EtapaPedido[] = [
@@ -58,6 +58,10 @@ describe('caixasDeSaida', () => {
     });
     expect(caixasDeSaida(board([velha, recente, comHist]), hoje).map((c) => c.id)).toEqual(['r', 'h']);
   });
+  it('saidasComColuna traz a coluna junto', () => {
+    const r = saidasComColuna(board([saiu({ id: '1' }), resolvida({ id: 'r', saiuEm: '2026-09-20' })]), hoje);
+    expect(r.map((x) => [x.caixa.id, x.coluna.coluna])).toEqual([['1', 'sem_tratativa'], ['r', 'resolvido']]);
+  });
 });
 
 describe('selo de dias', () => {
@@ -81,7 +85,7 @@ describe('textos de Saídas', () => {
     expect(textoTratativa({ tratativa: '', tratativaEm: '' })).toBe('Ainda não enviado à oficina');
   });
   it('itens para pedido: abertos, editáveis e sem pedido', () => {
-    const c = saiu({ itens: [item({ id: 'a' }), item({ id: 'b', pedidoId: 'PED-0001' }), item({ id: 'c', editavel: false }), item({ id: 'd', status: 'RESOLVIDO', resta: 0 })] });
+    const c = saiu({ itens: [item({ id: 'a' }), item({ id: 'b', pedidoId: 'PED-0001' }), item({ id: 'c', editavel: false }), item({ id: 'd', status: 'RESOLVIDO', resta: 0 }), item({ id: 'e', resta: null })] });
     expect(itensParaPedido(c).map((i) => i.id)).toEqual(['a']);
   });
 });

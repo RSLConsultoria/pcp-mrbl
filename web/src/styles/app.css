@@ -199,7 +199,7 @@
 .campo input:focus { outline: 0; border-color: var(--signal); box-shadow: var(--focus-ring); }
 .botao { height: 38px; border: 0; border-radius: 4px; padding: 0 16px; font: 600 14px var(--font-sans); cursor: pointer; }
 .botao--signal { background: var(--signal); color: var(--ink); }
-.botao--signal:hover { background: var(--signal-hi); }
+.botao--signal:not(:disabled):hover { background: var(--signal-hi); }
 .botao:disabled { opacity: .6; cursor: default; }
 
 @media (max-width: 720px) {

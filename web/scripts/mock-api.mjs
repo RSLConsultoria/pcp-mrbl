@@ -1,5 +1,6 @@
 // Servidor local de conferência: imita pcp-login, pcp-board e pcp-acao com dados fictícios.
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
+// Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
 import http from 'node:http';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
@@ -52,7 +53,9 @@ const estado = {
     { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA' }] },
     { id: 'PED-0002', etapa: 'aguardando', origem: 'CLIENTE', quem: 'CLIENTE BETA', local: 'BRAGANCA', previsao: diaIso(10), responsavel: 'Lucca', criadoEm: diaIso(-4), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'b1', dealId: '700002', qtd: 52, fornecedor: '' }] },
     { id: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 300, fornecedor: 'AVIAMENTOS DELTA' }] },
-    { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Maria', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] }
+    { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Maria', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
+    // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
+    { id: 'PED-0005', etapa: 'conferencia', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(4), responsavel: 'Renata', criadoEm: diaIso(-15), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd2', dealId: '700004', qtd: 120, fornecedor: '' }] }
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
   dealsEditaveis: ['700001', '700003', '700004', '700005', '700006']
@@ -72,7 +75,7 @@ const caixaDe = (dealId) => estado.caixas.find((c) => c.dealId === dealId);
 const editavel = (dealId) => estado.dealsEditaveis.includes(dealId);
 const itemDe = (dealId, itemId) => caixaDe(dealId)?.itens.find((i) => i.id === itemId);
 const pedidoAbertoDoItem = (dealId, itemId) => estado.pedidos.find((p) => !p.baixadoEm && p.itens.some((i) => i.dealId === dealId && i.itemId === itemId));
-const semAcento = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const slug = (s) => semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'etapa';
 const chaveNome = (s) => semAcento(s).trim().toLowerCase();
 const nomeLocal = (l) => (l === 'SAO_PAULO' ? 'São Paulo' : 'Bragança');

@@ -3,7 +3,8 @@ import type { EtapaPedido, Pedido } from '../api/tipos';
 import type { EstadoEditavel } from './pedidos';
 import {
   acaoEditarPedido, estadoDoPedido, historicoDoPedido, motivoTravaEtapa, pedidoAtendeBusca, pedidoEditavel,
-  itensSelecionados, podeDarBaixa, qtdOsDoPedido, vazioDaEtapa
+  itensQueSairam, itensSelecionados, pedidosForaDasEtapas, podeDarBaixa, qtdOsDoPedido, textoConfirmarBaixa,
+  textoContagemFaltas, textoItensQueSairam, vazioDaEtapa
 } from './pedidosQuadro';
 import { caixa, item } from './teste-util';
 
@@ -99,5 +100,49 @@ describe('itensSelecionados', () => {
     const c2 = caixa({ id: '2', dealId: '2', itens: [item({ id: 'a' })] });
     const r = itensSelecionados({ geradoEm: '', avisos: [], usuarios: [], caixas: [c1, c2] }, new Set(['1|a', '1|b', '2|a', '9|z']));
     expect(r.map((x) => `${x.caixa.dealId}|${x.item.id}`)).toEqual(['1|a', '2|a']);
+  });
+});
+
+describe('pedidosForaDasEtapas', () => {
+  it('pedido com etapa que saiu do quadro', () => {
+    const lista = [ped({ id: '1', etapa: 'a' }), ped({ id: '2', etapa: 'sumiu' }), ped({ id: '3', etapa: 'c', finalizado: true })];
+    expect(pedidosForaDasEtapas(lista, etapas).map((p) => p.id)).toEqual(['2']);
+    expect(pedidosForaDasEtapas(lista, etapas, (p) => (p.id === '1' ? 'outra' : p.etapa)).map((p) => p.id)).toEqual(['1', '2']);
+    expect(pedidosForaDasEtapas(lista, [])).toHaveLength(3);
+  });
+});
+
+describe('textoConfirmarBaixa', () => {
+  it('itens e OS', () => {
+    expect(textoConfirmarBaixa(ped())).toBe('Dar baixa de 2 itens em 2 OS? A baixa não pode ser desfeita.');
+    expect(textoConfirmarBaixa(ped({ itens: [it1] }))).toBe('Dar baixa de 1 item em 1 OS? A baixa não pode ser desfeita.');
+    expect(textoConfirmarBaixa(ped({ itens: [it1, { ...it1, itemId: 'i3' }] }))).toBe('Dar baixa de 2 itens em 1 OS? A baixa não pode ser desfeita.');
+  });
+});
+
+describe('itensQueSairam', () => {
+  const sel = (dealId: string, id: string) => ({ caixa: caixa({ dealId }), item: item({ id }) });
+  it('conta só os que sumiram na recarga, não os removidos pelo usuário', () => {
+    const iniciais = ['1|a', '1|b', '2|c', '2|d'];
+    expect(itensQueSairam(iniciais, [sel('1', 'a'), sel('2', 'c'), sel('2', 'd'), sel('1', 'b')], new Set())).toBe(0);
+    expect(itensQueSairam(iniciais, [sel('1', 'a')], new Set(['2|d']))).toBe(2);
+  });
+  it('texto da nota', () => {
+    expect(textoItensQueSairam(0)).toBe('');
+    expect(textoItensQueSairam(1)).toBe('1 item saiu da lista porque já está em pedido ou foi resolvido.');
+    expect(textoItensQueSairam(2)).toBe('2 itens saíram da lista porque já estão em pedido ou foram resolvidos.');
+  });
+});
+
+describe('textoContagemFaltas', () => {
+  it('sem marcados mostra o total visível', () => {
+    expect(textoContagemFaltas(1, 0, 0)).toBe('1 item');
+    expect(textoContagemFaltas(5, 0, 0)).toBe('5 itens');
+  });
+  it('marcados contam todos e avisam os que a busca esconde', () => {
+    expect(textoContagemFaltas(5, 1, 1)).toBe('1 selecionado');
+    expect(textoContagemFaltas(5, 3, 3)).toBe('3 selecionados');
+    expect(textoContagemFaltas(2, 3, 1)).toBe('3 selecionados (2 fora da busca)');
+    expect(textoContagemFaltas(0, 1, 0)).toBe('1 selecionado (1 fora da busca)');
   });
 });

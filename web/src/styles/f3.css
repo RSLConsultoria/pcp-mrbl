@@ -27,7 +27,16 @@
 .card__item-meta { flex: none; color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .selo-origem { flex: none; padding: 2px 9px; border-radius: 999px; background: var(--navy-tint); color: var(--navy); font-size: 11.5px; font-weight: 700; }
 .selo-origem--cliente { background: var(--signal-tint); color: var(--signal-lo); }
-.card__acao { width: 100%; margin-top: 10px; }
+/* Card de pedido: o botão do título cobre o card todo; o rodapé de ações fica por cima dele. */
+.card__abrir { appearance: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; color: inherit; text-align: left; cursor: pointer;
+  font-family: var(--font-display-alt); font-size: 19px; font-weight: 600; letter-spacing: .01em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.card__abrir::after { content: ''; position: absolute; inset: 0; border-radius: var(--raio); }
+.card__abrir:focus-visible { outline: 0; }
+.card:has(.card__abrir:focus-visible) { box-shadow: var(--focus-ring); }
+.card__acoes { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; cursor: default; }
+.card__acoes .baixa-pedido__abrir { width: 100%; }
+.card__acoes .confirmacao { margin-top: 0; padding: 12px; border-left-color: var(--signal); background: #fff; }
+.card__acoes .confirmacao__texto { font-size: 13px; }
 .coluna--alvo { border-radius: var(--raio); background: var(--signal-tint); box-shadow: 0 0 0 1px var(--signal); }
 .coluna--alvo .coluna__cabecalho { background: transparent; }
 .quadro__sem-etapas { margin: 52px 0 0; width: 292px; }
@@ -62,6 +71,24 @@
 .grupo input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--navy); cursor: pointer; }
 .grupo input[type="checkbox"]:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 
+/* Abaixo de 1366px, com o painel do pedido aberto, a coluna vira um trilho de 48px para o
+   quadro manter ao menos 2 colunas à vista. */
+.reserva__trilho, .reserva__recolher { display: none; }
+.reserva__titulo:focus { outline: 0; }
+.reserva__titulo:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+@media (max-width: 1365px) {
+  .reserva--recolhivel .reserva__recolher { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; font-size: 13px; }
+  .reserva--recolhivel:not(.reserva--expandida) { flex-basis: 48px; }
+  .reserva--recolhivel:not(.reserva--expandida) > .reserva__topo,
+  .reserva--recolhivel:not(.reserva--expandida) > .reserva__lista { display: none; }
+  .reserva--recolhivel:not(.reserva--expandida) > .reserva__trilho { display: flex; flex: 1; }
+  .reserva__alternar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 0; border: 0; background: transparent; color: var(--texto); cursor: pointer; }
+  .reserva__alternar:hover { background: var(--canvas); }
+  .reserva__alternar:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+  .reserva__seta { font-size: 20px; line-height: 1; color: var(--suave); }
+  .reserva__vertical { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 13px; font-weight: 600; white-space: nowrap; }
+}
+
 /* Linhas de item editáveis (janela e painel do pedido) */
 .linhas-itens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .linha-item { display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--borda); }
@@ -75,6 +102,12 @@
 .janela--larga .linha-item .campo__erro { grid-column: 2; }
 .campo input[aria-invalid="true"] { border-color: var(--error, #d85d55); }
 .campo input::placeholder { color: var(--leve); }
+.janela--larga .linha-item--removivel { grid-template-columns: minmax(0, 1fr) 400px 36px; }
+.linha-item--removivel { position: relative; }
+.linha-item__remover { display: flex; width: 36px; height: 38px; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: var(--suave); cursor: pointer; }
+.linha-item__remover:hover { background: var(--canvas); color: var(--erro-text); }
+.linha-item__remover:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+.janela__aviso { margin: 0; padding: 10px 12px; border-radius: 4px; background: var(--navy-tint); color: var(--navy); font-size: 13.5px; }
 
 /* Resumo do que será gravado */
 .resumo { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--canvas); }
@@ -113,6 +146,8 @@
   .pedidos { flex-direction: column; }
   .painel { z-index: 5; }
   .reserva { flex: none; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--borda); }
+  .reserva__alternar { flex-direction: row; justify-content: center; padding: 0 16px; }
+  .reserva__vertical { writing-mode: horizontal-tb; transform: none; }
   .janela-fundo { padding: 16px; }
   .janela--larga .campos, .linha-item__campos { grid-template-columns: 1fr; }
   .janela--larga .linha-item { display: flex; }

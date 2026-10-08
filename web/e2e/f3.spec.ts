@@ -71,6 +71,7 @@ test('gerar pedido com 2 itens de OS diferentes envia o corpo certo', async ({ p
   await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
   await expect(aviso(page, /PED-0001 gerado · 2 itens · registrado em 2 OS no Ploomes/)).toBeVisible();
   await expect(janela).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Faltas sem pedido' })).toBeFocused();
   expect(mock.bodies).toHaveLength(1);
   const corpo = mock.bodies[0] as { itens: Corpo[] } & Corpo;
   expect(corpo).toMatchObject({ tipo: 'gerar_pedido', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-20', responsavel: 'Maria' });
@@ -100,7 +101,18 @@ test('dar baixa nas caixas só aparece na última etapa e envia baixar_pedido', 
   });
   await expect(page.getByRole('button', { name: 'Dar baixa nas caixas' })).toHaveCount(1);
   await expect(page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Dar baixa nas caixas' })).toHaveCount(0);
-  await page.getByRole('region', { name: 'Entregue' }).getByRole('button', { name: 'Dar baixa nas caixas' }).click();
+  const entregue = page.getByRole('region', { name: 'Entregue' });
+  await entregue.getByRole('button', { name: 'Dar baixa nas caixas' }).click();
+  const confirmacao = entregue.getByRole('group', { name: 'Confirmar baixa do PED-0043' });
+  await expect(confirmacao).toContainText('Dar baixa de 1 item em 1 OS? A baixa não pode ser desfeita.');
+  await expect(confirmacao.getByRole('button', { name: 'Confirmar baixa' })).toBeFocused();
+  await confirmacao.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(confirmacao).toHaveCount(0);
+  await expect(entregue.getByRole('button', { name: 'Dar baixa nas caixas' })).toBeFocused();
+  await expect(page.getByRole('complementary', { name: 'Pedido PED-0043' })).toHaveCount(0); // a baixa não abre o painel
+  expect(mock.bodies).toHaveLength(0);
+  await entregue.getByRole('button', { name: 'Dar baixa nas caixas' }).click();
+  await confirmacao.getByRole('button', { name: 'Confirmar baixa' }).click();
   await expect(aviso(page, 'Baixa do PED-0043 registrada')).toBeVisible();
   expect(mock.bodies).toEqual([{ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: V_PED }]);
   await expect(page.getByRole('button', { name: 'Dar baixa nas caixas' })).toHaveCount(0);
@@ -183,10 +195,73 @@ test('caixa fora de dealsEditaveis: Saídas sem botões e pedido que não arrast
   await expect(painel.getByRole('button', { name: 'Selecionar para pedido' })).toHaveCount(0);
 
   await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Solicitações de faltas' }).click();
-  const card = page.getByRole('button', { name: 'Pedido PED-0042' });
-  await expect(card).toHaveAttribute('draggable', 'false');
-  await card.click();
+  await expect(page.getByRole('article', { name: 'Pedido PED-0042' })).toHaveAttribute('draggable', 'false');
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
   const pedidoPainel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
   await expect(pedidoPainel.getByText('Edição liberada em breve para esta caixa.')).toBeVisible();
   await expect(pedidoPainel.getByRole('button', { name: /Salvar alterações|Nada alterado/ })).toHaveCount(0);
+});
+
+test('gerar pedido recusado com 409: mostra a mensagem do servidor, tira o item que entrou em outro pedido e permite remover', async ({ page }) => {
+  let tentativas = 0;
+  const box: { mock?: Mock } = {};
+  box.mock = await preparar(page, '#pedidos', {
+    resposta: () => {
+      if (tentativas++ > 0) return undefined;
+      const b = box.mock!.board;
+      b.caixas[1].itens[0].pedidoId = 'PED-0003';
+      b.pedidos = [pedido('PED-0003', 'solicitado', [{ itemId: 'b1', dealId: '700002', os: '90002', nome: 'ZÍPER METAL MÉDIO FIXO CA 18CM', un: 'UN', qtd: 52 }])] as never;
+      return { status: 409, json: { erro: 'Item já está no PED-0003.' } };
+    }
+  });
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await faltas.getByRole('checkbox', { name: 'Todos os itens da OS 90001' }).check();
+  await faltas.getByRole('checkbox', { name: /ZÍPER METAL/ }).check();
+  await page.getByRole('button', { name: 'Gerar pedido' }).click();
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
+  await expect(aviso(page, 'Item já está no PED-0003.')).toBeVisible();
+  await expect(janela).toContainText('1 item saiu da lista porque já está em pedido ou foi resolvido.');
+  await expect(janela.getByLabel('Quantidade (UN) de ZÍPER METAL MÉDIO FIXO CA 18CM')).toHaveCount(0);
+  await janela.getByRole('button', { name: 'Remover LINHA 120 RESISTENTE 335 da lista' }).click();
+  await expect(janela.getByLabel(/Quantidade .* de LINHA 120/)).toHaveCount(0);
+  await expect(janela).toContainText('1 item saiu da lista'); // o removido à mão não entra na nota
+  await janela.getByRole('button', { name: 'Confirmar e gerar' }).click();
+  await expect(janela).toHaveCount(0);
+  const { bodies } = box.mock!;
+  expect(bodies).toHaveLength(2);
+  expect((bodies[1] as { itens: Corpo[] }).itens).toEqual([{ itemId: 'a2', dealId: '700001', qtd: 26, fornecedor: '' }]);
+});
+
+test('contagem de Faltas sem pedido conta os marcados fora da busca', async ({ page }) => {
+  await preparar(page, '#pedidos');
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await faltas.getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
+  await faltas.getByRole('checkbox', { name: /ZÍPER METAL/ }).check();
+  await page.getByRole('searchbox', { name: 'Buscar' }).fill('90002');
+  await expect(faltas).toContainText('2 selecionados (1 fora da busca)');
+});
+
+test('pedido com etapa que saiu do quadro aparece em Outra etapa', async ({ page }) => {
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'conferencia', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
+  });
+  await expect(page.getByRole('region', { name: 'Outra etapa' }).getByRole('button', { name: 'Pedido PED-0042' })).toBeVisible();
+});
+
+test('abaixo de 1366px, com o painel do pedido aberto, Faltas sem pedido vira trilho', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'a_pedir', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
+  });
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await expect(faltas.getByRole('checkbox', { name: /ZÍPER METAL/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  await expect(faltas.getByRole('checkbox', { name: /ZÍPER METAL/ })).toBeHidden();
+  expect((await faltas.boundingBox())!.width).toBeLessThanOrEqual(49);
+  await expect(page.getByRole('region', { name: 'Solicitado' })).toBeInViewport({ ratio: 1 });
+  await faltas.getByRole('button', { name: 'Mostrar faltas sem pedido' }).click();
+  await expect(faltas.getByRole('checkbox', { name: /ZÍPER METAL/ })).toBeVisible();
+  await faltas.getByRole('button', { name: 'Recolher' }).click();
+  await expect(faltas.getByRole('checkbox', { name: /ZÍPER METAL/ })).toBeHidden();
 });

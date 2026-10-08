@@ -100,13 +100,20 @@ describe('mensagemSucesso', () => {
 describe('desfechoDoErro', () => {
   it('classifica a recusa do servidor', () => {
     expect(desfechoDoErro(new ApiError(401, 'Sessão expirada.'))).toEqual({ tipo: 'expirou' });
-    expect(desfechoDoErro(new ApiError(409, 'x'))).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO });
+    expect(desfechoDoErro(new ApiError(409, 'Alguém alterou esta caixa agora há pouco.'))).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO });
+    expect(desfechoDoErro(new ApiError(409, ''))).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO });
+    expect(desfechoDoErro(new ApiError(409, 'Erro 409'))).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO }); // 409 sem corpo
     expect(desfechoDoErro(new ApiError(400, 'Falta só 3 UN'))).toEqual({ tipo: 'aviso', texto: 'Falta só 3 UN' });
     expect(desfechoDoErro(new ApiError(403, 'Edição liberada em breve para esta caixa.'))).toEqual({ tipo: 'aviso', texto: 'Edição liberada em breve para esta caixa.' });
     expect(desfechoDoErro(new ApiError(404, 'Item não encontrado.'))).toEqual({ tipo: 'aviso', texto: 'Item não encontrado.' });
     expect(desfechoDoErro(new ApiError(500, 'Erro 500'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
     expect(desfechoDoErro(new ApiError(0, 'Sem conexão com o servidor.'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
     expect(desfechoDoErro(new Error('x'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
+  });
+  it('409 que não é de versão mostra a mensagem do servidor (e ainda recarrega, como conflito)', () => {
+    for (const msg of ['Item já está no PED-0003.', 'Item não encontrado.', 'Pedido finalizado não pode ser alterado.', 'A etapa Solicitado tem pedidos abertos.']) {
+      expect(desfechoDoErro(new ApiError(409, msg))).toEqual({ tipo: 'conflito', texto: msg });
+    }
   });
 });
 
