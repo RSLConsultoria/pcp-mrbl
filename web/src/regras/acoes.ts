@@ -88,7 +88,7 @@ export function desfechoDoErro(e: unknown): DesfechoErro {
   if (e instanceof ApiError) {
     if (e.status === 401) return { tipo: 'expirou' };
     if (e.status === 409) return { tipo: 'conflito', texto: MSG_CONFLITO };
-    if ((e.status === 400 || e.status === 404) && e.message) return { tipo: 'aviso', texto: e.message };
+    if ((e.status === 400 || e.status === 403 || e.status === 404) && e.message) return { tipo: 'aviso', texto: e.message };
   }
   return { tipo: 'aviso', texto: MSG_FALHA };
 }

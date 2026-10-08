@@ -3,6 +3,7 @@ import type { Caixa } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { colunaDaCaixa, COLUNAS, itemAberto } from '../regras/colunas';
 import { ddmm, diasEntre, textoDias } from '../regras/datas';
+import { MSG_SOMENTE_LEITURA } from '../regras/edicao';
 import { corDoTipo, nomeDoTipo } from '../regras/texto';
 import { CamposCaixa } from './painel/CamposCaixa';
 import { Historico } from './painel/Historico';
@@ -16,11 +17,12 @@ interface Props {
   hoje: Date;
   usuarios: string[];
   perfil: string;
+  editavel: boolean;
   executar: Executar;
   onFechar: () => void;
 }
 
-export function PainelCaixa({ caixa, hoje, usuarios, perfil, executar, onFechar }: Props) {
+export function PainelCaixa({ caixa, hoje, usuarios, perfil, editavel, executar, onFechar }: Props) {
   useEffect(() => {
     const aoTecla = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onFechar();
@@ -45,20 +47,21 @@ export function PainelCaixa({ caixa, hoje, usuarios, perfil, executar, onFechar 
         <a className="painel__link" href={URL_PLOOMES + caixa.dealId} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
       </div>
       <div className="painel__corpo">
+        {!editavel && <p className="item__nota" role="note">{MSG_SOMENTE_LEITURA}</p>}
         <dl className="leitura">
           <div><dt>Etapa</dt><dd>{coluna.nome}</dd></div>
           <div><dt>Registro</dt><dd>{caixa.registradoEm ? `${ddmm(caixa.registradoEm)} · ${textoDias(dias)}` : '—'}</dd></div>
           {caixa.saiu && <div><dt>Saiu do almoxarifado</dt><dd>{caixa.saiuEm ? ddmm(caixa.saiuEm) : 'sim'}</dd></div>}
         </dl>
-        <CamposCaixa caixa={caixa} usuarios={usuarios} executar={executar} />
+        <CamposCaixa caixa={caixa} usuarios={usuarios} executar={executar} somenteLeitura={!editavel} />
         <section className="secao">
           <h3 className="secao__titulo">Itens <span>{itens.length}</span></h3>
           <ul className="itens">
-            {itens.map((i) => <ItemEditavel key={i.id} item={i} dealId={caixa.dealId} executar={executar} />)}
+            {itens.map((i) => <ItemEditavel key={i.id} item={i} dealId={caixa.dealId} executar={executar} somenteLeitura={!editavel} />)}
           </ul>
           {itens.length === 0 && <p className="vazio">Nenhum item registrado nesta caixa.</p>}
         </section>
-        <MoverPara caixa={caixa} perfil={perfil} executar={executar} />
+        {editavel && <MoverPara caixa={caixa} perfil={perfil} executar={executar} />}
         <Historico entradas={caixa.historico ?? []} />
       </div>
     </aside>

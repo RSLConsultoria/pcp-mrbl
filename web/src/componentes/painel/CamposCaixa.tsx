@@ -3,18 +3,29 @@ import type { Acao, Caixa } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { useValorDoBoard } from '../../hooks/useValorDoBoard';
 import { mensagemSucesso } from '../../regras/acoes';
+import { ddmm } from '../../regras/datas';
 import { CampoData, CampoTexto } from './Campos';
 
-interface Props { caixa: Caixa; usuarios: string[]; executar: Executar }
+interface Props { caixa: Caixa; usuarios: string[]; executar: Executar; somenteLeitura?: boolean }
 
 // Topo do painel: responsável, previsão geral e observação geral da caixa.
-export function CamposCaixa({ caixa, usuarios, executar }: Props) {
+export function CamposCaixa({ caixa, usuarios, executar, somenteLeitura }: Props) {
   const idResp = useId();
   const [resp, setResp, reverterResp] = useValorDoBoard(caixa.responsavel);
   const base = { dealId: caixa.dealId, versao: caixa.versao };
   const enviar = (acao: Acao) => executar(acao, mensagemSucesso(acao));
   // Quem está na caixa continua na lista mesmo que não esteja mais ativo em USUARIOS.
   const opcoes = !caixa.responsavel || usuarios.includes(caixa.responsavel) ? usuarios : [caixa.responsavel, ...usuarios];
+
+  if (somenteLeitura) {
+    return (
+      <dl className="leitura">
+        <div><dt>Responsável</dt><dd>{caixa.responsavel || '—'}</dd></div>
+        <div><dt>Previsão geral</dt><dd>{caixa.previsao ? ddmm(caixa.previsao) : '—'}</dd></div>
+        <div><dt>Observação geral</dt><dd>{caixa.observacao || '—'}</dd></div>
+      </dl>
+    );
+  }
 
   return (
     <div className="campos">

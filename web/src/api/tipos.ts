@@ -58,6 +58,7 @@ export interface Board {
   caixas: Caixa[];
   avisos: string[];
   usuarios: string[];
+  dealsEditaveis?: string[]; // vazio ou ausente = todas as caixas editáveis
 }
 
 // Corpo do POST /pcp-acao.

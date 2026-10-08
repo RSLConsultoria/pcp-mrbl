@@ -7,7 +7,7 @@ import { ddmm } from '../../regras/datas';
 import { contaDoItem } from '../../regras/quantidade';
 import { CampoData, CampoTexto } from './Campos';
 
-interface Props { item: Item; dealId: string; executar: Executar }
+interface Props { item: Item; dealId: string; executar: Executar; somenteLeitura?: boolean }
 
 function Baixa({ item, dealId, executar }: Props) {
   const idCampo = useId();
@@ -54,13 +54,14 @@ function Baixa({ item, dealId, executar }: Props) {
   );
 }
 
-export function ItemEditavel({ item, dealId, executar }: Props) {
+export function ItemEditavel({ item, dealId, executar, somenteLeitura }: Props) {
+  const leitura = !item.editavel || !!somenteLeitura;
   const aberto = itemAberto(item);
   const zerado = item.resta === 0; // tudo chegou: nada mais a baixar nem a prever
   const base = { dealId, itemId: item.id, versao: item.versao };
   const enviar = (acao: Acao) => executar(acao, mensagemSucesso(acao, item));
   const detalhes = [
-    !item.editavel && item.previsao && `previsão ${ddmm(item.previsao)}`,
+    leitura && item.previsao && `previsão ${ddmm(item.previsao)}`,
     item.resolvidoEm && `resolvido em ${ddmm(item.resolvidoEm)}`
   ].filter(Boolean).join(' · ');
 
@@ -74,10 +75,10 @@ export function ItemEditavel({ item, dealId, executar }: Props) {
       {detalhes && <span className="item__detalhe">{detalhes}</span>}
       {item.obsAlmox && <p className="item__almox"><span>Almoxarifado:</span> {item.obsAlmox}</p>}
 
-      {!item.editavel ? (
+      {leitura ? (
         <>
           {item.obsPcp && <p className="item__obs">{item.obsPcp}</p>}
-          <p className="item__nota">Item lido da planilha de caixas ganhas; não pode ser alterado aqui.</p>
+          {!item.editavel && <p className="item__nota">Item lido da planilha de caixas ganhas; não pode ser alterado aqui.</p>}
         </>
       ) : zerado ? (
         <>

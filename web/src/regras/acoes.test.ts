@@ -111,6 +111,7 @@ describe('desfechoDoErro', () => {
     expect(desfechoDoErro(new ApiError(401, 'Sessão expirada.'))).toEqual({ tipo: 'expirou' });
     expect(desfechoDoErro(new ApiError(409, 'x'))).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO });
     expect(desfechoDoErro(new ApiError(400, 'Falta só 3 UN'))).toEqual({ tipo: 'aviso', texto: 'Falta só 3 UN' });
+    expect(desfechoDoErro(new ApiError(403, 'Edição liberada em breve para esta caixa.'))).toEqual({ tipo: 'aviso', texto: 'Edição liberada em breve para esta caixa.' });
     expect(desfechoDoErro(new ApiError(404, 'Item não encontrado.'))).toEqual({ tipo: 'aviso', texto: 'Item não encontrado.' });
     expect(desfechoDoErro(new ApiError(500, 'Erro 500'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
     expect(desfechoDoErro(new ApiError(0, 'Sem conexão com o servidor.'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });

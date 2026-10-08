@@ -14,6 +14,7 @@ const copia = (): Board => structuredClone(base);
 interface Mock { bodies: Corpo[]; board: Board; boardGets: () => number }
 interface Opcoes {
   perfil?: string;
+  ajustar?: (b: Board) => void;
   resposta?: (corpo: Corpo) => { status: number; json: unknown };
   aoAgir?: (b: Board, corpo: Corpo) => void;
 }
@@ -22,6 +23,7 @@ interface Opcoes {
 async function preparar(page: Page, opts: Opcoes = {}): Promise<Mock> {
   let gets = 0;
   const mock: Mock = { bodies: [], board: copia(), boardGets: () => gets };
+  opts.ajustar?.(mock.board);
   await page.route(LOGIN, (r) => r.fulfill({ json: { ...SESSAO, perfil: opts.perfil ?? 'ADM' } }));
   await page.route(BOARD, (r) => { gets++; return r.fulfill({ json: mock.board }); });
   await page.route(ACAO, (r) => {
@@ -139,4 +141,13 @@ test('o histórico mostra os selos do Ploomes', async ({ page }) => {
   await expect(painel.getByText('enviado ao Ploomes')).toBeVisible();
   await expect(painel.getByText('aguardando Ploomes')).toBeVisible();
   await expect(painel.getByText('falhou no Ploomes')).toBeVisible();
+});
+
+test('caixa fora de dealsEditaveis abre só para leitura, com o aviso e sem controles', async ({ page }) => {
+  await preparar(page, { ajustar: (b) => { (b as Board & { dealsEditaveis?: string[] }).dealsEditaveis = ['607479158']; } });
+  const painel = await abrir(page);
+  await expect(painel.getByText('Edição liberada em breve para esta caixa.')).toBeVisible();
+  await expect(painel.getByRole('button', { name: 'Registrar baixa' })).toHaveCount(0);
+  await expect(painel.getByLabel('Responsável')).toHaveCount(0);
+  await expect(painel.locator('select, textarea, input')).toHaveCount(0);
 });

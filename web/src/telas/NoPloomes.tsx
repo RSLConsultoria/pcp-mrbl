@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import type { Board } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { CardCaixa } from '../componentes/CardCaixa';
+import { caixaEditavelNoApp } from '../regras/edicao';
 import { PainelCaixa } from '../componentes/PainelCaixa';
 import { caixaAtendeBusca } from '../regras/busca';
 import { colunaDaCaixa, COLUNAS, visivelNoQuadro } from '../regras/colunas';
@@ -40,7 +41,7 @@ export function NoPloomes({ board, q, hoje, perfil, executar }: Props) {
       </div>
       {sel && (
         <PainelCaixa key={sel.id} caixa={sel} hoje={hoje} usuarios={board.usuarios ?? []} perfil={perfil}
-          executar={executar} onFechar={fechar} />
+          editavel={caixaEditavelNoApp(board, sel)} executar={executar} onFechar={fechar} />
       )}
     </div>
   );
