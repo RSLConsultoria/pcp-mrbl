@@ -2,7 +2,7 @@ import { useState, type DragEvent } from 'react';
 import type { Acao, Board, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
-import type { FiltroPedidos } from '../../regras/pedidos';
+import { PREFIXO_NOVO, type FiltroPedidos } from '../../regras/pedidos';
 import {
   entraNaUltimaEtapa, etapaNoQuadro, partesDoPedido, pedidoEditavel, pedidosForaDasEtapas, textoConfirmarResolvido, vazioDaEtapa
 } from '../../regras/pedidosQuadro';
@@ -46,6 +46,7 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
   function soltar(id: string, etapaId: string) {
     const p = pedidos.find((x) => x.id === id);
     if (!p || etapaDe(p) === etapaId || !pedidoEditavel(board, p)) return;
+    if (etapaId.startsWith(PREFIXO_NOVO)) return; // etapa nova ainda gravando: o servidor não a conhece
     if (entraNaUltimaEtapa(etapaDe(p), etapaId, etapas)) { setPendente(id); return; }
     mover(id, etapaId);
   }
