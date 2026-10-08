@@ -48,7 +48,7 @@ export function passoDaData(valor: string, incompleta: boolean, aoSair: boolean)
 export function mensagemSucesso(
   acao: Acao,
   item?: Pick<Item, 'nome' | 'un'>,
-  extra: { pedidoId?: string; etapa?: string } = {}
+  extra: { pedidoId?: string; etapa?: string; baixa?: boolean; partes?: number } = {}
 ): string {
   const nome = item?.nome ?? 'item';
   switch (acao.tipo) {
@@ -72,11 +72,15 @@ export function mensagemSucesso(
     case 'editar_pedido':
       return `${acao.pedidoId} alterado`;
     case 'mover_pedido':
-      return `${acao.pedidoId} movido para ${extra.etapa ?? acao.etapa}`;
+      return `${acao.pedidoId} movido para ${extra.etapa ?? acao.etapa}${extra.baixa ? ' · baixa registrada nas caixas' : ''}`;
     case 'baixar_pedido':
       return `Baixa do ${acao.pedidoId} registrada`;
     case 'dividir_pedido':
       return `${acao.pedidoId} dividido · ${extra.pedidoId ?? 'nova parte'} em ${extra.etapa ?? acao.etapa}`;
+    case 'dividir_por_previsao': {
+      const n = extra.partes ?? 0;
+      return `${acao.pedidoId} dividido por previsão${n > 0 ? ` · ${n} ${n === 1 ? 'parte' : 'partes'}` : ''}`;
+    }
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
     case 'enviar_oficina':

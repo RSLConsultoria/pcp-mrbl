@@ -1,9 +1,11 @@
 // Servidor local de conferência: imita pcp-login, pcp-board e pcp-acao com dados fictícios.
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
+// A última etapa é "Resolvido": mover um pedido para ela dá a baixa nas caixas (e finaliza o pedido).
 // Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
-// 90005 em Aguardando entrega (partes em etapas diferentes); 90007 com tudo na última etapa (pode ir à oficina);
-// 90006 já enviada (material todo na última etapa). Enviar à oficina fora da última etapa: 409, como no servidor.
+// 90005 em Aguardando entrega (a parte PED-0003.1 já foi resolvida); 90007 em Resolvido (material baixado, pronta
+// para ir à oficina); 90006 já enviada; 90008 concluída (a oficina recebeu). PED-0001 tem itens com previsões
+// diferentes (Dividir por previsão). Enviar à oficina com material faltando: 409, como no servidor.
 import http from 'node:http';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
@@ -42,36 +44,40 @@ const estado = {
       item('d2', 'BOTAO MADREPEROLA 15MM', 'UN', 120)
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-9) }),
     caixa(90005, 'PEDIDO', 'COSTURA', 'PECA TESTE E', 'CLIENTE BETA', 'Maria', [
-      item('e1', 'FITA GROSGRAIN 25MM', 'MT', 300)
+      item('e1', 'FITA GROSGRAIN 25MM', 'MT', 300, { baixada: 120, status: 'PARCIAL' })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-6),
-      historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Material no almoxarifado)')] }),
+      historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Resolvido) e deu baixa: 120 MT de FITA GROSGRAIN 25MM (resta 180 MT)')] }),
     caixa(90006, 'PEDIDO', 'ACABAMENTO', 'PECA TESTE F', 'CLIENTE GAMA', 'Lucca', [
-      item('f1', 'ELASTICO CHATO 30MM', 'MT', 80, { separada: 20, status: 'PARCIAL' })
+      item('f1', 'ELASTICO CHATO 30MM', 'MT', 80, { separada: 20, baixada: 80, status: 'RESOLVIDO', resolvidoEm: diaIso(-3) })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4), tratativa: 'ENVIADO', tratativaEm: diaIso(-2) }),
     caixa(90007, 'CORTE', 'COSTURA', 'PECA TESTE G', 'CLIENTE ALFA', 'Renata', [
-      item('g1', 'BOTAO PRESSAO 12MM', 'UN', 200),
-      item('g2', 'ENTRETELA FINA', 'MT', 15)
-    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-2) })
+      item('g1', 'BOTAO PRESSAO 12MM', 'UN', 200, { baixada: 200, status: 'RESOLVIDO', resolvidoEm: diaIso(-1) }),
+      item('g2', 'ENTRETELA FINA', 'MT', 15, { baixada: 15, status: 'RESOLVIDO', resolvidoEm: diaIso(-1) })
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-2),
+      historico: [hist(1, 'Renata', 'Renata moveu PED-0007 para Resolvido e deu baixa: 200 UN de BOTAO PRESSAO 12MM (resta 0 UN); 15 MT de ENTRETELA FINA (resta 0 MT)')] }),
+    caixa(90008, 'PEDIDO', 'COSTURA', 'PECA TESTE H', 'CLIENTE BETA', 'Maria', [
+      item('h1', 'LINHA 80 POLIESTER', 'cones', 6, { baixada: 6, status: 'RESOLVIDO', resolvidoEm: diaIso(-5) })
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-12), tratativa: 'RECEBIDO', tratativaEm: diaIso(-3) })
   ],
   etapas: [
     { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' },
-    { id: 'aguardando', nome: 'Aguardando entrega' }, { id: 'entregue', nome: 'Material no almoxarifado' }
+    { id: 'aguardando', nome: 'Aguardando entrega' }, { id: 'entregue', nome: 'Resolvido' }
   ],
   pedidos: [
-    { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA' }] },
+    { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA', previsao: '' }, { itemId: 'a2', dealId: '700001', qtd: 30, fornecedor: '', previsao: diaIso(12) }] },
     { id: 'PED-0002', etapa: 'aguardando', origem: 'CLIENTE', quem: 'CLIENTE BETA', local: 'BRAGANCA', previsao: diaIso(10), responsavel: 'Lucca', criadoEm: diaIso(-4), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'b1', dealId: '700002', qtd: 52, fornecedor: '' }] },
     // já dividido: 120 MT chegaram e viraram o PED-0003.1; o PED-0003 espera os outros 180 MT
     { id: 'PED-0003', etapa: 'aguardando', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 180, fornecedor: 'AVIAMENTOS DELTA' }] },
-    { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-1), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
+    { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-1), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
     { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Maria', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
     // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
-    // material da 90006 (já enviada à oficina) e da 90007 (pronta para enviar): todo na última etapa
-    { id: 'PED-0006', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-3), responsavel: 'Lucca', criadoEm: diaIso(-6), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'f1', dealId: '700006', qtd: 80, fornecedor: '' }] },
-    { id: 'PED-0007', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'SAO_PAULO', previsao: diaIso(-1), responsavel: 'Renata', criadoEm: diaIso(-3), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'g1', dealId: '700007', qtd: 200, fornecedor: '' }, { itemId: 'g2', dealId: '700007', qtd: 15, fornecedor: '' }] },
+    // material da 90006 (já enviada à oficina) e da 90007 (pronta para enviar): resolvido, com a baixa dada
+    { id: 'PED-0006', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-3), responsavel: 'Lucca', criadoEm: diaIso(-6), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'f1', dealId: '700006', qtd: 80, fornecedor: '' }] },
+    { id: 'PED-0007', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'SAO_PAULO', previsao: diaIso(-1), responsavel: 'Renata', criadoEm: diaIso(-3), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'g1', dealId: '700007', qtd: 200, fornecedor: '' }, { itemId: 'g2', dealId: '700007', qtd: 15, fornecedor: '' }] },
     { id: 'PED-0005', etapa: 'conferencia', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(4), responsavel: 'Renata', criadoEm: diaIso(-15), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd2', dealId: '700004', qtd: 120, fornecedor: '' }] }
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
-  dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007']
+  dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008']
 };
 
 // ---------- utilidades ----------
@@ -91,6 +97,11 @@ const itemDe = (dealId, itemId) => caixaDe(dealId)?.itens.find((i) => i.id === i
 const numPedido = (id) => parseInt(id.slice(4), 10);
 const raizDoPedido = (id) => id.split('.')[0];
 const parteDoPedido = (id) => Number(id.split('.')[1] ?? 0);
+const ehUltima = (etapaId) => etapaId === ultimaEtapa();
+// Previsão que vale para o item do pedido: a dele ou, vazia, a do pedido.
+const previsaoDoItem = (p, i) => i.previsao || p.previsao || '';
+const previsoesDistintas = (p) => [...new Set(itensValidos(p).map((i) => previsaoDoItem(p, i)))]
+  .sort((a, b) => (a === b ? 0 : a === '' ? 1 : b === '' ? -1 : a < b ? -1 : 1));
 const compararPedidos = (a, b) => numPedido(a.id) - numPedido(b.id) || parteDoPedido(a.id) - parteDoPedido(b.id);
 const itensValidos = (p) => p.itens.filter((i) => i.qtd !== 0);
 const pedidosAbertosDoItem = (dealId, itemId) => [...estado.pedidos].sort(compararPedidos)
@@ -140,10 +151,12 @@ function montarBoard() {
     pedidos: [...estado.pedidos].sort(compararPedidos).map((p) => ({
       ...p,
       pai: p.pai ?? '',
-      finalizado: p.etapa === ultimaEtapa() && !!p.baixadoEm,
+      finalizado: !!p.baixadoEm,
+      previsaoMaisProxima: previsoesDistintas(p)[0] || p.previsao,
+      previsoesDiferentes: previsoesDistintas(p).length > 1,
       itens: itensValidos(p).map((i) => {
         const it = itemDe(i.dealId, i.itemId);
-        return { ...i, os: caixaDe(i.dealId).os, nome: it.nome, un: it.un };
+        return { ...i, previsao: previsaoDoItem(p, i), os: caixaDe(i.dealId).os, nome: it.nome, un: it.un };
       })
     })),
     caixas: estado.caixas.map((c) => ({
@@ -235,6 +248,7 @@ function gerarPedido(c, usuario) {
     if (!num(i.qtd) || i.qtd <= 0) throw bad('Informe uma quantidade maior que zero');
     if (resta(it) <= 0) throw bad('Item sem quantidade faltante registrada.');
     if (i.qtd > resta(it)) throw bad(`Falta só ${fmtNum(resta(it))} ${it.un} de ${it.nome}`);
+    validarData(i.previsao);
   }
   const n = Math.max(0, ...estado.pedidos.map((p) => numPedido(p.id))) + 1;
   const id = `PED-${String(n).padStart(4, '0')}`;
@@ -242,7 +256,7 @@ function gerarPedido(c, usuario) {
   estado.pedidos.push({
     id, etapa: estado.etapas[0].id, origem: c.origem, quem: c.quem ?? '', local: c.local, previsao: c.previsao ?? '',
     responsavel: c.responsavel ?? '', criadoEm: diaIso(), baixadoEm: '', versao,
-    itens: c.itens.map((i) => ({ itemId: i.itemId, dealId: i.dealId, qtd: i.qtd, fornecedor: i.fornecedor ?? '' }))
+    itens: c.itens.map((i) => ({ itemId: i.itemId, dealId: i.dealId, qtd: i.qtd, fornecedor: i.fornecedor ?? '', previsao: i.previsao ?? '' }))
   });
   const historicos = [];
   const porDeal = new Map();
@@ -292,15 +306,24 @@ function editarPedido(c, usuario) {
     if (m.fornecedor !== undefined && m.fornecedor !== pi.fornecedor) {
       add(pi.dealId, `fornecedor de ${it.nome}: ${pi.fornecedor || '—'} → ${m.fornecedor || '—'}`); novosItens.push([pi, 'fornecedor', m.fornecedor]);
     }
+    if (m.previsao !== undefined) {
+      validarData(m.previsao);
+      const a = previsaoDoItem(p, pi);
+      const d = m.previsao || ('previsao' in novos ? novos.previsao : p.previsao) || '';
+      if (a !== d) { add(pi.dealId, `previsão de ${it.nome}: ${ddmm(a)} → ${ddmm(d)}`); novosItens.push([pi, 'previsao', m.previsao]); }
+    }
   }
   if (!comuns.length && !porDeal.size) throw bad('Nada alterado.');
+  const resolver = 'etapa' in novos && ehUltima(novos.etapa);
   Object.assign(p, novos);
   for (const [pi, k, v] of novosItens) pi[k] = v;
   p.versao = agoraIso();
+  const baixas = resolver ? baixarItens(itensValidos(p)) : new Map();
+  if (resolver) p.baixadoEm = diaIso();
   const historicos = [];
   for (const d of dealsDe(p)) {
     const partes = [...comuns, ...(porDeal.get(d) ?? [])];
-    if (partes.length) registrar(d, usuario, `${usuario} alterou ${p.id}: ${partes.join(', ')}`, historicos);
+    if (partes.length) registrar(d, usuario, `${usuario} alterou ${p.id}: ${partes.join(', ')}${textoBaixa(baixas.get(d))}`, historicos);
   }
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
@@ -312,24 +335,35 @@ function moverPedido(c, usuario) {
   if (!estado.etapas.some((e) => e.id === c.etapa)) throw bad('Etapa inválida.');
   if (p.etapa === c.etapa) throw bad('O pedido já está nessa etapa.');
   p.etapa = c.etapa; p.versao = agoraIso();
+  // Entrar na última etapa (Resolvido) dá a baixa nas caixas e finaliza o pedido.
+  const baixas = ehUltima(c.etapa) ? baixarItens(itensValidos(p)) : new Map();
+  if (ehUltima(c.etapa)) p.baixadoEm = diaIso();
   const historicos = [];
-  for (const d of dealsDe(p)) registrar(d, usuario, `${usuario} moveu ${p.id} para ${nomeEtapa(c.etapa)}`, historicos);
+  for (const d of dealsDe(p)) registrar(d, usuario, `${usuario} moveu ${p.id} para ${nomeEtapa(c.etapa)}${textoBaixa(baixas.get(d))}`, historicos);
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
 
-function baixarPedido(c, usuario) {
-  const p = pedidoPorId(c.pedidoId);
-  pedidoEditavel(p);
-  conferirVersao(p.versao, c.versao);
-  if (p.etapa !== ultimaEtapa()) throw bad('Dar baixa só na última etapa.');
+// Baixa de cada item (min(qtd, resta)); devolve dealId -> ['20 MT de VIÉS (resta 80 MT)'].
+function baixarItens(itens) {
   const partes = new Map();
-  for (const pi of p.itens) {
+  for (const pi of itens) {
     const it = itemDe(pi.dealId, pi.itemId);
     const q = Math.min(pi.qtd ?? 0, resta(it));
     if (q <= 0) continue;
     darBaixa(it, q);
     partes.set(pi.dealId, [...(partes.get(pi.dealId) ?? []), `${fmtNum(q)} ${it.un} de ${it.nome} (resta ${fmtNum(resta(it))} ${it.un})`]);
   }
+  return partes;
+}
+const textoBaixa = (partes) => (partes?.length ? ` e deu baixa: ${partes.join('; ')}` : '');
+
+// Mantido por compatibilidade (o app dá a baixa movendo para a última etapa).
+function baixarPedido(c, usuario) {
+  const p = pedidoPorId(c.pedidoId);
+  pedidoEditavel(p);
+  conferirVersao(p.versao, c.versao);
+  if (p.etapa !== ultimaEtapa()) throw bad('Dar baixa só na última etapa.');
+  const partes = baixarItens(itensValidos(p));
   p.baixadoEm = diaIso(); p.versao = agoraIso();
   const historicos = [];
   for (const d of dealsDe(p)) registrar(d, usuario, `${usuario} deu baixa do ${p.id}: ${(partes.get(d) ?? ['sem itens abertos']).join('; ')}`, historicos);
@@ -364,18 +398,54 @@ function dividirPedido(c, usuario) {
   const k = Math.max(0, ...estado.pedidos.filter((x) => raizDoPedido(x.id) === raiz).map((x) => parteDoPedido(x.id))) + 1;
   const id = `${raiz}.${k}`;
   const versao = agoraIso();
-  estado.pedidos.push({
+  const parte = {
     id, pai: raiz, etapa: etapa.id, origem: p.origem, quem: p.quem, local: p.local, previsao: p.previsao, responsavel: p.responsavel,
     criadoEm: diaIso(), baixadoEm: '', versao,
-    itens: movidos.map((m) => ({ itemId: m.pi.itemId, dealId: m.pi.dealId, qtd: m.qtd, fornecedor: m.pi.fornecedor }))
-  });
+    itens: movidos.map((m) => ({ itemId: m.pi.itemId, dealId: m.pi.dealId, qtd: m.qtd, fornecedor: m.pi.fornecedor, previsao: m.pi.previsao ?? '' }))
+  };
+  estado.pedidos.push(parte);
   for (const m of movidos) m.pi.qtd = Math.round((m.pi.qtd - m.qtd) * 1000) / 1000;
   p.versao = versao;
+  // parte que vai direto para a última etapa (Resolvido) já nasce com a baixa
+  const baixas = ehUltima(etapa.id) ? baixarItens(parte.itens) : new Map();
+  if (ehUltima(etapa.id)) parte.baixadoEm = diaIso();
   const historicos = [];
   const porDeal = new Map();
   for (const m of movidos) porDeal.set(m.pi.dealId, [...(porDeal.get(m.pi.dealId) ?? []), `${fmtNum(m.qtd)} ${m.it.un} de ${m.it.nome}`]);
-  for (const [d, partes] of porDeal) registrar(d, usuario, `${usuario} dividiu ${p.id}: ${partes.join('; ')} foram para ${id} (${etapa.nome})`, historicos);
+  for (const [d, partes] of porDeal) registrar(d, usuario, `${usuario} dividiu ${p.id}: ${partes.join('; ')} foram para ${id} (${etapa.nome})${textoBaixa(baixas.get(d))}`, historicos);
   return resposta(versao, historicos, { pedidoId: id });
+}
+
+// Uma parte por data de previsão dos itens; a mais próxima fica no pedido.
+function dividirPorPrevisao(c, usuario) {
+  const p = pedidoPorId(c.pedidoId);
+  pedidoEditavel(p);
+  conferirVersao(p.versao, c.versao);
+  const datas = previsoesDistintas(p);
+  if (datas.length < 2) throw bad('Os itens têm a mesma previsão.');
+  const raiz = raizDoPedido(p.id);
+  const versao = agoraIso();
+  const ids = [];
+  const porDeal = new Map();
+  for (const data of datas.slice(1)) {
+    const k = Math.max(0, ...estado.pedidos.filter((x) => raizDoPedido(x.id) === raiz).map((x) => parteDoPedido(x.id))) + 1;
+    const id = `${raiz}.${k}`;
+    ids.push(id);
+    const vao = itensValidos(p).filter((i) => previsaoDoItem(p, i) === data);
+    estado.pedidos.push({
+      id, pai: raiz, etapa: p.etapa, origem: p.origem, quem: p.quem, local: p.local, previsao: data, responsavel: p.responsavel,
+      criadoEm: diaIso(), baixadoEm: '', versao, itens: vao.map((i) => ({ ...i }))
+    });
+    for (const i of vao) {
+      const it = itemDe(i.dealId, i.itemId);
+      porDeal.set(i.dealId, [...(porDeal.get(i.dealId) ?? []), `${fmtNum(i.qtd)} ${it.un} de ${it.nome} foram para ${id} (${data ? `previsão ${ddmm(data)}` : 'sem previsão'})`]);
+      i.qtd = 0;
+    }
+  }
+  p.versao = versao;
+  const historicos = [];
+  for (const [d, partes] of porDeal) registrar(d, usuario, `${usuario} dividiu ${p.id} por previsão: ${partes.join('; ')}`, historicos);
+  return resposta(versao, historicos, { pedidoId: ids[0], partes: ids });
 }
 
 function salvarEtapas(c) {
@@ -414,7 +484,7 @@ function oficina(c, usuario, recebeu) {
   exigirEditavel([cx.dealId]);
   conferirVersao(cx.versao, c.versao);
   if (!recebeu) {
-    // Só com todo o material na última etapa: todo item aberto com pedido e todos os pedidos dele lá.
+    // Sem item aberto (tudo baixado) ou todo item aberto com pedido e todos os pedidos dele na última etapa.
     const naUltima = cx.itens.filter(aberto).every((it) => {
       const ps = pedidosAbertosDoItem(cx.dealId, it.id);
       return ps.length > 0 && ps.every((p) => p.etapa === ultimaEtapa());
@@ -443,6 +513,7 @@ function processar(corpo, usuario) {
     case 'mover_pedido': return moverPedido(corpo, usuario);
     case 'baixar_pedido': return baixarPedido(corpo, usuario);
     case 'dividir_pedido': return dividirPedido(corpo, usuario);
+    case 'dividir_por_previsao': return dividirPorPrevisao(corpo, usuario);
     case 'salvar_etapas': return salvarEtapas(corpo);
     case 'enviar_oficina': return oficina(corpo, usuario, false);
     case 'oficina_recebeu': return oficina(corpo, usuario, true);

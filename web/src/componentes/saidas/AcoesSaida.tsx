@@ -15,7 +15,7 @@ interface Props {
 }
 
 // Próximos passos da caixa que saiu com falta. Um só botão principal por etapa.
-// Enviar à oficina só aparece com todo o material na última etapa dos pedidos.
+// Enviar à oficina só aparece na coluna Resolvido: tudo baixado ou todo o material na última etapa.
 export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecionarParaPedido }: Props) {
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -28,7 +28,7 @@ export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecio
     else if (voltarFoco.current) { voltarFoco.current = false; reabrirRef.current?.focus(); }
   }, [confirmando]);
 
-  if (coluna === 'resolvido') return null;
+  if (coluna === 'concluido') return null;
   const paraPedido = itensParaPedido(caixa).length;
   const abertos = itensAbertos(caixa).length;
   const enviada = caixa.tratativa === 'ENVIADO';

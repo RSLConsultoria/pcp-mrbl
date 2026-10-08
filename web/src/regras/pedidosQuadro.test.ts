@@ -3,7 +3,7 @@ import type { EtapaPedido, Pedido } from '../api/tipos';
 import type { EstadoEditavel } from './pedidos';
 import {
   acaoEditarPedido, estadoDoPedido, historicoDoPedido, motivoTravaEtapa, pedidoAtendeBusca, pedidoEditavel,
-  itensQueSairam, itensSelecionados, pedidosForaDasEtapas, podeDarBaixa, qtdOsDoPedido, textoConfirmarBaixa,
+  itensQueSairam, itensSelecionados, pedidosForaDasEtapas, qtdOsDoPedido,
   textoContagemFaltas, textoItensQueSairam, vazioDaEtapa
 } from './pedidosQuadro';
 import { caixa, item } from './teste-util';
@@ -31,11 +31,6 @@ describe('busca, OS e baixa', () => {
   it('conta OS distintas', () => {
     expect(qtdOsDoPedido(ped({ itens: [it1, { ...it1, itemId: 'i3' }, it2] }))).toBe(2);
   });
-  it('dar baixa só na última etapa e sem baixa anterior', () => {
-    expect(podeDarBaixa(ped({ etapa: 'c' }), etapas)).toBe(true);
-    expect(podeDarBaixa(ped({ etapa: 'b' }), etapas)).toBe(false);
-    expect(podeDarBaixa(ped({ etapa: 'c', baixadoEm: '2026-10-08T10:00:00Z' }), etapas)).toBe(false);
-  });
   it('editável: não finalizado e todas as OS liberadas', () => {
     expect(pedidoEditavel({ dealsEditaveis: [] }, ped())).toBe(true);
     expect(pedidoEditavel({ dealsEditaveis: ['1'] }, ped())).toBe(false);
@@ -48,7 +43,7 @@ describe('vazioDaEtapa', () => {
     expect(vazioDaEtapa('aberto', 0, 3, false)).toBe('Pedidos gerados a partir das faltas entram aqui.');
     expect(vazioDaEtapa('aberto', 1, 3, false)).toBe('Arraste um pedido para esta etapa.');
     expect(vazioDaEtapa('finalizado', 2, 3, false)).toBe('Nenhum pedido finalizado ainda.');
-    expect(vazioDaEtapa('finalizado', 0, 3, false)).toBe('Pedidos finalizados ficam só na última etapa.');
+    expect(vazioDaEtapa('finalizado', 0, 3, false)).toBe('Pedidos finalizados ficam na última etapa.');
     expect(vazioDaEtapa('todos', 0, 3, true)).toBe('Nenhum pedido desta etapa atende à busca.');
   });
 });
@@ -109,14 +104,6 @@ describe('pedidosForaDasEtapas', () => {
     expect(pedidosForaDasEtapas(lista, etapas).map((p) => p.id)).toEqual(['2']);
     expect(pedidosForaDasEtapas(lista, etapas, (p) => (p.id === '1' ? 'outra' : p.etapa)).map((p) => p.id)).toEqual(['1', '2']);
     expect(pedidosForaDasEtapas(lista, [])).toHaveLength(3);
-  });
-});
-
-describe('textoConfirmarBaixa', () => {
-  it('itens e OS', () => {
-    expect(textoConfirmarBaixa(ped())).toBe('Dar baixa de 2 itens em 2 OS? A baixa não pode ser desfeita.');
-    expect(textoConfirmarBaixa(ped({ itens: [it1] }))).toBe('Dar baixa de 1 item em 1 OS? A baixa não pode ser desfeita.');
-    expect(textoConfirmarBaixa(ped({ itens: [it1, { ...it1, itemId: 'i3' }] }))).toBe('Dar baixa de 2 itens em 1 OS? A baixa não pode ser desfeita.');
   });
 });
 

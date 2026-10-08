@@ -54,13 +54,13 @@ describe('ultimaEtapa / quemDoPedido', () => {
 describe('resumoAlteracoes', () => {
   const base: EstadoEditavel = {
     etapa: 'a', origem: 'FORNECEDOR', quem: 'ALFA', local: 'BRAGANCA', previsao: '2026-10-09', responsavel: 'Renata',
-    itens: [{ itemId: 'i1', nome: 'ZÍPER', un: 'UN', qtd: 10, fornecedor: '' }]
+    itens: [{ itemId: 'i1', nome: 'ZÍPER', un: 'UN', qtd: 10, fornecedor: '', previsao: '' }]
   };
   it('sem mudança: vazio', () => expect(resumoAlteracoes(base, structuredClone(base), etapas)).toEqual([]));
   it('linhas no formato do servidor', () => {
     const depois: EstadoEditavel = {
       ...base, etapa: 'b', previsao: '2026-10-12', responsavel: '',
-      itens: [{ itemId: 'i1', nome: 'ZÍPER', un: 'UN', qtd: 8, fornecedor: 'FITAS' }]
+      itens: [{ itemId: 'i1', nome: 'ZÍPER', un: 'UN', qtd: 8, fornecedor: 'FITAS', previsao: '' }]
     };
     expect(resumoAlteracoes(base, depois, etapas)).toEqual([
       'Etapa: A pedir → Solicitado',
@@ -104,7 +104,7 @@ describe('mensagemSucesso dos pedidos', () => {
   const dados: DadosPedido = { origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '' };
   it('textos', () => {
     const gerar: Acao = { tipo: 'gerar_pedido', ...dados, itens: [
-      { itemId: 'a', dealId: '1', qtd: 1, fornecedor: '' }, { itemId: 'b', dealId: '1', qtd: 1, fornecedor: '' }, { itemId: 'c', dealId: '2', qtd: 1, fornecedor: '' }
+      { itemId: 'a', dealId: '1', qtd: 1, fornecedor: '', previsao: '' }, { itemId: 'b', dealId: '1', qtd: 1, fornecedor: '', previsao: '' }, { itemId: 'c', dealId: '2', qtd: 1, fornecedor: '', previsao: '' }
     ] };
     expect(mensagemSucesso(gerar, undefined, { pedidoId: 'PED-0044' })).toBe('PED-0044 gerado · 3 itens · registrado em 2 OS no Ploomes');
     expect(mensagemSucesso({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: '', etapa: 'b' }, undefined, { etapa: 'Solicitado' })).toBe('PED-0044 movido para Solicitado');

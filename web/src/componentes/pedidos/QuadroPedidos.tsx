@@ -3,9 +3,12 @@ import type { Acao, Board, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
 import type { FiltroPedidos } from '../../regras/pedidos';
-import { partesDoPedido, pedidoEditavel, pedidosForaDasEtapas, podeDarBaixa, vazioDaEtapa } from '../../regras/pedidosQuadro';
+import {
+  entraNaUltimaEtapa, etapaNoQuadro, partesDoPedido, pedidoEditavel, pedidosForaDasEtapas, textoConfirmarResolvido, vazioDaEtapa
+} from '../../regras/pedidosQuadro';
 import { ColunaQuadro } from '../ColunaQuadro';
 import { CardPedido } from './CardPedido';
+import { ConfirmarResolvido } from './ConfirmarResolvido';
 
 interface Props {
   board: Board;
@@ -18,22 +21,28 @@ interface Props {
   onAbrir: (id: string | null) => void;
 }
 
-// Quadro de pedidos por etapa, com arrastar e soltar entre as colunas.
+// Quadro de pedidos por etapa, com arrastar e soltar entre as colunas. A última etapa é a
+// "Resolvido": soltar um card nela pede confirmação, porque dá a baixa nas caixas. Pedido
+// finalizado (com baixa) fica sempre nela.
 export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId, executar, onAbrir }: Props) {
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [sobre, setSobre] = useState<string | null>(null);
   const [movidos, setMovidos] = useState<Record<string, string>>({}); // etapa mostrada enquanto o servidor grava
-  const [baixando, setBaixando] = useState<string | null>(null);
-  const etapaDe = (p: Pedido) => movidos[p.id] ?? p.etapa;
+  const [pendente, setPendente] = useState<string | null>(null); // pedido aguardando a confirmação do Resolvido
+  const [gravando, setGravando] = useState(false);
+  const ultima = etapas[etapas.length - 1];
+  const etapaDe = (p: Pedido) => movidos[p.id] ?? etapaNoQuadro(p, etapas);
   const origem = arrastando ? pedidos.find((p) => p.id === arrastando) : undefined;
   const etapaDeOrigem = origem ? etapaDe(origem) : null;
+  const pedPendente = pendente ? pedidos.find((p) => p.id === pendente) : undefined;
 
   async function mover(id: string, etapaId: string) {
     const p = pedidos.find((x) => x.id === id);
     if (!p || etapaDe(p) === etapaId || !pedidoEditavel(board, p)) return;
     const acao: Acao = { tipo: 'mover_pedido', pedidoId: p.id, versao: p.versao, etapa: etapaId };
+    const baixa = etapaId === ultima?.id;
     setMovidos((m) => ({ ...m, [id]: etapaId }));
-    await executar(acao, mensagemSucesso(acao, undefined, { etapa: etapas.find((e) => e.id === etapaId)?.nome }));
+    await executar(acao, mensagemSucesso(acao, undefined, { etapa: etapas.find((e) => e.id === etapaId)?.nome, baixa }));
     setMovidos((m) => {
       const resto = { ...m };
       delete resto[id];
@@ -41,11 +50,19 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
     });
   }
 
-  async function baixar(p: Pedido) {
-    const acao: Acao = { tipo: 'baixar_pedido', pedidoId: p.id, versao: p.versao };
-    setBaixando(p.id);
-    await executar(acao, mensagemSucesso(acao));
-    setBaixando(null);
+  function soltar(id: string, etapaId: string) {
+    const p = pedidos.find((x) => x.id === id);
+    if (!p || etapaDe(p) === etapaId || !pedidoEditavel(board, p)) return;
+    if (entraNaUltimaEtapa(etapaDe(p), etapaId, etapas)) { setPendente(id); return; }
+    void mover(id, etapaId);
+  }
+
+  async function confirmar() {
+    if (!pedPendente || !ultima) return;
+    setGravando(true);
+    await mover(pedPendente.id, ultima.id);
+    setGravando(false);
+    setPendente(null);
   }
 
   const soltarEm = (etapaId: string) => ({
@@ -63,18 +80,14 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
       const id = e.dataTransfer.getData('text/plain') || arrastando;
       setSobre(null);
       setArrastando(null);
-      if (id) void mover(id, etapaId);
+      if (id) soltar(id, etapaId);
     }
   });
 
-  const card = (p: Pedido) => {
-    const editavel = pedidoEditavel(board, p);
-    return (
-      <CardPedido key={p.id} pedido={p} partes={partesDoPedido(board.pedidos ?? [], p.id).length} selecionado={p.id === selId} arrastavel={editavel}
-        podeBaixar={editavel && etapaDe(p) === p.etapa && podeDarBaixa(p, etapas)} baixando={baixando === p.id}
-        onAbrir={() => onAbrir(p.id === selId ? null : p.id)} onArrastar={setArrastando} onBaixar={() => baixar(p)} />
-    );
-  };
+  const card = (p: Pedido) => (
+    <CardPedido key={p.id} pedido={p} partes={partesDoPedido(board.pedidos ?? [], p.id).length} selecionado={p.id === selId}
+      arrastavel={pedidoEditavel(board, p)} onAbrir={() => onAbrir(p.id === selId ? null : p.id)} onArrastar={setArrastando} />
+  );
   // Pedido cuja etapa saiu do quadro continua à vista, numa coluna no fim.
   const fora = pedidosForaDasEtapas(pedidos, etapas, etapaDe);
 
@@ -83,11 +96,17 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
       <div className="quadro__trilho">
         {etapas.map((et, idx) => {
           const ps = pedidos.filter((p) => etapaDe(p) === et.id);
+          const ehUltima = idx === etapas.length - 1;
           return (
-            <ColunaQuadro key={et.id} nome={et.nome} cor={idx === etapas.length - 1 ? 'var(--success)' : 'var(--navy)'} qtd={ps.length}
+            <ColunaQuadro key={et.id} nome={et.nome} cor={ehUltima ? 'var(--success)' : 'var(--navy)'} qtd={ps.length}
               vazio={vazioDaEtapa(filtro, idx, etapas.length, temBusca)}
               alvo={sobre === et.id && arrastando !== null && etapaDeOrigem !== et.id}
               soltar={soltarEm(et.id)}>
+              {ehUltima && pedPendente && (
+                <ConfirmarResolvido rotulo={`Confirmar ${et.nome} do ${pedPendente.id}`}
+                  texto={textoConfirmarResolvido(pedPendente.itens, et.nome)} ocupado={gravando}
+                  onConfirmar={confirmar} onCancelar={() => setPendente(null)} />
+              )}
               {ps.map(card)}
             </ColunaQuadro>
           );
@@ -97,7 +116,7 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
             {fora.map(card)}
           </ColunaQuadro>
         )}
-        {etapas.length === 0 &&<div className="coluna__vazio quadro__sem-etapas">Nenhuma etapa configurada. Use Etapas do quadro para criar as etapas.</div>}
+        {etapas.length === 0 && <div className="coluna__vazio quadro__sem-etapas">Nenhuma etapa configurada. Use Etapas do quadro para criar as etapas.</div>}
       </div>
     </div>
   );

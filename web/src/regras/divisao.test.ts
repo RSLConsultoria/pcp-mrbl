@@ -74,7 +74,8 @@ describe('Saídas com pedidoIds', () => {
   it('a parte mais atrasada define a coluna; última etapa só com todas as partes nela', () => {
     const c = saiu([item({ id: 'z', pedidoId: 'PED-0002', pedidoIds: ['PED-0002', 'PED-0002.1'] })]);
     expect(colunaSaida(c, lista, etapas)).toEqual({ coluna: 'etapa:rec', etapasDiferentes: true });
-    expect(colunaSaida(c, [lista[0], { ...lista[1], etapa: 'ent' }], etapas)).toEqual({ coluna: 'etapa:ent' });
+    // todas as partes na última etapa: a caixa está em Resolvido
+    expect(colunaSaida(c, [lista[0], { ...lista[1], etapa: 'ent' }], etapas)).toEqual({ coluna: 'resolvido' });
   });
   it('com pedido quando pedidoIds não está vazio; texto com as partes', () => {
     const c = saiu([item({ id: 'z', pedidoId: 'PED-0002.1', pedidoIds: ['PED-0002.1'] }), item({ id: 'y' })]);

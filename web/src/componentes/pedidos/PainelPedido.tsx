@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react';
-import type { Acao, Board, EtapaPedido, Pedido } from '../../api/tipos';
+import type { Board, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { useTeclaEsc } from '../../hooks/useTeclaEsc';
 import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import { nomeLocal, nomeOrigem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel } from '../../regras/pedidos';
-import { acaoEditarPedido, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, podeDarBaixa, textoFamilia } from '../../regras/pedidosQuadro';
+import {
+  acaoEditarPedido, entraNaUltimaEtapa, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, textoConfirmarResolvido, textoFamilia
+} from '../../regras/pedidosQuadro';
 import { formatarQtd, qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { Historico } from '../painel/Historico';
 import { CamposPedido, type FormPedido } from './CamposPedido';
-import { ConfirmarBaixa } from './ConfirmarBaixa';
+import { ConfirmarResolvido } from './ConfirmarResolvido';
 import { DividirPedido } from './DividirPedido';
 import { LinhaItemPedido, type TextoItem } from './LinhaItemPedido';
 import { ResumoAlteracoes } from './ResumoAlteracoes';
@@ -24,20 +26,21 @@ interface Props {
 }
 
 // Painel do pedido: edição com o resumo exato do que será gravado. Remontado (key) a cada versão.
+// Escolher a última etapa (Resolvido) e salvar pede confirmação: a baixa nas caixas não volta.
 export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Props) {
   useTeclaEsc(onFechar);
   const editavel = pedidoEditavel(board, pedido);
   const antes = useMemo(() => estadoDoPedido(pedido), [pedido]);
   const textosIniciais = useMemo(
-    () => Object.fromEntries(pedido.itens.map((i) => [i.itemId, { qtd: quantidadeParaCampo(i.qtd), fornecedor: i.fornecedor }])) as Record<string, TextoItem>,
-    [pedido]
+    () => Object.fromEntries(antes.itens.map((i) => [i.itemId, { qtd: quantidadeParaCampo(i.qtd), fornecedor: i.fornecedor, previsao: i.previsao }])) as Record<string, TextoItem>,
+    [antes]
   );
   const [form, setForm] = useState<FormPedido>(() => ({
     etapa: pedido.etapa, origem: pedido.origem, quem: pedido.quem, local: pedido.local, previsao: pedido.previsao, responsavel: pedido.responsavel
   }));
   const [textos, setTextos] = useState(textosIniciais);
   const [enviando, setEnviando] = useState(false);
-  const [baixando, setBaixando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
 
   const restaDe = (dealId: string, itemId: string) =>
     board.caixas.find((c) => c.dealId === dealId)?.itens.find((i) => i.id === itemId)?.resta ?? Number.POSITIVE_INFINITY;
@@ -49,29 +52,30 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     previsao: form.previsao, responsavel: form.responsavel,
     itens: antes.itens.map((i) => {
       const q = erros[i.itemId] ? null : lerQuantidade(textos[i.itemId].qtd);
-      return { ...i, qtd: q ?? i.qtd, fornecedor: textos[i.itemId].fornecedor.trim() };
+      return { ...i, qtd: q ?? i.qtd, fornecedor: textos[i.itemId].fornecedor.trim(), previsao: textos[i.itemId].previsao ?? '' };
     })
   };
   const linhas = resumoAlteracoes(antes, depois, etapas);
   const temErro = Object.keys(erros).length > 0;
+  const paraUltima = entraNaUltimaEtapa(antes.etapa, depois.etapa, etapas);
+  const nomeDestino = etapas.find((e) => e.id === depois.etapa)?.nome ?? depois.etapa;
 
-  async function salvar() {
+  async function gravar() {
     const acao = acaoEditarPedido(pedido, antes, depois);
     if (!acao || temErro) return;
     setEnviando(true);
-    await executar(acao, mensagemSucesso(acao));
+    const ok = await executar(acao, paraUltima ? `${pedido.id} movido para ${nomeDestino} · baixa registrada nas caixas` : mensagemSucesso(acao));
     setEnviando(false);
+    if (!ok) setConfirmando(false);
   }
 
-  async function baixar() {
-    const acao: Acao = { tipo: 'baixar_pedido', pedidoId: pedido.id, versao: pedido.versao };
-    setBaixando(true);
-    await executar(acao, mensagemSucesso(acao));
-    setBaixando(false);
+  function salvar() {
+    if (paraUltima) setConfirmando(true);
+    else void gravar();
   }
 
   const historico = historicoDoPedido(board.caixas, pedido.id);
-  const nomeEtapa = etapas.find((e) => e.id === pedido.etapa)?.nome ?? pedido.etapa;
+  const nomeEtapa = (pedido.finalizado ? etapas[etapas.length - 1]?.nome : undefined) ?? etapas.find((e) => e.id === pedido.etapa)?.nome ?? pedido.etapa;
   const todos = board.pedidos ?? [];
   const familia = textoFamilia(pedido, partesDoPedido(todos, pedido.id).length);
   return (
@@ -89,7 +93,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
       <div className="painel__corpo">
         {editavel ? (
           <>
-            <CamposPedido valor={form} onMudar={setForm} usuarios={board.usuarios ?? []} etapas={etapas} />
+            <CamposPedido valor={form} onMudar={(v) => { setForm(v); setConfirmando(false); }} usuarios={board.usuarios ?? []} etapas={etapas} />
             <section className="secao">
               <h3 className="secao__titulo">Itens do pedido <span>{pedido.itens.length}</span></h3>
               <ul className="linhas-itens">
@@ -99,24 +103,24 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                     <LinhaItemPedido key={i.itemId} os={i.os} nome={i.nome} un={i.un}
                       detalhe={Number.isFinite(resta) ? `resta ${qtdComUn(resta, i.un)} na caixa` : ''}
                       valor={textos[i.itemId]} erro={erros[i.itemId]}
-                      onMudar={(v) => setTextos((t) => ({ ...t, [i.itemId]: v }))} />
+                      onMudar={(v) => { setTextos((t) => ({ ...t, [i.itemId]: v })); setConfirmando(false); }} />
                   );
                 })}
               </ul>
             </section>
             <ResumoAlteracoes linhas={linhas} />
-            <div className="acoes">
-              <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro || enviando} onClick={salvar}>
-                {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
-              </button>
-            </div>
-            <DividirPedido pedido={pedido} pedidos={todos} etapas={etapas} executar={executar} />
-            {podeDarBaixa(pedido, etapas) && (
-              <section className="secao">
-                <h3 className="secao__titulo">Material chegou</h3>
-                <ConfirmarBaixa pedido={pedido} baixando={baixando} onBaixar={baixar} />
-              </section>
+            {confirmando ? (
+              <ConfirmarResolvido rotulo={`Confirmar ${nomeDestino} do ${pedido.id}`}
+                texto={textoConfirmarResolvido(pedido.itens, nomeDestino)} ocupado={enviando}
+                onConfirmar={() => void gravar()} onCancelar={() => setConfirmando(false)} />
+            ) : (
+              <div className="acoes">
+                <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro || enviando} onClick={salvar}>
+                  {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
+                </button>
+              </div>
             )}
+            <DividirPedido pedido={pedido} pedidos={todos} etapas={etapas} executar={executar} />
           </>
         ) : (
           <>
@@ -135,7 +139,9 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                 {pedido.itens.map((i) => (
                   <li key={i.itemId} className="item">
                     <span className="item__nome">OS {i.os} · {i.nome}</span>
-                    <span className="item__conta">{[formatarQtd(i.qtd, i.un, null), i.fornecedor].filter(Boolean).join(' · ')}</span>
+                    <span className="item__conta">
+                      {[formatarQtd(i.qtd, i.un, null), i.fornecedor, i.previsao && `previsão ${ddmm(i.previsao)}`].filter(Boolean).join(' · ')}
+                    </span>
                   </li>
                 ))}
               </ul>

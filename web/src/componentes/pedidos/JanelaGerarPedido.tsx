@@ -20,7 +20,7 @@ interface Props {
 }
 
 const chaveDe = ({ caixa, item }: ItemSelecionado) => chaveItem(caixa.dealId, item.id);
-const textoInicial = ({ item }: ItemSelecionado): TextoItem => ({ qtd: quantidadeParaCampo(item.resta), fornecedor: '' });
+const textoInicial = ({ item }: ItemSelecionado): TextoItem => ({ qtd: quantidadeParaCampo(item.resta), fornecedor: '', previsao: '' });
 
 export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGerado, onFechar }: Props) {
   // Itens que estavam na lista ao abrir: se uma recusa do servidor recarrega o board e algum
@@ -62,7 +62,8 @@ export function JanelaGerarPedido({ itens, usuarios, executar, onRemover, onGera
       tipo: 'gerar_pedido',
       itens: itens.map((x) => {
         const t = textoDe(x);
-        return { itemId: x.item.id, dealId: x.caixa.dealId, qtd: arredondar3(lerQuantidade(t.qtd)!), fornecedor: t.fornecedor.trim() };
+        // previsão vazia = a do pedido
+        return { itemId: x.item.id, dealId: x.caixa.dealId, qtd: arredondar3(lerQuantidade(t.qtd)!), fornecedor: t.fornecedor.trim(), previsao: t.previsao ?? '' };
       }),
       origem: form.origem, quem: form.quem.trim(), local: form.local, previsao: form.previsao, responsavel: form.responsavel
     };

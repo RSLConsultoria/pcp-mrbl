@@ -22,8 +22,8 @@ export function CardSaida({ caixa, coluna, pedidos, etapas, hoje, selecionada, o
   const abertos = itensAbertos(caixa);
   const visiveis = abertos.slice(0, ITENS_NO_CARD);
   const ocultos = abertos.length - visiveis.length;
-  const resolvida = coluna.coluna === 'resolvido';
-  const atrasada = !resolvida && seloSaidaVermelho(diasDesdeSaida(caixa, hoje));
+  const concluida = coluna.coluna === 'concluido';
+  const atrasada = !concluida && seloSaidaVermelho(diasDesdeSaida(caixa, hoje));
   return (
     <div role="button" tabIndex={0} aria-pressed={selecionada} aria-label={`OS ${caixa.os}`}
       className={selecionada ? 'card card--selecionado' : 'card'} onClick={onAbrir}
@@ -58,7 +58,8 @@ export function CardSaida({ caixa, coluna, pedidos, etapas, hoje, selecionada, o
           {ocultos > 0 && <li className="card__mais">+ {ocultos} {ocultos > 1 ? 'itens' : 'item'}</li>}
         </ul>
       )}
-      {resolvida && <div className="card__rodape"><span className="card__estado card__estado--ok">falta resolvida</span></div>}
+      {coluna.coluna === 'resolvido' && <div className="card__rodape"><span className="card__estado card__estado--ok">material resolvido · pronto para a oficina</span></div>}
+      {concluida && <div className="card__rodape"><span className="card__estado card__estado--ok">oficina recebeu</span></div>}
     </div>
   );
 }

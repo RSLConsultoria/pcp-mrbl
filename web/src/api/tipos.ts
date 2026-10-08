@@ -65,6 +65,7 @@ export interface ItemPedido {
   un: string;
   qtd: number | null;
   fornecedor: string;
+  previsao?: string; // previsão efetiva do item ('aaaa-mm-dd' ou ''): a dele ou, vazia, a do pedido
 }
 
 export interface Pedido {
@@ -75,6 +76,8 @@ export interface Pedido {
   quem: string;
   local: LocalPedido;
   previsao: string; // 'aaaa-mm-dd' ou ''
+  previsaoMaisProxima?: string; // a menor previsão dos itens (ou a do pedido)
+  previsoesDiferentes?: boolean; // itens com previsões diferentes
   responsavel: string;
   criadoEm: string;
   baixadoEm: string;
@@ -107,17 +110,18 @@ export type Acao =
   | { tipo: 'responsavel'; dealId: string; valor: string; versao: string }
   | { tipo: 'previsao_caixa'; dealId: string; valor: string; versao: string }
   | { tipo: 'obs_caixa'; dealId: string; valor: string; versao: string }
-  | ({ tipo: 'gerar_pedido'; itens: { itemId: string; dealId: string; qtd: number; fornecedor: string }[] } & DadosPedido)
+  | ({ tipo: 'gerar_pedido'; itens: { itemId: string; dealId: string; qtd: number; fornecedor: string; previsao: string }[] } & DadosPedido)
   | {
       tipo: 'editar_pedido';
       pedidoId: string;
       versao: string;
       campos: Partial<DadosPedido & { etapa: string }>;
-      itens?: { itemId: string; qtd: number; fornecedor: string }[];
+      itens?: { itemId: string; qtd: number; fornecedor: string; previsao?: string }[];
     }
   | { tipo: 'mover_pedido'; pedidoId: string; versao: string; etapa: string }
   | { tipo: 'baixar_pedido'; pedidoId: string; versao: string }
   | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; etapa: string; itens: { itemId: string; qtd: number }[] }
+  | { tipo: 'dividir_por_previsao'; pedidoId: string; versao: string }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] }
   | { tipo: 'enviar_oficina'; dealId: string; versao: string }
   | { tipo: 'oficina_recebeu'; dealId: string; versao: string };
@@ -135,6 +139,7 @@ export interface RespostaAcao {
   historico: EntradaHistorico | null;
   historicos?: { quando: string; usuario: string; texto: string; ploomes: StatusPloomes; dealId: string }[];
   pedidoId?: string;
+  partes?: string[]; // dividir_por_previsao: ids das partes criadas
 }
 
 export interface Sessao {

@@ -68,7 +68,17 @@ export interface EstadoEditavel {
   local: DadosPedido['local'];
   previsao: string;
   responsavel: string;
-  itens: { itemId: string; nome: string; un: string; qtd: number; fornecedor: string }[];
+  // previsao do item: a própria ('' = igual à do pedido)
+  itens: { itemId: string; nome: string; un: string; qtd: number; fornecedor: string; previsao: string }[];
+}
+
+// Previsão que vale para o item: a dele ou, vazia, a do pedido.
+export const previsaoEfetiva = (estado: Pick<EstadoEditavel, 'previsao'>, i: { previsao: string }): string => i.previsao || estado.previsao;
+
+// A previsão do item mudou de fato: o campo dele mudou e a previsão que vale é outra.
+export function previsaoDoItemMudou(antes: EstadoEditavel, depois: EstadoEditavel, d: EstadoEditavel['itens'][number]): boolean {
+  const a = antes.itens.find((i) => i.itemId === d.itemId);
+  return !!a && a.previsao !== d.previsao && previsaoEfetiva(antes, a) !== previsaoEfetiva(depois, d);
 }
 
 const ou = (s: string): string => (s.trim() === '' ? '—' : s);
@@ -89,6 +99,7 @@ export function resumoAlteracoes(antes: EstadoEditavel, depois: EstadoEditavel, 
     if (!a) continue;
     if (arredondar3(a.qtd) !== arredondar3(d.qtd)) out.push(`qtd de ${d.nome}: ${formatarNumero(a.qtd)} → ${formatarNumero(d.qtd)}`);
     if (a.fornecedor !== d.fornecedor) out.push(`fornecedor de ${d.nome}: ${ou(a.fornecedor)} → ${ou(d.fornecedor)}`);
+    if (previsaoDoItemMudou(antes, depois, d)) out.push(`previsão de ${d.nome}: ${dia(previsaoEfetiva(antes, a))} → ${dia(previsaoEfetiva(depois, d))}`);
   }
   return out;
 }

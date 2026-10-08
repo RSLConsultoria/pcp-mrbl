@@ -22,9 +22,11 @@ describe('colunaSaida', () => {
     { id: 'a', nome: 'A', ordem: 1 },
     { id: 'm', nome: 'M', ordem: 2 }
   ];
-  it('sem itens abertos: resolvido, mesmo com tratativa enviada', () => {
-    const c = saiu({ tratativa: 'ENVIADO', itens: [item({ status: 'RESOLVIDO', resta: 0 })] });
+  it('sem itens abertos: resolvido até ir à oficina; enviado e concluído pela tratativa', () => {
+    const c = saiu({ itens: [item({ status: 'RESOLVIDO', resta: 0 })] });
     expect(colunaSaida(c, [], etapas)).toEqual({ coluna: 'resolvido' });
+    expect(colunaSaida({ ...c, tratativa: 'ENVIADO' }, [], etapas)).toEqual({ coluna: 'enviado' });
+    expect(colunaSaida({ ...c, tratativa: 'RECEBIDO' }, [], etapas)).toEqual({ coluna: 'concluido' });
   });
   it('tratativa ENVIADO: enviado', () => {
     const c = saiu({ tratativa: 'ENVIADO', itens: [item({ pedidoId: 'PED-0001' })] });
@@ -39,7 +41,7 @@ describe('colunaSaida', () => {
   });
   it('todos com pedido: a etapa do pedido mais atrasado (pela ordem)', () => {
     const c = saiu({ itens: [item({ id: 'a', pedidoId: 'PED-0001' }), item({ id: 'b', pedidoId: 'PED-0002' })] });
-    expect(colunaSaida(c, [ped('PED-0001', 'z'), ped('PED-0002', 'z')], tres)).toEqual({ coluna: 'etapa:z' });
+    expect(colunaSaida(c, [ped('PED-0001', 'z'), ped('PED-0002', 'z')], tres)).toEqual({ coluna: 'resolvido' });
     expect(colunaSaida(c, [ped('PED-0001', 'z'), ped('PED-0002', 'm')], tres)).toEqual({ coluna: 'etapa:m', etapasDiferentes: true });
     expect(colunaSaida(c, [ped('PED-0001', 'a'), ped('PED-0002', 'm')], tres).coluna).toBe('etapa:a');
   });
@@ -53,15 +55,16 @@ describe('colunaSaida', () => {
   });
   it('ignora itens resolvidos ao olhar os pedidos', () => {
     const c = saiu({ itens: [item({ id: 'a', pedidoId: 'PED-0001' }), item({ id: 'b', status: 'RESOLVIDO', resta: 0 })] });
-    expect(colunaSaida(c, [ped('PED-0001', 'z')], etapas).coluna).toBe('etapa:z');
+    expect(colunaSaida(c, [ped('PED-0001', 'a')], etapas).coluna).toBe('etapa:a');
+    expect(colunaSaida(c, [ped('PED-0001', 'z')], etapas).coluna).toBe('resolvido');
   });
 });
 
 describe('colunasSaida', () => {
   const tres: EtapaPedido[] = [{ id: 'z', nome: 'Entregue', ordem: 3 }, { id: 'a', nome: 'A pedir', ordem: 1 }, { id: 'm', nome: 'Solicitado', ordem: 2 }];
-  it('etapas do quadro na ordem, entre Sem pedido (opcional) e Enviado/Resolvido', () => {
-    expect(colunasSaida(tres, true).map((c) => c.nome)).toEqual(['Sem pedido', 'A pedir', 'Solicitado', 'Entregue', 'Enviado à oficina', 'Resolvido']);
-    expect(colunasSaida(tres, false).map((c) => c.id)).toEqual(['etapa:a', 'etapa:m', 'etapa:z', 'enviado', 'resolvido']);
+  it('etapas do quadro na ordem (a última vira a coluna Resolvido), entre Sem pedido (opcional) e Enviado/Concluído', () => {
+    expect(colunasSaida(tres, true).map((c) => c.nome)).toEqual(['Sem pedido', 'A pedir', 'Solicitado', 'Entregue', 'Enviado à oficina', 'Concluído']);
+    expect(colunasSaida(tres, false).map((c) => c.id)).toEqual(['etapa:a', 'etapa:m', 'resolvido', 'enviado', 'concluido']);
     expect(colunasSaida(tres, true)[0].cor).toBe('var(--erro-text)');
   });
   it('nome da coluna', () => {
@@ -79,12 +82,13 @@ describe('podeEnviarOficina', () => {
     expect(podeEnviarOficina(c, [ped('PED-0001', 'z'), ped('PED-0002', 'z'), ped('PED-0002.1', 'a')], etapas)).toBe(false);
     expect(podeEnviarOficina(c, [ped('PED-0001', 'z'), ped('PED-0002', 'z'), ped('PED-0002.1', 'sumiu')], etapas)).toBe(false);
   });
-  it('item sem pedido trava; item resolvido não conta', () => {
+  it('item sem pedido trava; item resolvido não conta; tudo baixado pode ir', () => {
     const sem = saiu({ itens: [item({ id: 'a', pedidoId: 'PED-0001' }), item({ id: 'b' })] });
     expect(podeEnviarOficina(sem, [ped('PED-0001', 'z')], etapas)).toBe(false);
     const res = saiu({ itens: [item({ id: 'a', pedidoId: 'PED-0001' }), item({ id: 'b', status: 'RESOLVIDO', resta: 0 })] });
     expect(podeEnviarOficina(res, [ped('PED-0001', 'z')], etapas)).toBe(true);
     expect(podeEnviarOficina(res, [ped('PED-0001', 'z')], [])).toBe(false);
+    expect(podeEnviarOficina(saiu({ itens: [item({ status: 'RESOLVIDO', resta: 0 })] }), [], [])).toBe(true);
   });
   it('texto da regra', () => {
     expect(textoEnviarSoNaUltima(etapas)).toBe('Para enviar à oficina, todo o material precisa estar na última etapa (Z).');
@@ -93,14 +97,14 @@ describe('podeEnviarOficina', () => {
 
 describe('caixasDeSaida', () => {
   const hoje = new Date(2026, 9, 8);
-  const resolvida = (extra = {}) => saiu({ itens: [item({ status: 'RESOLVIDO', resta: 0 })], ...extra });
+  const resolvida = (extra = {}) => saiu({ itens: [item({ status: 'RESOLVIDO', resta: 0 })], tratativa: 'RECEBIDO', ...extra });
   const board = (caixas: Board['caixas']): Board => ({ geradoEm: '', caixas, avisos: [], usuarios: [] });
 
   it('só saiu com falta', () => {
     const lista = caixasDeSaida(board([saiu({ id: '1' }), caixa({ id: '2' }), caixa({ id: '3', saiu: true })]), hoje);
     expect(lista.map((c) => c.id)).toEqual(['1']);
   });
-  it('resolvido some 30 dias depois da saída ou da última ação', () => {
+  it('concluído some 30 dias depois da saída ou da última ação', () => {
     const velha = resolvida({ id: 'v', saiuEm: '2026-08-01' });
     const recente = resolvida({ id: 'r', saiuEm: '2026-09-20' });
     const comHist = resolvida({
@@ -111,7 +115,7 @@ describe('caixasDeSaida', () => {
   });
   it('saidasComColuna traz a coluna junto', () => {
     const r = saidasComColuna(board([saiu({ id: '1' }), resolvida({ id: 'r', saiuEm: '2026-09-20' })]), hoje);
-    expect(r.map((x) => [x.caixa.id, x.coluna.coluna])).toEqual([['1', 'sem_pedido'], ['r', 'resolvido']]);
+    expect(r.map((x) => [x.caixa.id, x.coluna.coluna])).toEqual([['1', 'sem_pedido'], ['r', 'concluido']]);
   });
 });
 

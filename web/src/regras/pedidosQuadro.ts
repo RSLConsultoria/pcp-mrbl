@@ -1,9 +1,10 @@
-import type { Acao, Board, Caixa, DadosPedido, EntradaHistorico, EtapaPedido, Item, Pedido } from '../api/tipos';
+import type { Acao, Board, Caixa, DadosPedido, EntradaHistorico, EtapaPedido, Item, ItemPedido, Pedido } from '../api/tipos';
 import { arredondar3, lerQuantidade } from './acoes';
 import { normalizar } from './busca';
 import { caixaEditavelNoApp } from './edicao';
 import type { EstadoEditavel, FiltroPedidos } from './pedidos';
-import { faltasSemPedido, ultimaEtapa } from './pedidos';
+import { ddmm } from './datas';
+import { faltasSemPedido, previsaoDoItemMudou, ultimaEtapa } from './pedidos';
 import { qtdComUn } from './quantidade';
 
 export const chaveItem = (dealId: string, itemId: string): string => `${dealId}|${itemId}`;
@@ -32,9 +33,23 @@ export function qtdOsDoPedido(p: Pick<Pedido, 'itens'>): number {
   return new Set(p.itens.map((i) => i.dealId)).size;
 }
 
-// Só na última etapa e enquanto a baixa não foi dada.
-export function podeDarBaixa(p: Pedido, etapas: EtapaPedido[]): boolean {
-  return !p.baixadoEm && ultimaEtapa(etapas)?.id === p.etapa;
+// A última etapa (maior ordem) é sempre a "Resolvido": entrar nela dá a baixa nas caixas.
+// O pedido finalizado (com baixa) fica nela no quadro, qualquer que seja a etapa gravada.
+export function etapaNoQuadro(p: Pick<Pedido, 'etapa' | 'finalizado'>, etapas: EtapaPedido[]): string {
+  return p.finalizado ? ultimaEtapa(etapas)?.id ?? p.etapa : p.etapa;
+}
+
+// Mudar de `de` para `para` entra na última etapa (pede confirmação: a baixa não volta).
+export function entraNaUltimaEtapa(de: string, para: string, etapas: EtapaPedido[]): boolean {
+  const u = ultimaEtapa(etapas);
+  return !!u && para === u.id && de !== u.id;
+}
+
+// "Mover para Resolvido dá baixa de 2 itens em 2 OS. A baixa não pode ser desfeita."
+export function textoConfirmarResolvido(itens: Pick<ItemPedido, 'dealId'>[], nomeUltima: string): string {
+  const n = itens.length;
+  const os = new Set(itens.map((i) => i.dealId)).size;
+  return `Mover para ${nomeUltima} dá baixa de ${n} ${n === 1 ? 'item' : 'itens'} em ${os} OS. A baixa não pode ser desfeita.`;
 }
 
 // Pedido editável no app: não finalizado e todas as OS liberadas para edição.
@@ -45,16 +60,20 @@ export function pedidoEditavel(board: Pick<Board, 'dealsEditaveis'>, p: Pedido):
 export function vazioDaEtapa(filtro: FiltroPedidos, indice: number, total: number, temBusca: boolean): string {
   if (temBusca) return 'Nenhum pedido desta etapa atende à busca.';
   const ultima = indice === total - 1;
-  if (filtro === 'finalizado') return ultima ? 'Nenhum pedido finalizado ainda.' : 'Pedidos finalizados ficam só na última etapa.';
+  if (filtro === 'finalizado') return ultima ? 'Nenhum pedido finalizado ainda.' : 'Pedidos finalizados ficam na última etapa.';
   if (indice === 0) return 'Pedidos gerados a partir das faltas entram aqui.';
-  if (ultima) return 'Quando o material chega, dê baixa nas caixas por aqui.';
+  if (ultima) return 'Mover um pedido para cá dá baixa nas caixas.';
   return 'Arraste um pedido para esta etapa.';
 }
 
 export function estadoDoPedido(p: Pedido): EstadoEditavel {
   return {
     etapa: p.etapa, origem: p.origem, quem: p.quem, local: p.local, previsao: p.previsao, responsavel: p.responsavel,
-    itens: p.itens.map((i) => ({ itemId: i.itemId, nome: i.nome, un: i.un, qtd: i.qtd ?? 0, fornecedor: i.fornecedor }))
+    itens: p.itens.map((i) => ({
+      itemId: i.itemId, nome: i.nome, un: i.un, qtd: i.qtd ?? 0, fornecedor: i.fornecedor,
+      // só a previsão própria: igual à do pedido fica vazia ("Igual à do pedido")
+      previsao: i.previsao && i.previsao !== p.previsao ? i.previsao : ''
+    }))
   };
 }
 
@@ -67,9 +86,12 @@ export function acaoEditarPedido(p: Pick<Pedido, 'id' | 'versao'>, antes: Estado
   const itens = depois.itens
     .filter((d) => {
       const a = antes.itens.find((i) => i.itemId === d.itemId);
-      return a && (arredondar3(a.qtd) !== arredondar3(d.qtd) || a.fornecedor !== d.fornecedor);
+      return a && (arredondar3(a.qtd) !== arredondar3(d.qtd) || a.fornecedor !== d.fornecedor || previsaoDoItemMudou(antes, depois, d));
     })
-    .map((d) => ({ itemId: d.itemId, qtd: arredondar3(d.qtd), fornecedor: d.fornecedor }));
+    .map((d) => ({
+      itemId: d.itemId, qtd: arredondar3(d.qtd), fornecedor: d.fornecedor,
+      ...(previsaoDoItemMudou(antes, depois, d) ? { previsao: d.previsao } : {})
+    }));
   if (Object.keys(campos).length === 0 && itens.length === 0) return null;
   return {
     tipo: 'editar_pedido', pedidoId: p.id, versao: p.versao,
@@ -118,11 +140,6 @@ export function pedidosForaDasEtapas(pedidos: Pedido[], etapas: EtapaPedido[], e
   return pedidos.filter((p) => !ids.has(etapaDe(p)));
 }
 
-// Pergunta da confirmação de Dar baixa nas caixas.
-export function textoConfirmarBaixa(p: Pick<Pedido, 'itens'>): string {
-  const n = p.itens.length;
-  return `Dar baixa de ${n} ${n === 1 ? 'item' : 'itens'} em ${qtdOsDoPedido(p)} OS? A baixa não pode ser desfeita.`;
-}
 
 // Itens que estavam na janela Gerar pedido ao abrir e saíram dela sem o usuário remover
 // (entraram em outro pedido ou foram resolvidos na recarga).
@@ -226,4 +243,54 @@ export function textoFamilia(p: Pick<Pedido, 'pai'>, partes: number): string {
   if (p.pai) return `parte de ${p.pai}`;
   if (partes > 0) return `dividido em ${partes} ${partes === 1 ? 'parte' : 'partes'}`;
   return '';
+}
+
+// ---------- previsão por item ----------
+
+// Previsão que vale para o item do pedido (a dele ou a do pedido).
+const previsaoDoItem = (p: Pick<Pedido, 'previsao'>, i: Pick<ItemPedido, 'previsao'>): string => i.previsao || p.previsao;
+
+// Datas distintas dos itens, em ordem; '' (sem previsão) por último.
+function previsoesDoPedido(p: Pick<Pedido, 'previsao' | 'itens'>): string[] {
+  const datas = [...new Set(p.itens.map((i) => previsaoDoItem(p, i)))];
+  return datas.sort((a, b) => (a === b ? 0 : a === '' ? 1 : b === '' ? -1 : a < b ? -1 : 1));
+}
+
+export function previsaoMaisProxima(p: Pick<Pedido, 'previsao' | 'itens' | 'previsaoMaisProxima'>): string {
+  if (p.previsaoMaisProxima !== undefined) return p.previsaoMaisProxima;
+  const d = previsoesDoPedido(p)[0];
+  return d || p.previsao;
+}
+
+export function previsoesDiferentes(p: Pick<Pedido, 'previsao' | 'itens' | 'previsoesDiferentes'>): boolean {
+  if (p.previsoesDiferentes !== undefined) return p.previsoesDiferentes;
+  return previsoesDoPedido(p).length > 1;
+}
+
+export interface ParteDaPrevisao { id: string; previsao: string; itens: ItemPedido[] }
+
+// Prévia do dividir_por_previsao: a data mais próxima fica no pedido; cada outra vira uma parte.
+export function partesPorPrevisao(p: Pedido, pedidos: Pedido[]): ParteDaPrevisao[] {
+  const datas = previsoesDoPedido(p).slice(1);
+  const raiz = raizDoPedido(p.id);
+  const base = Number(proximoIdParte(pedidos, p.id).split('.')[1]);
+  return datas.map((d, k) => ({
+    id: `${raiz}.${base + k}`,
+    previsao: d,
+    itens: p.itens.filter((i) => previsaoDoItem(p, i) === d)
+  }));
+}
+
+const textoData = (d: string) => (d ? `previsão ${ddmm(d)}` : 'sem previsão');
+const textoItens = (itens: ItemPedido[]) => itens.map((i) => `${i.qtd !== null ? qtdComUn(i.qtd, i.un) : '—'} de ${i.nome}`).join('; ');
+
+// Linhas da prévia: uma por parte e o que fica no pedido.
+export function resumoDivisaoPorPrevisao(p: Pedido, partes: ParteDaPrevisao[]): string[] {
+  const vao = new Set(partes.flatMap((x) => x.itens.map((i) => i.itemId)));
+  const ficam = p.itens.filter((i) => !vao.has(i.itemId));
+  const fica = ficam.length ? previsaoDoItem(p, ficam[0]) : '';
+  return [
+    ...partes.map((x) => `${x.id} (${textoData(x.previsao)}): ${textoItens(x.itens)}`),
+    `${p.id} fica com: ${textoItens(ficam)} (${textoData(fica)})`
+  ];
 }

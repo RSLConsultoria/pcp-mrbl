@@ -4,20 +4,22 @@ import { ddmm, diasEntre, textoDias } from './datas';
 import { pedidosDoItem, podeEntrarEmPedido } from './pedidos';
 
 // Colunas de Saídas: "Sem pedido" (só quando há caixa nela), as etapas do quadro de
-// Solicitações de faltas (na ordem dele), "Enviado à oficina" e "Resolvido".
-// A coluna de uma etapa tem o id `etapa:<id da etapa>`.
-export type ColunaSaidaId = 'sem_pedido' | 'enviado' | 'resolvido' | `etapa:${string}`;
+// Solicitações de faltas menos a última (na ordem dele), "Resolvido" (a última etapa:
+// material chegou, pronto para ir à oficina), "Enviado à oficina" e "Concluído" (a oficina
+// recebeu). A coluna de uma etapa tem o id `etapa:<id da etapa>`.
+export type ColunaSaidaId = 'sem_pedido' | 'resolvido' | 'enviado' | 'concluido' | `etapa:${string}`;
 
 export interface ColunaSaida { id: ColunaSaidaId; nome: string; cor: string; vazio: string }
 
-// Colunas fixas; as das etapas entram entre "Sem pedido" e "Enviado à oficina".
+// Colunas fixas; as das etapas entram entre "Sem pedido" e "Resolvido".
 export const COLUNAS_SAIDA: ColunaSaida[] = [
   { id: 'sem_pedido', nome: 'Sem pedido', cor: 'var(--erro-text)', vazio: 'Toda falta já tem pedido.' },
+  { id: 'resolvido', nome: 'Resolvido', cor: 'var(--signal)', vazio: 'Com todo o material resolvido, a caixa pode ir à oficina.' },
   { id: 'enviado', nome: 'Enviado à oficina', cor: 'var(--navy)', vazio: 'Nenhuma caixa enviada à oficina.' },
-  { id: 'resolvido', nome: 'Resolvido', cor: 'var(--success)', vazio: 'Caixas resolvidas ficam aqui por 30 dias.' }
+  { id: 'concluido', nome: 'Concluído', cor: 'var(--success)', vazio: 'Caixas concluídas ficam aqui por 30 dias.' }
 ];
 
-const DIAS_RESOLVIDO_VISIVEL = 30;
+const DIAS_CONCLUIDO_VISIVEL = 30;
 export const DIAS_SELO_VERMELHO = 7;
 
 export const idColunaEtapa = (etapaId: string): ColunaSaidaId => `etapa:${etapaId}`;
@@ -37,24 +39,21 @@ export function ultimaEtapaSaida(etapas: EtapaPedido[]): EtapaPedido | null {
   return o.length ? o[o.length - 1] : null;
 }
 
-// Colunas na ordem da tela. "Sem pedido" só aparece quando alguma caixa está nela.
+// Colunas na ordem da tela. "Sem pedido" só aparece quando alguma caixa está nela. A coluna
+// "Resolvido" leva o nome da última etapa do quadro (o padrão é Resolvido).
 export function colunasSaida(etapas: EtapaPedido[], comSemPedido: boolean): ColunaSaida[] {
-  const [sem, enviado, resolvido] = COLUNAS_SAIDA;
+  const [sem, resolvido, enviado, concluido] = COLUNAS_SAIDA;
   const o = ordenadas(etapas);
-  const doQuadro = o.map((e, idx): ColunaSaida => {
-    const ultima = idx === o.length - 1;
-    return {
-      id: idColunaEtapa(e.id),
-      nome: e.nome,
-      cor: ultima ? 'var(--signal)' : 'var(--falta)',
-      vazio: ultima ? 'Com todo o material aqui, a caixa pode ir à oficina.' : 'Nenhuma caixa com pedido nesta etapa.'
-    };
-  });
-  return [...(comSemPedido ? [sem] : []), ...doQuadro, enviado, resolvido];
+  const doQuadro = o.slice(0, -1).map((e): ColunaSaida => ({
+    id: idColunaEtapa(e.id), nome: e.nome, cor: 'var(--falta)', vazio: 'Nenhuma caixa com pedido nesta etapa.'
+  }));
+  const ultima = o[o.length - 1];
+  return [...(comSemPedido ? [sem] : []), ...doQuadro, { ...resolvido, nome: ultima?.nome ?? resolvido.nome }, enviado, concluido];
 }
 
 export function nomeColunaSaida(id: ColunaSaidaId, etapas: EtapaPedido[]): string {
   if (id.startsWith('etapa:')) return etapas.find((e) => idColunaEtapa(e.id) === id)?.nome ?? 'Outra etapa';
+  if (id === 'resolvido') return ultimaEtapaSaida(etapas)?.nome ?? 'Resolvido';
   return COLUNAS_SAIDA.find((c) => c.id === id)?.nome ?? '';
 }
 
@@ -65,12 +64,14 @@ function pedidosAbertosDaCaixa(c: Caixa): string[] {
   return ids;
 }
 
-// Caixa pela etapa do pedido mais atrasado dos itens abertos. Pedido em etapa que não
-// existe mais (ou que não está na lista) conta como a primeira etapa.
+// Coluna da caixa: Concluído (oficina recebeu), Enviado à oficina, Resolvido (sem item
+// aberto, ou todos os pedidos abertos na última etapa), Sem pedido ou a etapa do pedido mais
+// atrasado. Pedido em etapa que não existe mais conta como a primeira etapa.
 export function colunaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]): ColunaDaSaida {
+  if (c.tratativa === 'RECEBIDO') return { coluna: 'concluido' };
+  if (c.tratativa === 'ENVIADO') return { coluna: 'enviado' };
   const abertos = itensAbertos(c);
   if (abertos.length === 0) return { coluna: 'resolvido' };
-  if (c.tratativa === 'ENVIADO') return { coluna: 'enviado' };
   const com = abertos.filter((i) => pedidosDoItem(i).length > 0).length;
   if (com < abertos.length) {
     return com > 0
@@ -89,17 +90,19 @@ export function colunaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]):
     const ef = idx < 0 ? 0 : idx;
     if (ef < atraso) atraso = ef;
   }
-  const r: ColunaDaSaida = { coluna: idColunaEtapa(o[Math.min(atraso, o.length - 1)].id) };
+  const idx = Math.min(atraso, o.length - 1);
+  const r: ColunaDaSaida = { coluna: idx === o.length - 1 ? 'resolvido' : idColunaEtapa(o[idx].id) };
   if (vistas.size > 1) r.etapasDiferentes = true;
   return r;
 }
 
-// Enviar à oficina só com todo o material na última etapa: todo item aberto com pedido e
-// todos os pedidos abertos deles na última etapa (a mesma regra do servidor).
+// Enviar à oficina (a mesma regra do servidor): sem item aberto (tudo baixado), ou todo item
+// aberto com pedido e todos os pedidos abertos deles na última etapa.
 export function podeEnviarOficina(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]): boolean {
+  const abertos = itensAbertos(c);
+  if (abertos.length === 0) return true;
   const ultima = ultimaEtapaSaida(etapas);
   if (!ultima) return false;
-  const abertos = itensAbertos(c);
   if (abertos.some((i) => pedidosDoItem(i).length === 0)) return false;
   const porId = new Map(pedidos.map((p) => [p.id, p]));
   return pedidosAbertosDaCaixa(c).every((id) => porId.get(id)?.etapa === ultima.id);
@@ -113,14 +116,14 @@ export function textoEnviarSoNaUltima(etapas: EtapaPedido[]): string {
 export const TEXTO_ETAPAS_DIFERENTES = 'pedidos em etapas diferentes';
 
 function ultimaAtividade(c: Caixa): string {
-  let u = c.saiuEm;
+  let u = c.tratativaEm > c.saiuEm ? c.tratativaEm : c.saiuEm;
   for (const h of c.historico) if (h.quando > u) u = h.quando;
   return u;
 }
 
 export interface SaidaComColuna { caixa: Caixa; coluna: ColunaDaSaida }
 
-// Caixas que saíram com falta, já com a coluna (calculada uma vez só); as resolvidas
+// Caixas que saíram com falta, já com a coluna (calculada uma vez só); as concluídas
 // somem 30 dias depois da última ação.
 export function saidasComColuna(board: Board, hoje: Date): SaidaComColuna[] {
   const pedidos = board.pedidos ?? [];
@@ -129,9 +132,9 @@ export function saidasComColuna(board: Board, hoje: Date): SaidaComColuna[] {
   for (const c of board.caixas) {
     if (!c.saiu || !c.saiuComFalta) continue;
     const coluna = colunaSaida(c, pedidos, etapas);
-    if (coluna.coluna === 'resolvido') {
+    if (coluna.coluna === 'concluido') {
       const d = diasEntre(ultimaAtividade(c), hoje);
-      if (d !== null && d > DIAS_RESOLVIDO_VISIVEL) continue;
+      if (d !== null && d > DIAS_CONCLUIDO_VISIVEL) continue;
     }
     out.push({ caixa: c, coluna });
   }

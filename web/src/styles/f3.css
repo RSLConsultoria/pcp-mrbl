@@ -34,9 +34,10 @@
 .card__abrir:focus-visible { outline: 0; }
 .card:has(.card__abrir:focus-visible) { box-shadow: var(--focus-ring); }
 .card__acoes { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; cursor: default; }
-.card__acoes .baixa-pedido__abrir { width: 100%; }
-.card__acoes .confirmacao { margin-top: 0; padding: 12px; border-left-color: var(--signal); background: #fff; }
-.card__acoes .confirmacao__texto { font-size: 13px; }
+/* Confirmação de mover para a última etapa (Resolvido): dá a baixa nas caixas. */
+.confirmacao--resolvido { border-left-color: var(--signal); }
+.coluna__cards .confirmacao--resolvido { margin-top: 0; padding: 12px; background: #fff; }
+.coluna__cards .confirmacao--resolvido .confirmacao__texto { font-size: 13px; }
 .coluna--alvo { border-radius: var(--raio); background: var(--signal-tint); box-shadow: 0 0 0 1px var(--signal); }
 .coluna--alvo .coluna__cabecalho { background: transparent; }
 .quadro__sem-etapas { margin: 52px 0 0; width: 292px; }
@@ -155,6 +156,13 @@
 .divisao__item:not(.divisao__item--marcado) .divisao__qtd { opacity: .55; }
 .divisao__qtd input { width: 100%; box-sizing: border-box; font-variant-numeric: tabular-nums; }
 .divisao__erro { grid-column: 1 / -1; }
+.divisao__partes { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+/* Previsão por item: no painel ocupa a linha de baixo; na janela larga, terceira coluna. */
+.linha-item__campos--previsao .campo--previsao { grid-column: 1 / -1; }
+.janela--larga .linha-item__campos--previsao { grid-template-columns: 110px 1fr 150px; }
+.janela--larga .linha-item__campos--previsao .campo--previsao { grid-column: auto; }
+.janela--larga .linha-item:has(.linha-item__campos--previsao) { grid-template-columns: minmax(0, 1fr) 470px; }
+.janela--larga .linha-item--removivel:has(.linha-item__campos--previsao) { grid-template-columns: minmax(0, 1fr) 470px 36px; }
 .divisao__resumo { margin: 0; padding: 10px 12px; border-radius: 4px; background: #fff; font-size: 13px; line-height: 1.45; color: var(--texto); }
 
 @media (max-width: 720px) {

@@ -2,9 +2,8 @@ import type { CSSProperties, DragEvent } from 'react';
 import type { Pedido } from '../../api/tipos';
 import { ddmm } from '../../regras/datas';
 import { nomeLocal, nomeOrigem, quemDoPedido } from '../../regras/pedidos';
-import { qtdOsDoPedido, textoFamilia } from '../../regras/pedidosQuadro';
+import { previsaoMaisProxima, previsoesDiferentes, qtdOsDoPedido, textoFamilia } from '../../regras/pedidosQuadro';
 import { qtdComUn } from '../../regras/quantidade';
-import { ConfirmarBaixa } from './ConfirmarBaixa';
 
 const ITENS_NO_CARD = 3;
 
@@ -13,21 +12,20 @@ interface Props {
   partes: number; // quantas partes saíram deste pedido (dividir pedido)
   selecionado: boolean;
   arrastavel: boolean;
-  podeBaixar: boolean;
-  baixando: boolean;
   onAbrir: () => void;
   onArrastar: (id: string | null) => void;
-  onBaixar: () => Promise<void>;
 }
 
-// Card do pedido: o botão do título abre o painel (e cobre o card todo); a baixa fica no
-// rodapé, fora desse botão.
-export function CardPedido({ pedido: p, partes, selecionado, arrastavel, podeBaixar, baixando, onAbrir, onArrastar, onBaixar }: Props) {
+// Card do pedido: o botão do título abre o painel (e cobre o card todo). A previsão mostrada
+// é a mais próxima dos itens; com datas diferentes, o selo "previsões diferentes".
+export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir, onArrastar }: Props) {
   const visiveis = p.itens.slice(0, ITENS_NO_CARD);
   const ocultos = p.itens.length - visiveis.length;
   const quem = quemDoPedido(p);
   const cliente = p.origem === 'CLIENTE';
   const familia = textoFamilia(p, partes);
+  const previsao = previsaoMaisProxima(p);
+  const diferentes = previsoesDiferentes(p);
   return (
     <article aria-label={`Pedido ${p.id}`}
       className={selecionado ? 'card card--pedido card--selecionado' : 'card card--pedido'} draggable={arrastavel}
@@ -55,15 +53,19 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, podeBai
         ))}
         {ocultos > 0 && <li className="card__mais">+ {ocultos} {ocultos > 1 ? 'itens' : 'item'}</li>}
       </ul>
+      {diferentes && (
+        <div className="card__selos">
+          <span className="selo-dias" title="Os itens deste pedido têm previsões de entrega diferentes">previsões diferentes</span>
+        </div>
+      )}
       <div className="card__rodape">
-        <span className={p.previsao ? 'card__prev' : undefined}>{p.previsao ? `previsão ${ddmm(p.previsao)}` : 'sem previsão'}</span>
+        <span className={previsao ? 'card__prev' : undefined}>{previsao ? `previsão ${ddmm(previsao)}` : 'sem previsão'}</span>
         <span>{nomeLocal(p.local)}</span>
         <span title="Registro de interação gravado em cada OS do pedido">Ploomes · {qtdOsDoPedido(p)} OS</span>
       </div>
-      {(podeBaixar || p.baixadoEm) && (
+      {p.baixadoEm && (
         <footer className="card__acoes">
-          {podeBaixar && <ConfirmarBaixa pedido={p} baixando={baixando} onBaixar={onBaixar} />}
-          {p.baixadoEm && <span className="card__estado card__estado--ok">Baixa registrada nas caixas em {ddmm(p.baixadoEm)}</span>}
+          <span className="card__estado card__estado--ok">Baixa registrada nas caixas em {ddmm(p.baixadoEm)}</span>
         </footer>
       )}
     </article>
