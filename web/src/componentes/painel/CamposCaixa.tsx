@@ -30,10 +30,10 @@ export function CamposCaixa({ caixa, usuarios, executar }: Props) {
           {opcoes.map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
       </div>
-      <CampoData rotulo="Previsão geral" doBoard={caixa.previsao}
-        salvar={(v) => enviar({ tipo: 'previsao_caixa', ...base, valor: v })} />
-      <CampoTexto rotulo="Observação geral" doBoard={caixa.observacao}
-        salvar={(v) => enviar({ tipo: 'obs_caixa', ...base, valor: v })} />
+      <CampoData rotulo="Previsão geral" doBoard={caixa.previsao} versao={caixa.versao}
+        salvar={(v, versao) => enviar({ tipo: 'previsao_caixa', ...base, versao, valor: v })} />
+      <CampoTexto rotulo="Observação geral" doBoard={caixa.observacao} versao={caixa.versao}
+        salvar={(v, versao) => enviar({ tipo: 'obs_caixa', ...base, versao, valor: v })} />
     </div>
   );
 }

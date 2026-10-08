@@ -90,10 +90,10 @@ export function ItemEditavel({ item, dealId, executar }: Props) {
             ? <Baixa item={item} dealId={dealId} executar={executar} />
             : <p className="item__nota">Quantidade faltante não informada; registre pela observação.</p>}
           <div className="campos">
-            <CampoData rotulo="Previsão do item" doBoard={item.previsao}
-              salvar={(v) => enviar({ tipo: 'previsao_item', ...base, valor: v })} />
-            <CampoTexto rotulo="Observação do item" doBoard={item.obsPcp}
-              salvar={(v) => enviar({ tipo: 'obs_item', ...base, valor: v })} />
+            <CampoData rotulo="Previsão do item" doBoard={item.previsao} versao={item.versao}
+              salvar={(v, versao) => enviar({ tipo: 'previsao_item', ...base, versao, valor: v })} />
+            <CampoTexto rotulo="Observação do item" doBoard={item.obsPcp} versao={item.versao}
+              salvar={(v, versao) => enviar({ tipo: 'obs_item', ...base, versao, valor: v })} />
           </div>
         </div>
       )}
