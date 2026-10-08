@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ddmm, diasEntre, horaMinuto, paraData, textoDias } from './datas';
+import { dataHora, ddmm, diasEntre, horaMinuto, paraData, textoDias } from './datas';
 
 const HOJE = new Date(2026, 9, 7, 15, 30);
 
@@ -26,5 +26,9 @@ describe('datas', () => {
     expect(ddmm('')).toBe('');
     expect(horaMinuto(new Date(2026, 9, 7, 7, 58).toISOString())).toBe('07:58');
     expect(horaMinuto('lixo')).toBe('--:--');
+  });
+  it('dataHora mostra dd/mm HH:MM no fuso local', () => {
+    expect(dataHora(new Date(2026, 9, 7, 9, 5).toISOString())).toBe('07/10 09:05');
+    expect(dataHora('lixo')).toBe('');
   });
 });

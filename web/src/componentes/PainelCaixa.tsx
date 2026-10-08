@@ -1,32 +1,26 @@
 import { useEffect } from 'react';
-import type { Caixa, Item } from '../api/tipos';
+import type { Caixa } from '../api/tipos';
+import type { Executar } from '../hooks/useAcao';
 import { colunaDaCaixa, COLUNAS, itemAberto } from '../regras/colunas';
 import { ddmm, diasEntre, textoDias } from '../regras/datas';
-import { contaDoItem } from '../regras/quantidade';
 import { corDoTipo, nomeDoTipo } from '../regras/texto';
+import { CamposCaixa } from './painel/CamposCaixa';
+import { Historico } from './painel/Historico';
+import { ItemEditavel } from './painel/ItemEditavel';
+import { MoverPara } from './painel/MoverPara';
 
 const URL_PLOOMES = 'https://app10.ploomes.com/deal/';
 
-function ItemDoPainel({ item }: { item: Item }) {
-  const aberto = itemAberto(item);
-  const detalhes = [
-    item.previsao && `previsão ${ddmm(item.previsao)}`,
-    item.resolvidoEm && `resolvido em ${ddmm(item.resolvidoEm)}`
-  ].filter(Boolean).join(' · ');
-  return (
-    <li className={aberto ? 'item' : 'item item--resolvido'}>
-      <div className="item__topo">
-        <span className="item__nome">{item.nome}{item.cor && <span className="item__cor"> {item.cor}</span>}</span>
-        <span className={aberto ? 'tag tag--falta' : 'tag tag--ok'}>{aberto ? item.status.toLowerCase() : 'resolvido'}</span>
-      </div>
-      <span className="item__conta">{contaDoItem(item)}</span>
-      {detalhes && <span className="item__detalhe">{detalhes}</span>}
-      {(item.obsAlmox || item.obsPcp) && <span className="item__obs">{[item.obsAlmox, item.obsPcp].filter(Boolean).join(' · ')}</span>}
-    </li>
-  );
+interface Props {
+  caixa: Caixa;
+  hoje: Date;
+  usuarios: string[];
+  perfil: string;
+  executar: Executar;
+  onFechar: () => void;
 }
 
-export function PainelCaixa({ caixa, hoje, onFechar }: { caixa: Caixa; hoje: Date; onFechar: () => void }) {
+export function PainelCaixa({ caixa, hoje, usuarios, perfil, executar, onFechar }: Props) {
   useEffect(() => {
     const aoTecla = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onFechar();
@@ -36,6 +30,7 @@ export function PainelCaixa({ caixa, hoje, onFechar }: { caixa: Caixa; hoje: Dat
   }, [onFechar]);
   const coluna = COLUNAS.find((c) => c.id === colunaDaCaixa(caixa))!;
   const dias = diasEntre(caixa.registradoEm, hoje);
+  // Abertos primeiro; o sort é estável, então a ordem do board se mantém dentro de cada grupo.
   const itens = [...caixa.itens].sort((a, b) => Number(itemAberto(b)) - Number(itemAberto(a)));
   return (
     <aside className="painel" aria-label={`Caixa da OS ${caixa.os}`}>
@@ -52,16 +47,19 @@ export function PainelCaixa({ caixa, hoje, onFechar }: { caixa: Caixa; hoje: Dat
       <div className="painel__corpo">
         <dl className="leitura">
           <div><dt>Etapa</dt><dd>{coluna.nome}</dd></div>
-          <div><dt>Responsável</dt><dd>{caixa.responsavel || '—'}</dd></div>
           <div><dt>Registro</dt><dd>{caixa.registradoEm ? `${ddmm(caixa.registradoEm)} · ${textoDias(dias)}` : '—'}</dd></div>
           {caixa.saiu && <div><dt>Saiu do almoxarifado</dt><dd>{caixa.saiuEm ? ddmm(caixa.saiuEm) : 'sim'}</dd></div>}
         </dl>
+        <CamposCaixa caixa={caixa} usuarios={usuarios} executar={executar} />
         <section className="secao">
           <h3 className="secao__titulo">Itens <span>{itens.length}</span></h3>
-          <ul className="itens">{itens.map((i) => <ItemDoPainel key={i.id} item={i} />)}</ul>
+          <ul className="itens">
+            {itens.map((i) => <ItemEditavel key={i.id} item={i} dealId={caixa.dealId} executar={executar} />)}
+          </ul>
           {itens.length === 0 && <p className="vazio">Nenhum item registrado nesta caixa.</p>}
         </section>
-        <p className="painel__nota">Baixa, previsão e responsável passam a ser editáveis aqui na próxima fase.</p>
+        <MoverPara caixa={caixa} perfil={perfil} executar={executar} />
+        <Historico entradas={caixa.historico ?? []} />
       </div>
     </aside>
   );

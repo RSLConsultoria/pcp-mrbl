@@ -1,8 +1,18 @@
-import type { Item } from '../api/tipos';
+import { ApiError } from '../api/client';
+import type { Acao, EntradaHistorico, Item, StatusPloomes } from '../api/tipos';
+import { COLUNAS } from './colunas';
+import { ddmm } from './datas';
 import { formatarNumero } from './quantidade';
 
+export const MIN_JUSTIFICATIVA = 15;
+
+// Arredonda em 3 casas para comparar sem o ruído do ponto flutuante (0,1 + 0,2).
+export function arredondar3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
 // Aceita vírgula ou ponto como separador decimal.
-function lerQuantidade(texto: string): number | null {
+export function lerQuantidade(texto: string): number | null {
   const t = texto.trim().replace(',', '.');
   if (!/^\d*\.?\d+$|^\d+\.$/.test(t)) return null;
   const n = Number(t);
@@ -11,8 +21,88 @@ function lerQuantidade(texto: string): number | null {
 
 export function validarBaixa(qtdTexto: string, item: Item): string | null {
   const qtd = lerQuantidade(qtdTexto);
-  if (qtd === null || qtd <= 0) return 'Informe uma quantidade maior que zero';
+  if (qtd === null || arredondar3(qtd) <= 0) return 'Informe uma quantidade maior que zero';
   if (item.resta === null) return 'Item sem quantidade faltante registrada.';
-  if (qtd > item.resta) return `Falta só ${formatarNumero(item.resta)} ${item.un}`.trimEnd();
+  const resta = arredondar3(item.resta);
+  if (arredondar3(qtd) > resta) return `Falta só ${formatarNumero(resta)} ${item.un}`.trimEnd();
   return null;
+}
+
+export function tamanhoJustificativa(texto: string): number {
+  return texto.trim().length;
+}
+
+export function justificativaValida(texto: string): boolean {
+  return tamanhoJustificativa(texto) >= MIN_JUSTIFICATIVA;
+}
+
+// Data de <input type="date"> pronta para salvar: vazia ou com ano plausível.
+// Evita salvar a cada dígito do ano digitado (0002, 0020, 0202, 2026).
+export function dataPronta(v: string): boolean {
+  if (v === '') return true;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  return !!m && Number(m[1]) >= 2000 && Number(m[1]) <= 2099;
+}
+
+// Aviso de uma linha mostrado quando o servidor aceita a ação.
+export function mensagemSucesso(acao: Acao, item?: Pick<Item, 'nome' | 'un'>): string {
+  const nome = item?.nome ?? 'item';
+  switch (acao.tipo) {
+    case 'baixa':
+      return `Baixa registrada · ${[formatarNumero(acao.valor), item?.un].filter(Boolean).join(' ')} de ${nome}`;
+    case 'previsao_item':
+      return acao.valor ? `Previsão de ${nome}: ${ddmm(acao.valor)}` : `Previsão de ${nome} removida`;
+    case 'obs_item':
+      return acao.valor ? `Observação de ${nome} salva` : `Observação de ${nome} removida`;
+    case 'responsavel':
+      return acao.valor ? `Responsável: ${acao.valor}` : 'Responsável removido';
+    case 'previsao_caixa':
+      return acao.valor ? `Previsão da caixa: ${ddmm(acao.valor)}` : 'Previsão da caixa removida';
+    case 'obs_caixa':
+      return acao.valor ? 'Observação da caixa salva' : 'Observação da caixa removida';
+    case 'mover':
+      return `Caixa movida para ${COLUNAS.find((c) => c.id === acao.valor)?.nome ?? acao.valor}`;
+  }
+}
+
+export const MSG_CONFLITO = 'Alguém alterou esta caixa agora há pouco. Recarreguei os dados.';
+export const MSG_FALHA = 'Não foi possível salvar. Tente de novo.';
+
+export type DesfechoErro =
+  | { tipo: 'expirou' }
+  | { tipo: 'conflito'; texto: string }
+  | { tipo: 'aviso'; texto: string };
+
+// O que a tela faz quando o servidor recusa uma ação.
+export function desfechoDoErro(e: unknown): DesfechoErro {
+  if (e instanceof ApiError) {
+    if (e.status === 401) return { tipo: 'expirou' };
+    if (e.status === 409) return { tipo: 'conflito', texto: MSG_CONFLITO };
+    if ((e.status === 400 || e.status === 404) && e.message) return { tipo: 'aviso', texto: e.message };
+  }
+  return { tipo: 'aviso', texto: MSG_FALHA };
+}
+
+export const SELO_PLOOMES: Record<StatusPloomes, string> = {
+  ENVIADO: 'enviado ao Ploomes',
+  PENDENTE: 'aguardando Ploomes',
+  ERRO: 'falhou no Ploomes'
+};
+
+// Do mais novo para o mais antigo (o board já manda assim; aqui é só garantia).
+export function ordenarHistorico(h: EntradaHistorico[]): EntradaHistorico[] {
+  return [...h].sort((a, b) => (a.quando < b.quando ? 1 : a.quando > b.quando ? -1 : 0));
+}
+
+// Alvo da versão de uma ação: o item (linha da FALTANTES) ou a caixa (linha da CAIXAS_PCP).
+export function chaveDaAcao(acao: Acao): string {
+  return 'itemId' in acao ? `item:${acao.dealId}:${acao.itemId}` : `caixa:${acao.dealId}`;
+}
+
+// Ações enfileiradas antes da recarga levam a versão que a tela viu. Se a versão foi
+// trocada por uma ação nossa (antiga → nova), segue a troca até a mais recente.
+export function versaoAtual(versao: string, trocas: Map<string, string> | undefined): string {
+  let v = versao;
+  for (let i = 0; trocas && trocas.has(v) && i < 100; i++) v = trocas.get(v)!;
+  return v;
 }

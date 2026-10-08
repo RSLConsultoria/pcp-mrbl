@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { Board } from '../api/tipos';
+import type { Executar } from '../hooks/useAcao';
 import { CardCaixa } from '../componentes/CardCaixa';
 import { PainelCaixa } from '../componentes/PainelCaixa';
 import { caixaAtendeBusca } from '../regras/busca';
 import { colunaDaCaixa, COLUNAS, visivelNoQuadro } from '../regras/colunas';
 
-export function NoPloomes({ board, q, hoje }: { board: Board; q: string; hoje: Date }) {
+interface Props { board: Board; q: string; hoje: Date; perfil: string; executar: Executar }
+
+export function NoPloomes({ board, q, hoje, perfil, executar }: Props) {
   const [selId, setSelId] = useState<string | null>(null);
   const visiveis = board.caixas.filter((c) => visivelNoQuadro(c, hoje) && caixaAtendeBusca(c, q));
   const sel = board.caixas.find((c) => c.id === selId) ?? null;
+  const fechar = useCallback(() => setSelId(null), []);
   return (
     <div className="quadro">
       <div className="quadro__rolagem">
@@ -34,7 +38,10 @@ export function NoPloomes({ board, q, hoje }: { board: Board; q: string; hoje: D
           })}
         </div>
       </div>
-      {sel && <PainelCaixa caixa={sel} hoje={hoje} onFechar={() => setSelId(null)} />}
+      {sel && (
+        <PainelCaixa key={sel.id} caixa={sel} hoje={hoje} usuarios={board.usuarios ?? []} perfil={perfil}
+          executar={executar} onFechar={fechar} />
+      )}
     </div>
   );
 }

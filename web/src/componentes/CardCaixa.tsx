@@ -48,6 +48,7 @@ export function CardCaixa({ caixa, hoje, selecionada, onAbrir }: Props) {
           {abertos.length ? `${abertos.length} ${abertos.length > 1 ? 'itens faltando' : 'item faltando'}` : 'nada faltando'}
         </span>
         {dias !== null && <span>{textoDias(dias)}</span>}
+        {caixa.previsao && <span className="card__prev">previsão {ddmm(caixa.previsao)}</span>}
         {resolvidos > 0 && <span className="card__resolvidos">+ {resolvidos} {resolvidos > 1 ? 'itens já resolvidos' : 'item já resolvido'}</span>}
       </div>
     </div>
