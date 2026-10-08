@@ -17,10 +17,17 @@ export interface FaltaSemPedido {
   itens: Item[];
 }
 
+// Pedidos abertos com o item (o original e as partes dele). Board antigo sem pedidoIds
+// cai no pedidoId.
+export function pedidosDoItem(i: Pick<Item, 'pedidoId'> & { pedidoIds?: string[] }): string[] {
+  if (i.pedidoIds && i.pedidoIds.length > 0) return i.pedidoIds;
+  return i.pedidoId ? [i.pedidoId] : [];
+}
+
 // Item aberto que pode entrar num pedido: editável, sem pedido e com o quanto falta conhecido
 // (sem resta não há quantidade para validar, e a janela Gerar pedido travaria nele).
 export function podeEntrarEmPedido(i: Item): boolean {
-  return i.editavel && i.pedidoId === '' && i.resta !== null;
+  return i.editavel && pedidosDoItem(i).length === 0 && i.resta !== null;
 }
 
 // Itens abertos, editáveis no app e sem pedido, agrupados por caixa.

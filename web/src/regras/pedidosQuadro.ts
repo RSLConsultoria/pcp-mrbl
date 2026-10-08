@@ -1,9 +1,10 @@
 import type { Acao, Board, Caixa, DadosPedido, EntradaHistorico, EtapaPedido, Item, Pedido } from '../api/tipos';
-import { arredondar3 } from './acoes';
+import { arredondar3, lerQuantidade } from './acoes';
 import { normalizar } from './busca';
 import { caixaEditavelNoApp } from './edicao';
 import type { EstadoEditavel, FiltroPedidos } from './pedidos';
 import { faltasSemPedido, ultimaEtapa } from './pedidos';
+import { qtdComUn } from './quantidade';
 
 export const chaveItem = (dealId: string, itemId: string): string => `${dealId}|${itemId}`;
 
@@ -84,7 +85,9 @@ export function historicoDoPedido(caixas: Caixa[], pedidoId: string): EntradaHis
   const cita = (texto: string) => {
     let i = texto.indexOf(pedidoId);
     while (i >= 0) {
-      if (!/\d/.test(texto.charAt(i + pedidoId.length))) return true;
+      // PED-0002 não casa com PED-00021 nem com a parte PED-0002.1
+      const resto = texto.slice(i + pedidoId.length);
+      if (!/^\d|^\.\d/.test(resto)) return true;
       i = texto.indexOf(pedidoId, i + 1);
     }
     return false;
@@ -140,4 +143,87 @@ export function textoContagemFaltas(totalVisivel: number, marcados: number, marc
   if (marcados === 0) return `${totalVisivel} ${totalVisivel === 1 ? 'item' : 'itens'}`;
   const fora = marcados - marcadosVisiveis;
   return `${marcados} ${marcados > 1 ? 'selecionados' : 'selecionado'}${fora > 0 ? ` (${fora} fora da busca)` : ''}`;
+}
+
+// ---------- dividir pedido ----------
+
+// Família: PED-0002.3 -> PED-0002.
+export const raizDoPedido = (id: string): string => id.split('.')[0];
+
+// Partes (pedidos filhos) de um pedido original.
+export function partesDoPedido(pedidos: Pedido[], id: string): Pedido[] {
+  return pedidos.filter((p) => p.pai === id);
+}
+
+// Id que a próxima parte vai receber: maior parte da família + 1 (o servidor confirma).
+export function proximoIdParte(pedidos: Pedido[], id: string): string {
+  const raiz = raizDoPedido(id);
+  let max = 0;
+  for (const p of pedidos) {
+    const m = /^(PED-\d+)\.(\d+)$/.exec(p.id);
+    if (m && m[1] === raiz) max = Math.max(max, Number(m[2]));
+  }
+  return `${raiz}.${max + 1}`;
+}
+
+// Etapas para onde a parte pode ir (todas menos a atual); a padrão é a seguinte à atual.
+export function etapasParaDividir(etapas: EtapaPedido[], atual: string): { opcoes: EtapaPedido[]; padrao: string } {
+  const ordenadas = etapasOrdenadas(etapas);
+  const opcoes = ordenadas.filter((e) => e.id !== atual);
+  const idx = ordenadas.findIndex((e) => e.id === atual);
+  const seguinte = idx >= 0 ? ordenadas[idx + 1] : undefined;
+  return { opcoes, padrao: seguinte?.id ?? opcoes[0]?.id ?? '' };
+}
+
+export interface LinhaDivisao { itemId: string; chegou: boolean; qtd: string }
+
+export interface ValidacaoDivisao {
+  erros: Record<string, string>; // por itemId
+  geral: string | null;
+  itens: { itemId: string; qtd: number }[]; // o que vai para a parte nova (quando não há erro)
+}
+
+// Mesmas regras do servidor: ao menos um item, 0 < qtd <= qtd do item no pedido e não mover tudo.
+export function validarDivisao(p: Pick<Pedido, 'itens'>, linhas: LinhaDivisao[]): ValidacaoDivisao {
+  const erros: Record<string, string> = {};
+  const itens: { itemId: string; qtd: number }[] = [];
+  let sobra = false;
+  for (const i of p.itens) {
+    const l = linhas.find((x) => x.itemId === i.itemId);
+    const total = i.qtd ?? 0;
+    if (!l || !l.chegou) { if (total > 0) sobra = true; continue; }
+    const q = lerQuantidade(l.qtd);
+    if (q === null || arredondar3(q) <= 0) { erros[i.itemId] = 'Informe uma quantidade maior que zero'; continue; }
+    if (i.qtd === null) { erros[i.itemId] = 'Item sem quantidade no pedido.'; continue; }
+    if (arredondar3(q) > arredondar3(total)) { erros[i.itemId] = `O pedido tem só ${qtdComUn(arredondar3(total), i.un)} de ${i.nome}.`; continue; }
+    if (arredondar3(total - q) > 0) sobra = true;
+    itens.push({ itemId: i.itemId, qtd: arredondar3(q) });
+  }
+  let geral: string | null = null;
+  if (Object.keys(erros).length === 0) {
+    if (itens.length === 0) geral = 'Marque ao menos um item que chegou.';
+    else if (!sobra) geral = 'Para mover o pedido inteiro, arraste o card.';
+  }
+  return { erros, geral, itens };
+}
+
+// "PED-0002.1 vai para Recebidos com: 20 UN de ZÍPER; o PED-0002 fica com: 32 UN de ZÍPER".
+export function resumoDivisao(p: Pick<Pedido, 'id' | 'itens'>, itens: { itemId: string; qtd: number }[], parteId: string, nomeEtapa: string): string {
+  const vai: string[] = [];
+  const fica: string[] = [];
+  for (const i of p.itens) {
+    const m = itens.find((x) => x.itemId === i.itemId);
+    const total = i.qtd ?? 0;
+    if (m) vai.push(`${qtdComUn(m.qtd, i.un)} de ${i.nome}`);
+    const resto = arredondar3(total - (m?.qtd ?? 0));
+    if (resto > 0) fica.push(`${qtdComUn(resto, i.un)} de ${i.nome}`);
+  }
+  return `${parteId} vai para ${nomeEtapa} com: ${vai.join('; ')}; o ${p.id} fica com: ${fica.join('; ')}`;
+}
+
+// Linha do card e do painel: "parte de PED-0002" na parte; "dividido em N partes" no original.
+export function textoFamilia(p: Pick<Pedido, 'pai'>, partes: number): string {
+  if (p.pai) return `parte de ${p.pai}`;
+  if (partes > 0) return `dividido em ${partes} ${partes === 1 ? 'parte' : 'partes'}`;
+  return '';
 }

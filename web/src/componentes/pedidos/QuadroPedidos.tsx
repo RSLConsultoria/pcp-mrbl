@@ -3,7 +3,7 @@ import type { Acao, Board, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
 import type { FiltroPedidos } from '../../regras/pedidos';
-import { pedidoEditavel, pedidosForaDasEtapas, podeDarBaixa, vazioDaEtapa } from '../../regras/pedidosQuadro';
+import { partesDoPedido, pedidoEditavel, pedidosForaDasEtapas, podeDarBaixa, vazioDaEtapa } from '../../regras/pedidosQuadro';
 import { ColunaQuadro } from '../ColunaQuadro';
 import { CardPedido } from './CardPedido';
 
@@ -70,7 +70,7 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
   const card = (p: Pedido) => {
     const editavel = pedidoEditavel(board, p);
     return (
-      <CardPedido key={p.id} pedido={p} selecionado={p.id === selId} arrastavel={editavel}
+      <CardPedido key={p.id} pedido={p} partes={partesDoPedido(board.pedidos ?? [], p.id).length} selecionado={p.id === selId} arrastavel={editavel}
         podeBaixar={editavel && etapaDe(p) === p.etapa && podeDarBaixa(p, etapas)} baixando={baixando === p.id}
         onAbrir={() => onAbrir(p.id === selId ? null : p.id)} onArrastar={setArrastando} onBaixar={() => baixar(p)} />
     );

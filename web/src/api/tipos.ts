@@ -18,7 +18,8 @@ export interface Item {
   resolvidoEm: string; // 'aaaa-mm-dd' ou ''
   versao: string;
   editavel: boolean;
-  pedidoId: string; // pedido aberto que contém o item, ou ''
+  pedidoId: string; // primeiro pedido aberto que contém o item, ou ''
+  pedidoIds: string[]; // todos os pedidos abertos com o item (o original e as partes dele)
 }
 
 export type StatusPloomes = 'PENDENTE' | 'ENVIADO' | 'ERRO';
@@ -67,7 +68,8 @@ export interface ItemPedido {
 }
 
 export interface Pedido {
-  id: string; // PED-0001
+  id: string; // PED-0001, ou PED-0001.2 (parte de uma divisão)
+  pai: string; // pedido original de uma parte; '' no original
   etapa: string; // id da etapa
   origem: OrigemPedido;
   quem: string;
@@ -115,6 +117,7 @@ export type Acao =
     }
   | { tipo: 'mover_pedido'; pedidoId: string; versao: string; etapa: string }
   | { tipo: 'baixar_pedido'; pedidoId: string; versao: string }
+  | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; etapa: string; itens: { itemId: string; qtd: number }[] }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] }
   | { tipo: 'enviar_oficina'; dealId: string; versao: string }
   | { tipo: 'oficina_recebeu'; dealId: string; versao: string };

@@ -2,7 +2,7 @@ import type { CSSProperties, DragEvent } from 'react';
 import type { Pedido } from '../../api/tipos';
 import { ddmm } from '../../regras/datas';
 import { nomeLocal, nomeOrigem, quemDoPedido } from '../../regras/pedidos';
-import { qtdOsDoPedido } from '../../regras/pedidosQuadro';
+import { qtdOsDoPedido, textoFamilia } from '../../regras/pedidosQuadro';
 import { qtdComUn } from '../../regras/quantidade';
 import { ConfirmarBaixa } from './ConfirmarBaixa';
 
@@ -10,6 +10,7 @@ const ITENS_NO_CARD = 3;
 
 interface Props {
   pedido: Pedido;
+  partes: number; // quantas partes saíram deste pedido (dividir pedido)
   selecionado: boolean;
   arrastavel: boolean;
   podeBaixar: boolean;
@@ -21,11 +22,12 @@ interface Props {
 
 // Card do pedido: o botão do título abre o painel (e cobre o card todo); a baixa fica no
 // rodapé, fora desse botão.
-export function CardPedido({ pedido: p, selecionado, arrastavel, podeBaixar, baixando, onAbrir, onArrastar, onBaixar }: Props) {
+export function CardPedido({ pedido: p, partes, selecionado, arrastavel, podeBaixar, baixando, onAbrir, onArrastar, onBaixar }: Props) {
   const visiveis = p.itens.slice(0, ITENS_NO_CARD);
   const ocultos = p.itens.length - visiveis.length;
   const quem = quemDoPedido(p);
   const cliente = p.origem === 'CLIENTE';
+  const familia = textoFamilia(p, partes);
   return (
     <article aria-label={`Pedido ${p.id}`}
       className={selecionado ? 'card card--pedido card--selecionado' : 'card card--pedido'} draggable={arrastavel}
@@ -43,6 +45,7 @@ export function CardPedido({ pedido: p, selecionado, arrastavel, podeBaixar, bai
         <span className={cliente ? 'selo-origem selo-origem--cliente' : 'selo-origem'}>{nomeOrigem(p.origem)}</span>
       </div>
       {quem && <div className="card__peca">{quem}</div>}
+      {familia && <div className="card__familia">{familia}</div>}
       <ul className="card__itens">
         {visiveis.map((i) => (
           <li key={i.itemId} className="card__item">

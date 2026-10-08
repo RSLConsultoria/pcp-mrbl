@@ -140,6 +140,23 @@
 .etapas__trava { grid-column: 2 / -1; font-size: 12px; color: var(--suave); }
 .etapas__adicionar { align-self: flex-start; }
 
+/* Dividir pedido: partes PED-xxxx.n */
+.card__familia { margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--suave); }
+.painel__familia { font-weight: 600; }
+.divisao { gap: 12px; padding: 14px 16px; border: 1px solid var(--borda); border-left: 3px solid var(--signal); border-radius: var(--raio); background: var(--canvas); }
+.divisao .secao__titulo { margin: 0; }
+.divisao__ajuda { margin: 0; font-size: 13px; line-height: 1.45; color: var(--suave); }
+.divisao__itens { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.divisao__item { display: grid; grid-template-columns: minmax(0, 1fr) 120px; align-items: end; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--borda); }
+.divisao__item:first-child { border-top: 0; padding-top: 0; }
+.divisao__marca { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.divisao__marca input { margin: 3px 0 0; width: 16px; height: 16px; accent-color: var(--navy); flex: none; }
+.divisao__nome { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--texto); }
+.divisao__item:not(.divisao__item--marcado) .divisao__qtd { opacity: .55; }
+.divisao__qtd input { width: 100%; box-sizing: border-box; font-variant-numeric: tabular-nums; }
+.divisao__erro { grid-column: 1 / -1; }
+.divisao__resumo { margin: 0; padding: 10px 12px; border-radius: 4px; background: #fff; font-size: 13px; line-height: 1.45; color: var(--texto); }
+
 @media (max-width: 720px) {
   .barra { flex-wrap: wrap; }
   .barra__direita { margin-left: 0; flex-wrap: wrap; }

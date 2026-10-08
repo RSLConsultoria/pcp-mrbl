@@ -8,7 +8,7 @@ const etapas: EtapaPedido[] = [
   { id: 'z', nome: 'Z', ordem: 2 }
 ];
 const ped = (id: string, etapa: string): Pedido => ({
-  id, etapa, origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '',
+  id, pai: '', etapa, origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '', responsavel: '',
   criadoEm: '', baixadoEm: '', versao: '', finalizado: false, itens: []
 });
 const saiu = (o = {}) => caixa({ saiu: true, saiuComFalta: true, saiuEm: '2026-10-01', ...o });

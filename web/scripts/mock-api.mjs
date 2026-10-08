@@ -40,7 +40,8 @@ const estado = {
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-9) }),
     caixa(90005, 'PEDIDO', 'COSTURA', 'PECA TESTE E', 'CLIENTE BETA', 'Maria', [
       item('e1', 'FITA GROSGRAIN 25MM', 'MT', 300)
-    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-6) }),
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-6),
+      historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Material no almoxarifado)')] }),
     caixa(90006, 'PEDIDO', 'ACABAMENTO', 'PECA TESTE F', 'CLIENTE GAMA', 'Lucca', [
       item('f1', 'ELASTICO CHATO 30MM', 'MT', 80, { separada: 20, status: 'PARCIAL' })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4), tratativa: 'ENVIADO', tratativaEm: diaIso(-2) })
@@ -52,7 +53,9 @@ const estado = {
   pedidos: [
     { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA' }] },
     { id: 'PED-0002', etapa: 'aguardando', origem: 'CLIENTE', quem: 'CLIENTE BETA', local: 'BRAGANCA', previsao: diaIso(10), responsavel: 'Lucca', criadoEm: diaIso(-4), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'b1', dealId: '700002', qtd: 52, fornecedor: '' }] },
-    { id: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 300, fornecedor: 'AVIAMENTOS DELTA' }] },
+    // já dividido: 120 MT chegaram e viraram o PED-0003.1; o PED-0003 espera os outros 180 MT
+    { id: 'PED-0003', etapa: 'aguardando', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 180, fornecedor: 'AVIAMENTOS DELTA' }] },
+    { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-1), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
     { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Maria', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
     // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
     { id: 'PED-0005', etapa: 'conferencia', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(4), responsavel: 'Renata', criadoEm: diaIso(-15), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd2', dealId: '700004', qtd: 120, fornecedor: '' }] }
@@ -74,7 +77,15 @@ const aberto = (it) => it.status !== 'RESOLVIDO' && resta(it) > 0;
 const caixaDe = (dealId) => estado.caixas.find((c) => c.dealId === dealId);
 const editavel = (dealId) => estado.dealsEditaveis.includes(dealId);
 const itemDe = (dealId, itemId) => caixaDe(dealId)?.itens.find((i) => i.id === itemId);
-const pedidoAbertoDoItem = (dealId, itemId) => estado.pedidos.find((p) => !p.baixadoEm && p.itens.some((i) => i.dealId === dealId && i.itemId === itemId));
+// Pedido PED-nnnn ou parte PED-nnnn.k (dividir pedido); itens com qtd 0 foram todos para uma parte.
+const numPedido = (id) => parseInt(id.slice(4), 10);
+const raizDoPedido = (id) => id.split('.')[0];
+const parteDoPedido = (id) => Number(id.split('.')[1] ?? 0);
+const compararPedidos = (a, b) => numPedido(a.id) - numPedido(b.id) || parteDoPedido(a.id) - parteDoPedido(b.id);
+const itensValidos = (p) => p.itens.filter((i) => i.qtd !== 0);
+const pedidosAbertosDoItem = (dealId, itemId) => [...estado.pedidos].sort(compararPedidos)
+  .filter((p) => !p.baixadoEm && itensValidos(p).some((i) => i.dealId === dealId && i.itemId === itemId));
+const pedidoAbertoDoItem = (dealId, itemId) => pedidosAbertosDoItem(dealId, itemId)[0];
 const semAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const slug = (s) => semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'etapa';
 const chaveNome = (s) => semAcento(s).trim().toLowerCase();
@@ -116,10 +127,11 @@ function montarBoard() {
     usuarios: USUARIOS,
     dealsEditaveis: estado.dealsEditaveis,
     etapasPedido: estado.etapas.map((e, i) => ({ ...e, ordem: i + 1 })),
-    pedidos: estado.pedidos.map((p) => ({
+    pedidos: [...estado.pedidos].sort(compararPedidos).map((p) => ({
       ...p,
+      pai: p.pai ?? '',
       finalizado: p.etapa === ultimaEtapa() && !!p.baixadoEm,
-      itens: p.itens.map((i) => {
+      itens: itensValidos(p).map((i) => {
         const it = itemDe(i.dealId, i.itemId);
         return { ...i, os: caixaDe(i.dealId).os, nome: it.nome, un: it.un };
       })
@@ -133,7 +145,9 @@ function montarBoard() {
       })),
       itens: c.itens.map((i) => ({
         ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
-        editavel: editavel(c.dealId) && aberto(i), pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
+        editavel: editavel(c.dealId) && aberto(i),
+        pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((p) => p.id),
+        pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
       }))
     }))
   };
@@ -189,7 +203,7 @@ function pedidoPorId(id) {
   if (!p) throw new Erro(404, 'Pedido não encontrado.');
   return p;
 }
-const dealsDe = (p) => [...new Set(p.itens.map((i) => i.dealId))];
+const dealsDe = (p) => [...new Set(itensValidos(p).map((i) => i.dealId))];
 function pedidoEditavel(p) {
   exigirEditavel(dealsDe(p));
   if (p.baixadoEm) throw new Erro(409, 'Pedido finalizado não pode ser alterado.');
@@ -212,7 +226,7 @@ function gerarPedido(c, usuario) {
     if (resta(it) <= 0) throw bad('Item sem quantidade faltante registrada.');
     if (i.qtd > resta(it)) throw bad(`Falta só ${fmtNum(resta(it))} ${it.un} de ${it.nome}`);
   }
-  const n = Math.max(0, ...estado.pedidos.map((p) => Number(p.id.slice(4)))) + 1;
+  const n = Math.max(0, ...estado.pedidos.map((p) => numPedido(p.id))) + 1;
   const id = `PED-${String(n).padStart(4, '0')}`;
   const versao = agoraIso();
   estado.pedidos.push({
@@ -312,6 +326,48 @@ function baixarPedido(c, usuario) {
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
 
+function dividirPedido(c, usuario) {
+  const p = pedidoPorId(c.pedidoId);
+  pedidoEditavel(p);
+  conferirVersao(p.versao, c.versao);
+  const etapa = estado.etapas.find((e) => e.id === c.etapa);
+  if (!etapa) throw bad('Etapa inválida.');
+  if (!Array.isArray(c.itens) || c.itens.length === 0) throw bad('Marque ao menos um item que chegou.');
+  const vistos = new Set();
+  const movidos = [];
+  for (const m of c.itens) {
+    if (vistos.has(m.itemId)) throw bad('Item repetido no pedido.');
+    vistos.add(m.itemId);
+    if (!num(m.qtd) || m.qtd <= 0) throw bad('Informe uma quantidade maior que zero');
+    const pi = itensValidos(p).find((i) => i.itemId === m.itemId);
+    if (!pi) throw bad('Item não está no pedido.');
+    const it = itemDe(pi.dealId, pi.itemId);
+    if (m.qtd > pi.qtd) throw bad(`O pedido tem só ${fmtNum(pi.qtd)} ${it.un} de ${it.nome}.`);
+    movidos.push({ pi, it, qtd: m.qtd });
+  }
+  const sobra = itensValidos(p).some((pi) => {
+    const m = movidos.find((x) => x.pi === pi);
+    return !m || pi.qtd - m.qtd > 0;
+  });
+  if (!sobra) throw bad('Para mover o pedido inteiro, arraste o card.');
+  const raiz = raizDoPedido(p.id);
+  const k = Math.max(0, ...estado.pedidos.filter((x) => raizDoPedido(x.id) === raiz).map((x) => parteDoPedido(x.id))) + 1;
+  const id = `${raiz}.${k}`;
+  const versao = agoraIso();
+  estado.pedidos.push({
+    id, pai: raiz, etapa: etapa.id, origem: p.origem, quem: p.quem, local: p.local, previsao: p.previsao, responsavel: p.responsavel,
+    criadoEm: diaIso(), baixadoEm: '', versao,
+    itens: movidos.map((m) => ({ itemId: m.pi.itemId, dealId: m.pi.dealId, qtd: m.qtd, fornecedor: m.pi.fornecedor }))
+  });
+  for (const m of movidos) m.pi.qtd = Math.round((m.pi.qtd - m.qtd) * 1000) / 1000;
+  p.versao = versao;
+  const historicos = [];
+  const porDeal = new Map();
+  for (const m of movidos) porDeal.set(m.pi.dealId, [...(porDeal.get(m.pi.dealId) ?? []), `${fmtNum(m.qtd)} ${m.it.un} de ${m.it.nome}`]);
+  for (const [d, partes] of porDeal) registrar(d, usuario, `${usuario} dividiu ${p.id}: ${partes.join('; ')} foram para ${id} (${etapa.nome})`, historicos);
+  return resposta(versao, historicos, { pedidoId: id });
+}
+
 function salvarEtapas(c) {
   const lista = c.etapas;
   if (!Array.isArray(lista) || lista.length < 2) throw bad('O quadro precisa de pelo menos 2 etapas.');
@@ -368,6 +424,7 @@ function processar(corpo, usuario) {
     case 'editar_pedido': return editarPedido(corpo, usuario);
     case 'mover_pedido': return moverPedido(corpo, usuario);
     case 'baixar_pedido': return baixarPedido(corpo, usuario);
+    case 'dividir_pedido': return dividirPedido(corpo, usuario);
     case 'salvar_etapas': return salvarEtapas(corpo);
     case 'enviar_oficina': return oficina(corpo, usuario, false);
     case 'oficina_recebeu': return oficina(corpo, usuario, true);

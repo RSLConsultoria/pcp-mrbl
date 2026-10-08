@@ -6,11 +6,12 @@ import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import { nomeLocal, nomeOrigem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel } from '../../regras/pedidos';
-import { acaoEditarPedido, estadoDoPedido, historicoDoPedido, pedidoEditavel, podeDarBaixa } from '../../regras/pedidosQuadro';
+import { acaoEditarPedido, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, podeDarBaixa, textoFamilia } from '../../regras/pedidosQuadro';
 import { formatarQtd, qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { Historico } from '../painel/Historico';
 import { CamposPedido, type FormPedido } from './CamposPedido';
 import { ConfirmarBaixa } from './ConfirmarBaixa';
+import { DividirPedido } from './DividirPedido';
 import { LinhaItemPedido, type TextoItem } from './LinhaItemPedido';
 import { ResumoAlteracoes } from './ResumoAlteracoes';
 
@@ -71,6 +72,8 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
 
   const historico = historicoDoPedido(board.caixas, pedido.id);
   const nomeEtapa = etapas.find((e) => e.id === pedido.etapa)?.nome ?? pedido.etapa;
+  const todos = board.pedidos ?? [];
+  const familia = textoFamilia(pedido, partesDoPedido(todos, pedido.id).length);
   return (
     <aside className="painel" aria-label={`Pedido ${pedido.id}`}>
       <div className="painel__cabecalho">
@@ -81,6 +84,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
         <div className="painel__os">{pedido.id}</div>
         <div className="painel__peca">{[nomeOrigem(pedido.origem), quemDoPedido(pedido)].filter(Boolean).join(' · ')}</div>
         <div className="painel__meta">{[pedido.criadoEm && `criado ${ddmm(pedido.criadoEm)}`, nomeEtapa].filter(Boolean).join(' · ')}</div>
+        {familia && <div className="painel__meta painel__familia">{familia}</div>}
       </div>
       <div className="painel__corpo">
         {editavel ? (
@@ -106,6 +110,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                 {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
               </button>
             </div>
+            <DividirPedido pedido={pedido} pedidos={todos} etapas={etapas} executar={executar} />
             {podeDarBaixa(pedido, etapas) && (
               <section className="secao">
                 <h3 className="secao__titulo">Material chegou</h3>

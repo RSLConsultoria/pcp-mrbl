@@ -1,7 +1,7 @@
 import type { Board, Caixa, EtapaPedido, Item, Pedido } from '../api/tipos';
 import { itensAbertos } from './colunas';
 import { ddmm, diasEntre, textoDias } from './datas';
-import { podeEntrarEmPedido } from './pedidos';
+import { pedidosDoItem, podeEntrarEmPedido } from './pedidos';
 
 export type ColunaSaidaId = 'sem_tratativa' | 'aguardando' | 'almoxarifado' | 'enviado' | 'resolvido';
 
@@ -31,7 +31,7 @@ export function colunaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]):
   const abertos = itensAbertos(c);
   if (abertos.length === 0) return { coluna: 'resolvido' };
   if (c.tratativa === 'ENVIADO') return { coluna: 'enviado' };
-  const com = abertos.filter((i) => i.pedidoId !== '').length;
+  const com = abertos.filter((i) => pedidosDoItem(i).length > 0).length;
   if (com < abertos.length) {
     return com > 0
       ? { coluna: 'sem_tratativa', parcial: { com, total: abertos.length } }
@@ -39,7 +39,8 @@ export function colunaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]):
   }
   const ultima = idUltimaEtapa(etapas);
   const porId = new Map(pedidos.map((p) => [p.id, p]));
-  const tudoNaUltima = ultima !== '' && abertos.every((i) => porId.get(i.pedidoId)?.etapa === ultima);
+  // Todos os pedidos abertos (original e partes) de todos os itens abertos na última etapa.
+  const tudoNaUltima = ultima !== '' && abertos.every((i) => pedidosDoItem(i).every((id) => porId.get(id)?.etapa === ultima));
   return { coluna: tudoNaUltima ? 'almoxarifado' : 'aguardando' };
 }
 
@@ -81,12 +82,16 @@ export function seloSaidaVermelho(dias: number | null): boolean {
   return dias !== null && dias >= DIAS_SELO_VERMELHO;
 }
 
-// "PED-0044 · Solicitado" quando o item está num pedido aberto; senão "sem pedido".
-export function textoPedidoDoItem(i: Pick<Item, 'pedidoId'>, pedidos: Pedido[], etapas: EtapaPedido[]): string {
-  if (!i.pedidoId) return 'sem pedido';
-  const p = pedidos.find((x) => x.id === i.pedidoId);
-  const etapa = p && etapas.find((e) => e.id === p.etapa)?.nome;
-  return etapa ? `${i.pedidoId} · ${etapa}` : i.pedidoId;
+// "PED-0044 · Solicitado" quando o item está num pedido aberto; senão "sem pedido". Com
+// o pedido dividido, um por parte: "PED-0044 · Solicitado, PED-0044.1 · Recebidos".
+export function textoPedidoDoItem(i: Pick<Item, 'pedidoId'> & { pedidoIds?: string[] }, pedidos: Pedido[], etapas: EtapaPedido[]): string {
+  const ids = pedidosDoItem(i);
+  if (ids.length === 0) return 'sem pedido';
+  return ids.map((id) => {
+    const p = pedidos.find((x) => x.id === id);
+    const etapa = p && etapas.find((e) => e.id === p.etapa)?.nome;
+    return etapa ? `${id} · ${etapa}` : id;
+  }).join(', ');
 }
 
 // "saiu 18/09 · há 19 dias".

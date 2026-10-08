@@ -75,6 +75,8 @@ export function mensagemSucesso(
       return `${acao.pedidoId} movido para ${extra.etapa ?? acao.etapa}`;
     case 'baixar_pedido':
       return `Baixa do ${acao.pedidoId} registrada`;
+    case 'dividir_pedido':
+      return `${acao.pedidoId} dividido · ${extra.pedidoId ?? 'nova parte'} em ${extra.etapa ?? acao.etapa}`;
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
     case 'enviar_oficina':

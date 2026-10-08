@@ -4,7 +4,8 @@ export function item(o: Partial<Item> = {}): Item {
   return {
     id: 'i1', nome: 'ZIPER METAL', cor: 'preto', un: 'UN', necessaria: 52, separada: 0,
     falta: 52, faltaG: null, status: 'ABERTO', baixada: 0, resta: 52, restaG: null, obsAlmox: '', obsPcp: '',
-    previsao: '', resolvidoEm: '', versao: '', editavel: true, pedidoId: '', ...o
+    previsao: '', resolvidoEm: '', versao: '', editavel: true, pedidoId: '',
+    pedidoIds: o.pedidoIds ?? (o.pedidoId ? [o.pedidoId] : []), ...o
   };
 }
 

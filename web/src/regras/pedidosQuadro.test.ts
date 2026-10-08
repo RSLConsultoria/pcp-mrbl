@@ -16,7 +16,7 @@ const etapas: EtapaPedido[] = [
 const it1 = { itemId: 'i1', dealId: '1', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 20, fornecedor: '' };
 const it2 = { itemId: 'i2', dealId: '2', os: '90002', nome: 'ZÍPER', un: 'UN', qtd: 5, fornecedor: 'ALFA' };
 const ped = (o: Partial<Pedido> = {}): Pedido => ({
-  id: 'PED-0044', etapa: 'a', origem: 'FORNECEDOR', quem: 'BETA', local: 'BRAGANCA', previsao: '', responsavel: 'Maria',
+  id: 'PED-0044', pai: '', etapa: 'a', origem: 'FORNECEDOR', quem: 'BETA', local: 'BRAGANCA', previsao: '', responsavel: 'Maria',
   criadoEm: '', baixadoEm: '', versao: 'v1', finalizado: false, itens: [it1, it2], ...o
 });
 
