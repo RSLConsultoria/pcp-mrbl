@@ -1,3 +1,5 @@
+> **08/10/2026 (Saídas segue Solicitações):** decisão do dono: toda falta é tratada antes de a caixa ir à oficina, então Saídas com falta conversa com Solicitações de faltas. As colunas de Saídas passam a ser **Sem pedido** (só aparece quando alguma caixa tem item aberto sem pedido) + **as mesmas etapas do quadro de Solicitações, na ordem dele** + Enviado à oficina + Resolvido; saem Sem tratativa, Aguardando material e Material no almoxarifado. A caixa fica na etapa do **pedido mais atrasado** dos seus itens abertos (pedido em etapa que saiu do quadro conta como a primeira e aparece como "Outra etapa"). **Enviar à oficina** só aparece (em ouro) com todo o material na última etapa; o servidor recusa com 409 `O material desta caixa ainda não chegou (etapa <última etapa>).`
+
 > **08/10/2026 (dividir pedido):** quando parte de um pedido chega (entrega parcial do fornecedor ou do cliente), o painel do pedido tem **Dividir pedido**: marca os itens que chegaram, opcionalmente só parte da quantidade (ex.: 20 de 52 UN), e a etapa de destino. Isso vira um pedido novo `<PAI>.<n>` (`PED-0002.1`; n = maior parte existente da família + 1) ligado ao original pela coluna `pai` da PEDIDOS, com origem/quem/local/previsão/responsável copiados. O original fica com o resto na etapa dele (item que foi todo vira `qtd` 0 na PEDIDOS_ITENS e é ignorado na leitura). Mover o pedido inteiro continua sendo arrastar o card (400 `Para mover o pedido inteiro, arraste o card.`). Dividir uma parte cria outra parte da mesma raiz. Ação `dividir_pedido { pedidoId, versao, etapa, itens: [{ itemId, qtd }] }`, resposta com `pedidoId` = id da parte nova; histórico por OS: `Lucca dividiu PED-0002: 20 UN de ZÍPER METAL foram para PED-0002.1 (Recebidos)` (vários itens separados por `; `). Cada parte tem baixa própria. Um item pode estar em vários pedidos abertos **da mesma família**; de outra família continua 409. No board, o pedido ganha `pai` ('' no original) e o item ganha `pedidoIds` (todos os pedidos abertos com o item; `pedidoId` = o primeiro).
 
 > **08/10/2026:** finalizado = pedido com baixa registrada (baixado_em), independente da etapa — evita reabrir pedidos ao mudar as etapas.
@@ -69,7 +71,7 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
 | `dividir_pedido` | `{ pedidoId, versao, etapa, itens: [{ itemId, qtd }] }` | Cria a parte `<PAI>.<n>` na etapa escolhida com os itens/quantidades que chegaram; o original fica com o resto. | `Lucca dividiu PED-0002: 20 UN de ZÍPER METAL foram para PED-0002.1 (Recebidos)` |
 | `baixar_pedido` | `{ pedidoId, versao }` | Só na última etapa. Dá baixa da `qtd` de cada item na FALTANTES (soma em `qtd_baixada`, limitada ao que resta) e grava `baixado_em`. | `Lucca deu baixa do PED-0044: 20 MT de VIÉS… (resta 80 MT)` |
 | `salvar_etapas` | `{ etapas: [{ id?, nome }] }` | Regrava a ETAPAS_PEDIDO. Valida: no mínimo 2 etapas, nomes não vazios e únicos, e não remove etapa que tenha pedido aberto. | Não gera histórico de OS. |
-| `enviar_oficina` | `{ dealId, versao }` | Grava `tratativa = ENVIADO`. | `Lucca enviou o material faltante à oficina` |
+| `enviar_oficina` | `{ dealId, versao }` | Só com todo o material na última etapa (todo item aberto com pedido aberto e todos os pedidos abertos dele, original e partes, na última etapa); senão 409 `O material desta caixa ainda não chegou (etapa <nome da última etapa>).` Grava `tratativa = ENVIADO`. | `Lucca enviou o material faltante à oficina` |
 | `oficina_recebeu` | `{ dealId, versao }` | Baixa total dos itens abertos da caixa e `tratativa = RECEBIDO`. | `Lucca registrou que a oficina recebeu o material` |
 
 **Validações:**
@@ -84,18 +86,17 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
 
 ### Saídas com falta
 
-- **Colunas:** Sem tratativa · Aguardando material · Material no almoxarifado · Enviado à oficina · Resolvido.
+- **Colunas:** Sem pedido (ponto vermelho; só aparece quando alguma caixa está nela) · **as etapas do quadro de Solicitações de faltas, com os mesmos nomes e na mesma ordem** (`etapasPedido`) · Enviado à oficina · Resolvido. Se as etapas mudam em Solicitações, as colunas de Saídas mudam junto.
 - **Etapa da caixa** (só caixas que saíram com falta), na ordem:
   1. sem itens abertos → Resolvido;
   2. `tratativa = ENVIADO` → Enviado à oficina;
-  3. algum item aberto sem pedido → Sem tratativa, com o selo "parcial · N de M com pedido" quando houver pedidos parciais;
-  4. todos os pedidos dos itens abertos na última etapa → Material no almoxarifado;
-  5. senão → Aguardando material.
+  3. algum item aberto sem pedido → Sem pedido, com o selo "parcial · N de M com pedido" quando parte dos itens já tem pedido;
+  4. senão → a etapa do **pedido mais atrasado** (menor ordem) entre todos os pedidos abertos (original e partes, `pedidoIds`) dos itens abertos. Pedido em etapa que não existe mais conta como a primeira etapa.
 - "Resolvido" fica visível por 30 dias depois da última ação, como no "Saiu sem faltas".
-- **Card:** OS, peça, cliente, até 3 itens com o que resta e o pedido (`PED-0044 · Solicitado`) ou "sem pedido", e o selo "saiu dd/mm · há N dias".
+- **Card:** OS, peça, cliente, até 3 itens com o que resta e o(s) pedido(s) com a etapa (`PED-0044 · Solicitado`; pedido em etapa que saiu do quadro: `PED-0044 · Outra etapa`) ou "sem pedido", e o selo "saiu dd/mm · há N dias". Quando os pedidos da caixa estão em etapas diferentes, o selo "pedidos em etapas diferentes".
 - **Painel:** os mesmos dados mais os botões:
-  - **Selecionar para pedido:** abre Solicitações com os itens da caixa já marcados;
-  - **Enviar à oficina** (principal, em ouro, quando a coluna é Material no almoxarifado);
+  - **Selecionar para pedido:** abre Solicitações com os itens da caixa já marcados (principal quando a coluna é Sem pedido);
+  - **Enviar à oficina:** só aparece, em ouro, quando todos os pedidos abertos de todos os itens abertos estão na última etapa e nenhum item está sem pedido. Senão o painel explica: "Para enviar à oficina, todo o material precisa estar na última etapa (<nome>)." O servidor aplica a mesma regra (409);
   - **Oficina recebeu:** pede confirmação dentro do painel, sem `confirm()`.
   - Também mostra o histórico.
 
