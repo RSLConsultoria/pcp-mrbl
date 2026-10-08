@@ -26,9 +26,8 @@ describe('colunas', () => {
     expect(colunaDaCaixa(caixa({ saiu: true }))).toBe('saiu_com');
     expect(colunaDaCaixa(caixa({ saiu: true, itens: [resolvido] }))).toBe('saiu_sem');
   });
-  it('colunaDaCaixa respeita colunaManual', () => {
-    expect(colunaDaCaixa(caixa({ colunaManual: 'saiu_sem' }))).toBe('saiu_sem');
-    expect(colunaDaCaixa(caixa({ colunaManual: null }))).toBe('falta_pedido');
+  it('colunaDaCaixa ignora colunaManual (a coluna vem dos dados)', () => {
+    expect(colunaDaCaixa({ ...caixa(), colunaManual: 'saiu_sem' } as never)).toBe('falta_pedido');
   });
   it('visivelNoQuadro esconde "saiu sem faltas" depois de 30 dias', () => {
     const saiuSem = (saiuEm: string) => caixa({ saiu: true, saiuEm, itens: [] });

@@ -7,9 +7,9 @@ import { PainelCaixa } from '../componentes/PainelCaixa';
 import { caixaAtendeBusca } from '../regras/busca';
 import { colunaDaCaixa, COLUNAS, visivelNoQuadro } from '../regras/colunas';
 
-interface Props { board: Board; q: string; hoje: Date; perfil: string; executar: Executar }
+interface Props { board: Board; q: string; hoje: Date; executar: Executar }
 
-export function NoPloomes({ board, q, hoje, perfil, executar }: Props) {
+export function NoPloomes({ board, q, hoje, executar }: Props) {
   const [selId, setSelId] = useState<string | null>(null);
   const visiveis = board.caixas.filter((c) => visivelNoQuadro(c, hoje) && caixaAtendeBusca(c, q));
   const sel = board.caixas.find((c) => c.id === selId) ?? null;
@@ -40,7 +40,7 @@ export function NoPloomes({ board, q, hoje, perfil, executar }: Props) {
         </div>
       </div>
       {sel && (
-        <PainelCaixa key={sel.id} caixa={sel} hoje={hoje} usuarios={board.usuarios ?? []} perfil={perfil}
+        <PainelCaixa key={sel.id} caixa={sel} hoje={hoje} usuarios={board.usuarios ?? []}
           editavel={caixaEditavelNoApp(board, sel)} executar={executar} onFechar={fechar} />
       )}
     </div>

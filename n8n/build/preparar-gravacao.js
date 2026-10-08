@@ -124,21 +124,6 @@ function msDaData(v) {
   return Date.parse(t);
 }
 
-// A coluna manual vale ate algum item da caixa ser atualizado depois dela.
-function colunaManualDe(cp, linhas) {
-  if (!cp) return null;
-  var col = texto(cp.coluna_manual);
-  if (!NOMES_COLUNA.hasOwnProperty(col)) return null;
-  var desde = Date.parse(texto(cp.coluna_manual_em));
-  if (isNaN(desde)) return col;
-  var mexeu = (linhas || []).some(function (l) {
-    var a = texto(l.atualizado_em_app) === '' ? NaN : Date.parse(texto(l.atualizado_em_app));
-    var d = texto(l.data_atualizacao) === '' ? NaN : msDaData(l.data_atualizacao);
-    return (!isNaN(a) && a > desde) || (!isNaN(d) && d > desde);
-  });
-  return mexeu ? null : col;
-}
-
 function historicoDoDeal(historico, dealId) {
   return (historico || []).filter(function (h) { return h && texto(h.deal_id) === dealId; })
     .sort(function (a, b) {
@@ -266,7 +251,6 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     var cp = cpPorDeal[caixa.dealId];
     caixa.previsao = cp ? dataISO(cp.previsao, ano) : '';
     caixa.observacao = cp ? texto(cp.observacao) : '';
-    caixa.colunaManual = colunaManualDe(cp, linhas);
     caixa.versao = cp ? texto(cp.atualizado_em) : '';
     if (cp) caixa.responsavel = texto(cp.responsavel);
     caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);
@@ -344,20 +328,10 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
 
 // ----- src/acoes.js -----
 // ===== src/acoes.js =====
-// Regras das acoes de escrita (baixa, previsao, observacao, responsavel,
-// mover). Funcoes puras; sem import/export. Depende de util.js.
+// Regras das acoes de escrita (baixa, previsao, observacao, responsavel). Funcoes puras; sem import/export. Depende de util.js.
 
-var TIPOS_ACAO = ['baixa', 'previsao_item', 'obs_item', 'responsavel', 'previsao_caixa', 'obs_caixa', 'mover'];
+var TIPOS_ACAO = ['baixa', 'previsao_item', 'obs_item', 'responsavel', 'previsao_caixa', 'obs_caixa'];
 var TIPOS_ITEM = ['baixa', 'previsao_item', 'obs_item'];
-
-var NOMES_COLUNA = {
-  falta_pedido: 'Itens faltando · Pedido',
-  completa_pedido: 'Caixa completa · Pedido',
-  falta_corte: 'Itens faltando · Corte',
-  completa_corte: 'Caixa completa · Corte',
-  saiu_com: 'Saiu com faltas',
-  saiu_sem: 'Saiu sem faltas'
-};
 
 function linhaDeGravacao(gravacao) {
   var linha = Object.assign({}, gravacao.campos);
@@ -383,6 +357,7 @@ function dataValida(v) {
 function validarAcao(corpo, perfil) {
   if (!corpo || typeof corpo !== 'object') return erroAcao(400, 'Corpo inválido.');
   var tipo = corpo.tipo;
+  if (tipo === 'mover') return erroAcao(400, 'Mover caixa foi desativado: as etapas vêm do Ploomes.');
   if (TIPOS_ACAO.indexOf(tipo) < 0) return erroAcao(400, 'Tipo de ação inválido.');
   var dealId = texto(corpo.dealId);
   if (dealId === '') return erroAcao(400, 'Caixa não informada.');
@@ -390,7 +365,6 @@ function validarAcao(corpo, perfil) {
   if (TIPOS_ITEM.indexOf(tipo) >= 0 && itemId === '') return erroAcao(400, 'Item não informado.');
 
   var valor = corpo.valor;
-  var justificativa = '';
   if (tipo === 'baixa') {
     var n = typeof valor === 'number' ? valor : numero(valor);
     if (n !== null && isFinite(n)) n = arredondar(n);
@@ -407,18 +381,10 @@ function validarAcao(corpo, perfil) {
     if (typeof valor !== 'string') return erroAcao(400, 'Responsável inválido.');
     valor = valor.trim();
     if (valor.length > 100) return erroAcao(400, 'Nome do responsável muito longo.');
-  } else if (tipo === 'mover') {
-    if (typeof valor !== 'string' || !NOMES_COLUNA.hasOwnProperty(valor)) return erroAcao(400, 'Coluna inválida.');
-    justificativa = texto(corpo.justificativa);
-    if (justificativa.length > 500) return erroAcao(400, 'Justificativa muito longa (máximo 500 caracteres).');
-    if (perfil !== 'ADM' && justificativa.length < 15) {
-      return erroAcao(400, 'Justificativa precisa de pelo menos 15 caracteres.');
-    }
   }
 
   var acao = { tipo: tipo, dealId: dealId, valor: valor, versao: texto(corpo.versao) };
   if (TIPOS_ITEM.indexOf(tipo) >= 0) acao.itemId = itemId;
-  if (tipo === 'mover') acao.justificativa = justificativa;
   return { ok: true, acao: acao };
 }
 
@@ -458,9 +424,6 @@ function textoDaAcao(acao, ctx) {
         : u + ' definiu previsão geral da caixa: ' + dataCurta(acao.valor);
     case 'obs_caixa':
       return u + ' anotou na caixa: "' + acao.valor + '"';
-    case 'mover':
-      return u + ' moveu para ' + NOMES_COLUNA[acao.valor] +
-        (acao.justificativa ? ' — Justificativa: ' + acao.justificativa : '');
   }
   return '';
 }
@@ -506,10 +469,6 @@ function aplicarAcao(acao, alvo, contexto) {
     if (acao.tipo === 'responsavel') campos.responsavel = acao.valor;
     else if (acao.tipo === 'previsao_caixa') campos.previsao = acao.valor;
     else if (acao.tipo === 'obs_caixa') campos.observacao = acao.valor;
-    else if (acao.tipo === 'mover') {
-      campos.coluna_manual = acao.valor;
-      campos.coluna_manual_em = agora;
-    }
     campos.atualizado_em = agora;
   }
 

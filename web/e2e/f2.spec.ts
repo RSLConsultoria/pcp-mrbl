@@ -91,33 +91,6 @@ test('trocar o responsável envia o tipo responsavel', async ({ page }) => {
   expect(mock.bodies).toEqual([{ tipo: 'responsavel', dealId: '700001', valor: 'Lucca', versao: VERSAO_CAIXA }]);
 });
 
-test('ADM move a caixa na hora', async ({ page }) => {
-  const mock = await preparar(page, { perfil: 'ADM' });
-  const painel = await abrir(page);
-  await painel.getByRole('button', { name: 'Caixa completa · Pedido' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Caixa movida para Caixa completa · Pedido' })).toBeVisible();
-  await expect(painel.getByLabel('Justificativa (obrigatória)')).toHaveCount(0);
-  expect(mock.bodies).toEqual([{ tipo: 'mover', dealId: '700001', valor: 'completa_pedido', versao: VERSAO_CAIXA }]);
-});
-
-test('não-ADM só confirma o move com 15 caracteres de justificativa', async ({ page }) => {
-  const mock = await preparar(page, { perfil: 'PCP' });
-  const painel = await abrir(page);
-  await painel.getByRole('button', { name: 'Caixa completa · Pedido' }).click();
-  expect(mock.bodies).toHaveLength(0);
-  const confirmar = painel.getByRole('button', { name: 'Confirmar e mover' });
-  await expect(confirmar).toBeDisabled();
-  await painel.getByLabel('Justificativa (obrigatória)').fill('curta demais');
-  await expect(painel.getByText('12/15')).toBeVisible();
-  await expect(confirmar).toBeDisabled();
-  const texto = 'material conferido na mesa';
-  await painel.getByLabel('Justificativa (obrigatória)').fill(texto);
-  await expect(confirmar).toBeEnabled();
-  await confirmar.click();
-  await expect(page.getByRole('status').filter({ hasText: 'Caixa movida para Caixa completa · Pedido' })).toBeVisible();
-  expect(mock.bodies).toEqual([{ tipo: 'mover', dealId: '700001', valor: 'completa_pedido', versao: VERSAO_CAIXA, justificativa: texto }]);
-});
-
 test('resposta 409 mostra o aviso de conflito e recarrega o board', async ({ page }) => {
   const mock = await preparar(page, { resposta: () => ({ status: 409, json: { erro: 'Conflito de versão.' } }) });
   const painel = await abrir(page);

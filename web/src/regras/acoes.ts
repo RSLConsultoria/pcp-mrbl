@@ -1,10 +1,8 @@
 import { ApiError } from '../api/client';
 import type { Acao, EntradaHistorico, Item, StatusPloomes } from '../api/tipos';
-import { COLUNAS } from './colunas';
 import { ddmm } from './datas';
 import { qtdComUn } from './quantidade';
 
-export const MIN_JUSTIFICATIVA = 15;
 
 // Arredonda em 3 casas para comparar sem o ruído do ponto flutuante (0,1 + 0,2).
 export function arredondar3(n: number): number {
@@ -26,14 +24,6 @@ export function validarBaixa(qtdTexto: string, item: Item): string | null {
   const resta = arredondar3(item.resta);
   if (arredondar3(qtd) > resta) return `Falta só ${qtdComUn(resta, item.un)}`;
   return null;
-}
-
-export function tamanhoJustificativa(texto: string): number {
-  return texto.trim().length;
-}
-
-export function justificativaValida(texto: string): boolean {
-  return tamanhoJustificativa(texto) >= MIN_JUSTIFICATIVA;
 }
 
 // Data de <input type="date"> pronta para salvar: vazia ou com ano plausível.
@@ -70,8 +60,6 @@ export function mensagemSucesso(acao: Acao, item?: Pick<Item, 'nome' | 'un'>): s
       return acao.valor ? `Previsão da caixa: ${ddmm(acao.valor)}` : 'Previsão da caixa removida';
     case 'obs_caixa':
       return acao.valor ? 'Observação da caixa salva' : 'Observação da caixa removida';
-    case 'mover':
-      return `Caixa movida para ${COLUNAS.find((c) => c.id === acao.valor)?.nome ?? acao.valor}`;
   }
 }
 

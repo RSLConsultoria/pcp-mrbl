@@ -43,21 +43,6 @@ function msDaData(v) {
   return Date.parse(t);
 }
 
-// A coluna manual vale ate algum item da caixa ser atualizado depois dela.
-function colunaManualDe(cp, linhas) {
-  if (!cp) return null;
-  var col = texto(cp.coluna_manual);
-  if (!NOMES_COLUNA.hasOwnProperty(col)) return null;
-  var desde = Date.parse(texto(cp.coluna_manual_em));
-  if (isNaN(desde)) return col;
-  var mexeu = (linhas || []).some(function (l) {
-    var a = texto(l.atualizado_em_app) === '' ? NaN : Date.parse(texto(l.atualizado_em_app));
-    var d = texto(l.data_atualizacao) === '' ? NaN : msDaData(l.data_atualizacao);
-    return (!isNaN(a) && a > desde) || (!isNaN(d) && d > desde);
-  });
-  return mexeu ? null : col;
-}
-
 function historicoDoDeal(historico, dealId) {
   return (historico || []).filter(function (h) { return h && texto(h.deal_id) === dealId; })
     .sort(function (a, b) {
@@ -185,7 +170,6 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     var cp = cpPorDeal[caixa.dealId];
     caixa.previsao = cp ? dataISO(cp.previsao, ano) : '';
     caixa.observacao = cp ? texto(cp.observacao) : '';
-    caixa.colunaManual = colunaManualDe(cp, linhas);
     caixa.versao = cp ? texto(cp.atualizado_em) : '';
     if (cp) caixa.responsavel = texto(cp.responsavel);
     caixa.historico = historicoDoDeal(extras.historico, caixa.dealId);

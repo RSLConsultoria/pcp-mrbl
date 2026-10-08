@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client';
 import {
-  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, justificativaValida, mensagemSucesso, MSG_CONFLITO, MSG_FALHA,
-  ordenarHistorico, passoDaData, SELO_PLOOMES, tamanhoJustificativa, validarBaixa, versaoAtual
+  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_FALHA,
+  ordenarHistorico, passoDaData, SELO_PLOOMES, validarBaixa, versaoAtual
 } from './acoes';
 import { item } from './teste-util';
 
@@ -29,14 +29,6 @@ describe('validarBaixa', () => {
   });
   it('item sem quantidade faltante não recebe baixa', () => {
     expect(validarBaixa('1', item({ falta: null, resta: null }))).toBe('Item sem quantidade faltante registrada.');
-  });
-});
-
-describe('justificativa', () => {
-  it('conta sem os espaços das pontas e exige 15', () => {
-    expect(tamanhoJustificativa('   abc   ')).toBe(3);
-    expect(justificativaValida('  12345678901234  ')).toBe(false);
-    expect(justificativaValida(' 123456789012345 ')).toBe(true);
   });
 });
 
@@ -102,7 +94,6 @@ describe('mensagemSucesso', () => {
     expect(mensagemSucesso({ ...base, tipo: 'previsao_caixa', valor: '' })).toBe('Previsão da caixa removida');
     expect(mensagemSucesso({ ...base, tipo: 'obs_caixa', valor: 'x' })).toBe('Observação da caixa salva');
     expect(mensagemSucesso({ ...base, tipo: 'obs_caixa', valor: '' })).toBe('Observação da caixa removida');
-    expect(mensagemSucesso({ ...base, tipo: 'mover', valor: 'completa_pedido' })).toBe('Caixa movida para Caixa completa · Pedido');
   });
 });
 

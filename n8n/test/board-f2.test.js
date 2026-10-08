@@ -63,8 +63,8 @@ test('item do texto da CAIXAS GANHAS nao e editavel', () => {
 
 test('caixa: previsao, observacao, versao e responsavel da CAIXAS_PCP; sem aba continua igual', () => {
   const sem = montar([linha({ responsavel: 'Maria' })]).caixas[0];
-  assert.deepEqual([sem.previsao, sem.observacao, sem.versao, sem.colunaManual, sem.historico],
-    ['', '', '', null, []]);
+  assert.deepEqual([sem.previsao, sem.observacao, sem.versao, sem.historico],
+    ['', '', '', []]);
   const c = montar([linha({ responsavel: 'Maria' })], {
     caixasPcp: [cp({ previsao: '2026-10-12', observacao: 'ligar', atualizado_em: 'V1', responsavel: 'Joana' })]
   }).caixas[0];
@@ -74,17 +74,9 @@ test('caixa: previsao, observacao, versao e responsavel da CAIXAS_PCP; sem aba c
   assert.equal(c.responsavel, 'Joana');
 });
 
-test('colunaManual: vale ate um item ser atualizado depois; data_atualizacao e Brasilia', () => {
+test('board nao traz mais colunaManual', () => {
   const manual = { coluna_manual: 'saiu_sem', coluna_manual_em: '2026-10-07T12:00:00.000Z' };
-  const col = (l) => montar([linha(l)], { caixasPcp: [cp(manual)] }).caixas[0].colunaManual;
-  assert.equal(col({}), 'saiu_sem');
-  assert.equal(col({ atualizado_em_app: '2026-10-07T11:59:59.000Z' }), 'saiu_sem');
-  assert.equal(col({ atualizado_em_app: '2026-10-07T12:00:01.000Z' }), null);
-  // 08:59 em Brasilia = 11:59 UTC (antes); 09:01 = 12:01 UTC (depois)
-  assert.equal(col({ data_atualizacao: '2026-10-07 08:59' }), 'saiu_sem');
-  assert.equal(col({ data_atualizacao: '2026-10-07 09:01' }), null);
-  assert.equal(montar([linha({})], { caixasPcp: [cp({ coluna_manual: 'invalida', coluna_manual_em: manual.coluna_manual_em })] })
-    .caixas[0].colunaManual, null);
+  assert.equal('colunaManual' in montar([linha({})], { caixasPcp: [cp(manual)] }).caixas[0], false);
 });
 
 test('historico: por deal, mais novo primeiro, corte em 30', () => {
@@ -154,16 +146,13 @@ test('processarAcao: 200 de item limpa o cache e devolve gravacao e historico', 
   assert.equal(r.historico.email, 'ana@x.com');
 });
 
-test('processarAcao: caixa sem linha na CAIXAS_PCP; perfil nao ADM exige justificativa', () => {
+test('processarAcao: caixa sem linha na CAIXAS_PCP', () => {
   const e = {}; const cab = sessao(e, 'ana@x.com');
   const lin = { faltantes: FALT, caixasPcp: [] };
   const r = limpo(ctx.processarAcao(e, cab, { tipo: 'previsao_caixa', dealId: '600001', valor: '2026-10-12', versao: '' }, lin, T0, gerarId));
   assert.equal(r.status, 200);
   assert.equal(r.gravacao.aba, 'CAIXAS_PCP');
   assert.equal(r.gravacao.campos.os, '90001');
-  const e2 = {}; const cab2 = sessao(e2, 'pcp@x.com');
-  const r2 = limpo(ctx.processarAcao(e2, cab2, { tipo: 'mover', dealId: '600001', valor: 'saiu_sem', versao: '', justificativa: 'curta' }, lin, T0, gerarId));
-  assert.equal(r2.status, 400);
   const r3 = limpo(ctx.processarAcao(e, cab, { tipo: 'obs_caixa', dealId: '600001', valor: 'x', versao: 'errada' },
     { faltantes: FALT, caixasPcp: [cp({ atualizado_em: 'C1' })] }, T0, gerarId));
   assert.equal(r3.status, 409);

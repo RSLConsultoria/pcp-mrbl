@@ -1,3 +1,5 @@
+> 08/10/2026: 'Mover para' removido a pedido do dono; a coluna vem só dos dados (Ploomes dita as etapas).
+
 # F2 — Escritas no quadro "No Ploomes"
 
 Data: 07/10/2026 · Autor: Lucca (RSL Consultoria) · Status: aguardando revisão

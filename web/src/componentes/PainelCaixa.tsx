@@ -8,7 +8,6 @@ import { corDoTipo, nomeDoTipo } from '../regras/texto';
 import { CamposCaixa } from './painel/CamposCaixa';
 import { Historico } from './painel/Historico';
 import { ItemEditavel } from './painel/ItemEditavel';
-import { MoverPara } from './painel/MoverPara';
 
 const URL_PLOOMES = 'https://app10.ploomes.com/deal/';
 
@@ -16,13 +15,12 @@ interface Props {
   caixa: Caixa;
   hoje: Date;
   usuarios: string[];
-  perfil: string;
   editavel: boolean;
   executar: Executar;
   onFechar: () => void;
 }
 
-export function PainelCaixa({ caixa, hoje, usuarios, perfil, editavel, executar, onFechar }: Props) {
+export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFechar }: Props) {
   useEffect(() => {
     const aoTecla = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onFechar();
@@ -61,7 +59,6 @@ export function PainelCaixa({ caixa, hoje, usuarios, perfil, editavel, executar,
           </ul>
           {itens.length === 0 && <p className="vazio">Nenhum item registrado nesta caixa.</p>}
         </section>
-        {editavel && <MoverPara caixa={caixa} perfil={perfil} executar={executar} />}
         <Historico entradas={caixa.historico ?? []} />
       </div>
     </aside>

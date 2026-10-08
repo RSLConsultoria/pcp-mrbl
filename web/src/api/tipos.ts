@@ -1,5 +1,3 @@
-import type { ColunaId } from '../regras/colunas';
-
 // Contrato com o webhook pcp-board (n8n/src/montarCaixas.js).
 export interface Item {
   id: string;
@@ -47,7 +45,6 @@ export interface Caixa {
   saiuEm: string;
   previsao: string; // 'aaaa-mm-dd' ou ''
   observacao: string;
-  colunaManual: ColunaId | null;
   versao: string;
   historico: EntradaHistorico[];
   itens: Item[];
@@ -68,8 +65,7 @@ export type Acao =
   | { tipo: 'obs_item'; dealId: string; itemId: string; valor: string; versao: string }
   | { tipo: 'responsavel'; dealId: string; valor: string; versao: string }
   | { tipo: 'previsao_caixa'; dealId: string; valor: string; versao: string }
-  | { tipo: 'obs_caixa'; dealId: string; valor: string; versao: string }
-  | { tipo: 'mover'; dealId: string; valor: ColunaId; versao: string; justificativa?: string };
+  | { tipo: 'obs_caixa'; dealId: string; valor: string; versao: string };
 
 export interface RespostaAcao {
   versao: string;

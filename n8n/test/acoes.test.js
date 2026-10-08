@@ -20,7 +20,6 @@ test('validarAcao: tipos validos', () => {
   assert.strictEqual(ok({ ...base, tipo: 'responsavel', valor: 'Maria' }).ok, true);
   assert.strictEqual(ok({ ...base, tipo: 'previsao_caixa', valor: '2026-10-09' }).ok, true);
   assert.strictEqual(ok({ ...base, tipo: 'obs_caixa', valor: 'a'.repeat(500) }).ok, true);
-  assert.strictEqual(ok({ ...base, tipo: 'mover', valor: 'saiu_sem' }).ok, true);
 });
 
 test('validarAcao: invalidos', () => {
@@ -41,22 +40,13 @@ test('validarAcao: invalidos', () => {
   bad({ ...base, tipo: 'previsao_caixa', valor: '09/10' });
   bad({ ...base, tipo: 'obs_caixa', valor: 'a'.repeat(501) });
   bad({ ...base, tipo: 'responsavel', valor: 5 });
-  bad({ ...base, tipo: 'mover', valor: 'inexistente' });
 });
 
-test('validarAcao: justificativa do mover', () => {
-  const msg = 'Justificativa precisa de pelo menos 15 caracteres.';
-  const corpo = { ...base, tipo: 'mover', valor: 'saiu_com' };
-  assert.strictEqual(ok(corpo, 'ADM').ok, true);
-  const sem = ok(corpo, 'PCP');
-  assert.strictEqual(sem.ok, false);
-  assert.strictEqual(sem.status, 400);
-  assert.strictEqual(sem.erro, msg);
-  assert.strictEqual(ok({ ...corpo, justificativa: '   curta   ' }, 'PCP').erro, msg);
-  assert.strictEqual(ok({ ...corpo, justificativa: '  ' + 'a'.repeat(14) + '  ' }, 'PCP').erro, msg);
-  const bom = ok({ ...corpo, justificativa: '  ' + 'a'.repeat(15) + '  ' }, 'PCP');
-  assert.strictEqual(bom.ok, true);
-  assert.strictEqual(bom.acao.justificativa, 'a'.repeat(15));
+test('validarAcao: mover foi desativado', () => {
+  const r = ok({ ...base, tipo: 'mover', valor: 'saiu_com' }, 'ADM');
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.erro, 'Mover caixa foi desativado: as etapas vêm do Ploomes.');
 });
 
 test('aplicarAcao: baixa soma e grava', () => {
@@ -141,22 +131,6 @@ test('aplicarAcao: acoes da caixa', () => {
   const o = g({ tipo: 'obs_caixa', valor: 'tudo ok' });
   assert.strictEqual(o.gravacao.campos.observacao, 'tudo ok');
   assert.strictEqual(o.historico.texto, 'Lucca anotou na caixa: "tudo ok"');
-  const m = g({ tipo: 'mover', valor: 'completa_pedido' });
-  assert.deepStrictEqual(m.gravacao.campos, { deal_id: '9001', os: '90001', coluna_manual: 'completa_pedido', coluna_manual_em: AGORA, atualizado_em: AGORA });
-  assert.strictEqual(m.historico.texto, 'Lucca moveu para Caixa completa · Pedido');
-  const mj = g({ tipo: 'mover', valor: 'falta_corte', justificativa: ' cliente pediu urgencia ' });
-  assert.strictEqual(mj.historico.texto, 'Lucca moveu para Itens faltando · Corte — Justificativa: cliente pediu urgencia');
-});
-
-test('textoDaAcao: nomes das 6 colunas', () => {
-  const nomes = {
-    falta_pedido: 'Itens faltando · Pedido', completa_pedido: 'Caixa completa · Pedido',
-    falta_corte: 'Itens faltando · Corte', completa_corte: 'Caixa completa · Corte',
-    saiu_com: 'Saiu com faltas', saiu_sem: 'Saiu sem faltas',
-  };
-  for (const k of Object.keys(nomes)) {
-    assert.strictEqual(c.textoDaAcao({ tipo: 'mover', valor: k }, ctx()), 'Lucca moveu para ' + nomes[k]);
-  }
 });
 
 test('aplicarAcao: caixa sem linha previa cria a linha', () => {
@@ -178,15 +152,11 @@ test('validarAcao: datas impossiveis', () => {
   assert.strictEqual(prev('2028-02-29').ok, true);
 });
 
-test('validarAcao: limites de responsavel e justificativa', () => {
+test('validarAcao: limites de responsavel', () => {
   const r1 = ok({ ...base, tipo: 'responsavel', valor: 'a'.repeat(101) });
   assert.strictEqual(r1.status, 400);
   assert.strictEqual(r1.erro, 'Nome do responsável muito longo.');
   assert.strictEqual(ok({ ...base, tipo: 'responsavel', valor: '  ' + 'a'.repeat(100) + '  ' }).ok, true);
-  const r2 = ok({ ...base, tipo: 'mover', valor: 'saiu_com', justificativa: 'a'.repeat(501) });
-  assert.strictEqual(r2.status, 400);
-  assert.strictEqual(r2.erro, 'Justificativa muito longa (máximo 500 caracteres).');
-  assert.strictEqual(ok({ ...base, tipo: 'mover', valor: 'saiu_com', justificativa: 'a'.repeat(500) }, 'PCP').ok, true);
 });
 
 test('validarAcao: obs normaliza quebras de linha', () => {

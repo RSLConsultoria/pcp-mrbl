@@ -23,7 +23,6 @@ export function itensAbertos(c: Caixa): Item[] {
 }
 
 export function colunaDaCaixa(c: Caixa): ColunaId {
-  if (c.colunaManual) return c.colunaManual;
   const aberto = c.itens.some(itemAberto);
   if (c.saiu) return aberto ? 'saiu_com' : 'saiu_sem';
   const ciclo = c.ciclo === 'CORTE' ? 'corte' : 'pedido';

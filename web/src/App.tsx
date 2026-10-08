@@ -22,7 +22,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
       <Subnav q={q} onQ={setQ} />
       {erroDesde && <FaixaOffline desde={erroDesde} temDados={board !== null} />}
       <main className="app__principal">
-        {board ? <NoPloomes board={board} q={q} hoje={hoje} perfil={sessao.perfil ?? ''} executar={executar} />
+        {board ? <NoPloomes board={board} q={q} hoje={hoje} executar={executar} />
           : <div className="carregando">{carregando ? 'Carregando o quadro…' : 'Não foi possível carregar o quadro.'}</div>}
       </main>
     </div>

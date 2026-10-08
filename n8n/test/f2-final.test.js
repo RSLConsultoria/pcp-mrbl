@@ -57,7 +57,7 @@ test('preValidarAcao: 400 com a mesma mensagem do processarAcao', () => {
     [e, cab, { tipo: 'xyz', dealId: '1' }],
     [e, cab, { tipo: 'baixa', dealId: '1', valor: 1 }],
     [e, cab, { tipo: 'baixa', dealId: '1', itemId: 'a', valor: 0 }],
-    [ePcp, cabPcp, { tipo: 'mover', dealId: '1', valor: 'saiu_sem', justificativa: 'curta' }]
+    [ePcp, cabPcp, { tipo: 'mover', dealId: '1', valor: 'saiu_sem' }]
   ];
   for (const [est, cb, corpo] of casos) {
     const r = limpo(c.preValidarAcao(est, cb, corpo, T0));
@@ -71,9 +71,6 @@ test('preValidarAcao: 400 com a mesma mensagem do processarAcao', () => {
 test('preValidarAcao: ok com sessao e corpo validos', () => {
   const e = {}; const cab = sessao(e, 'ana@x.com');
   assert.deepEqual(limpo(c.preValidarAcao(e, cab, { tipo: 'obs_caixa', dealId: '1', valor: 'x', versao: '' }, T0)), { ok: true });
-  const ePcp = {}; const cabPcp = sessao(ePcp, 'pcp@x.com');
-  assert.deepEqual(limpo(c.preValidarAcao(ePcp, cabPcp,
-    { tipo: 'mover', dealId: '1', valor: 'saiu_sem', justificativa: 'a'.repeat(15) }, T0)), { ok: true });
 });
 
 // ---- I-3: qtd_baixada ilegivel ----
