@@ -306,8 +306,11 @@ test('salvar_etapas: validacoes e bloqueio de etapa com pedido aberto', () => {
 });
 
 // ---------- oficina ----------
+// Material da caixa todo na ultima etapa: a e b no PED-0043 (Entregue).
+const NA_ULTIMA = { pedidos: [SEED_P, ped({ etapa: 'entregue' })], pedidosItens: [SEED_I, pit({}), pit({ id: 'PED-0043|b', item_id: 'b', nome: 'ZÍPER', un: 'UN', qtd: 6 })] };
+
 test('enviar_oficina: CAIXAS_PCP appendOrUpdate e herda responsavel ao criar', () => {
-  const lin = linhas({ faltantes: [falt({ id: 'a', responsavel: '' }), falt({ id: 'b', responsavel: 'Maria' })] });
+  const lin = linhas(Object.assign({ faltantes: [falt({ id: 'a', responsavel: '' }), falt({ id: 'b', responsavel: 'Maria' })] }, NA_ULTIMA));
   const r = acao({ tipo: 'enviar_oficina', dealId: '600001', versao: '' }, lin);
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [{ aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id', linha: {
@@ -315,11 +318,43 @@ test('enviar_oficina: CAIXAS_PCP appendOrUpdate e herda responsavel ao criar', (
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.os, h.acao, h.texto]), [['600001', '90001', 'enviar_oficina', 'Lucca enviou o material faltante à oficina']]);
   assert.equal(r.gravacao, null);
   assert.equal(r.historico, null);
-  const comCp = acao({ tipo: 'enviar_oficina', dealId: '600001', versao: 'C1' }, linhas({ caixasPcp: [{ deal_id: '600001', os: '90001', responsavel: '', atualizado_em: 'C1' }] }));
+  const comCp = acao({ tipo: 'enviar_oficina', dealId: '600001', versao: 'C1' }, linhas(Object.assign({ caixasPcp: [{ deal_id: '600001', os: '90001', responsavel: '', atualizado_em: 'C1' }] }, NA_ULTIMA)));
   assert.equal(comCp.status, 200);
   assert.equal('responsavel' in comCp.operacoes[0].linha, false);
   assert.equal(acao({ tipo: 'enviar_oficina', dealId: '600001', versao: 'X' }).status, 409);
   assert.deepEqual(acao({ tipo: 'enviar_oficina', dealId: '777', versao: '' }), { status: 404, body: { erro: 'Caixa não encontrada.' } });
+});
+
+test('enviar_oficina: 409 enquanto o material nao esta todo na ultima etapa', () => {
+  const erro = { status: 409, body: { erro: 'O material desta caixa ainda não chegou (etapa Entregue).' } };
+  const env = (lin) => acao({ tipo: 'enviar_oficina', dealId: '600001', versao: '' }, lin);
+  // a e b sem pedido
+  assert.deepEqual(env(linhas()), erro);
+  // b sem pedido
+  assert.deepEqual(env(linhas({ pedidos: [SEED_P, ped({ etapa: 'entregue' })], pedidosItens: [SEED_I, pit({})] })), erro);
+  // tudo com pedido, mas o pedido em etapa anterior
+  assert.deepEqual(env(linhas(Object.assign({}, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'aguardando' })] }))), erro);
+  // pedido dividido: a parte ainda em Solicitado segura a caixa
+  const partes = {
+    pedidos: [SEED_P, ped({ etapa: 'entregue' }), ped({ id: 'PED-0043.1', pai: 'PED-0043', etapa: 'solicitado' })],
+    pedidosItens: NA_ULTIMA.pedidosItens.concat([pit({ id: 'PED-0043.1|a', pedido_id: 'PED-0043.1', qtd: 5 })])
+  };
+  assert.deepEqual(env(linhas(partes)), erro);
+  // etapa que nao existe mais conta como a primeira
+  assert.deepEqual(env(linhas(Object.assign({}, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'sumiu' })] }))), erro);
+  // pedido baixado nao conta; item resolvido nao conta
+  const baixado = linhas(Object.assign({}, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'entregue' }), ped({ id: 'PED-0044', etapa: 'a_pedir', baixado_em: 'X' })],
+    pedidosItens: NA_ULTIMA.pedidosItens.concat([pit({ id: 'PED-0044|a', pedido_id: 'PED-0044' })]) }));
+  assert.equal(env(baixado).status, 200);
+  const resolvido = linhas({ faltantes: [falt({ id: 'a' }), falt({ id: 'b', qtd_falta: 10, qtd_baixada: 10 })], pedidos: NA_ULTIMA.pedidos, pedidosItens: [SEED_I, pit({})] });
+  assert.equal(env(resolvido).status, 200);
+  // etapas customizadas: o nome vem da ultima
+  const etapas = [{ id: 'x', nome: 'Pedir', ordem: 1 }, { id: 'y', nome: 'No almoxarifado', ordem: 2 }];
+  assert.deepEqual(env(linhas(Object.assign({ etapas }, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'x' })] }))),
+    { status: 409, body: { erro: 'O material desta caixa ainda não chegou (etapa No almoxarifado).' } });
+  assert.equal(env(linhas(Object.assign({ etapas }, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'y' })] }))).status, 200);
+  // oficina_recebeu nao tem a regra
+  assert.equal(acao({ tipo: 'oficina_recebeu', dealId: '600001', versao: '' }, linhas()).status, 200);
 });
 
 test('oficina_recebeu: baixa total dos itens abertos e tratativa RECEBIDO', () => {

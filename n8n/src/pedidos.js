@@ -473,7 +473,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var abertos = pedidoAbertoPorItem(lista);
   var tipo = acao.tipo;
 
-  if (tipo === 'enviar_oficina' || tipo === 'oficina_recebeu') return aplicarTratativa(acao, linhas, ctx);
+  if (tipo === 'enviar_oficina' || tipo === 'oficina_recebeu') return aplicarTratativa(acao, linhas, ctx, lista, etapas);
   if (tipo === 'salvar_etapas') return aplicarEtapas(acao, linhas, ctx, lista);
 
   if (tipo === 'gerar_pedido') {
@@ -735,7 +735,27 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
   return { ok: true, operacoes: operacoes, historicos: [], versao: ctx.agora };
 }
 
-function aplicarTratativa(acao, linhas, ctx) {
+// Enviar a oficina so com todo o material na ultima etapa: cada item aberto da
+// caixa tem pedido aberto e todos os pedidos abertos dele (original e partes)
+// estao na ultima etapa. Etapa que nao existe mais conta como a primeira.
+function materialNaUltimaEtapa(faltantes, lista, etapas) {
+  var ultima = etapas[etapas.length - 1];
+  var etapaDe = {};
+  lista.forEach(function (p) { etapaDe[p.id] = texto(p.linha.etapa); });
+  var porItem = pedidosAbertosPorItem(lista);
+  for (var i = 0; i < faltantes.length; i++) {
+    var l = faltantes[i];
+    if (!STATUS_ABERTOS[semAcento(l.status)]) continue;
+    var resta = restaDaLinha(l);
+    if (resta !== null && resta <= 0) continue;
+    var ids = porItem[texto(l.id)] || [];
+    if (!ids.length) return false;
+    for (var k = 0; k < ids.length; k++) if (etapaDe[ids[k]] !== ultima.id) return false;
+  }
+  return true;
+}
+
+function aplicarTratativa(acao, linhas, ctx, lista, etapas) {
   if (!dealEditavel(acao.dealId)) return erroAcao(403, ERRO_NAO_EDITAVEL);
   var faltantes = (linhas.faltantes || []).filter(function (l) { return l && texto(l.deal_id) === acao.dealId; });
   var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === acao.dealId; })[0] || null;
@@ -748,6 +768,9 @@ function aplicarTratativa(acao, linhas, ctx) {
   if (!os && g) os = texto(g.os);
   var agora = ctx.agora;
   var recebeu = acao.tipo === 'oficina_recebeu';
+  if (!recebeu && !materialNaUltimaEtapa(faltantes, lista, etapas)) {
+    return erroAcao(409, 'O material desta caixa ainda não chegou (etapa ' + etapas[etapas.length - 1].nome + ').');
+  }
 
   var linhaCp = { deal_id: acao.dealId, os: os, tratativa: recebeu ? 'RECEBIDO' : 'ENVIADO', tratativa_em: agora, atualizado_em: agora };
   if (!cpRow) {
