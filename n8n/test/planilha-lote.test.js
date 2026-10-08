@@ -113,7 +113,7 @@ test('F2 baixa: um batchUpdate so com as colunas da operacao (sem a chave), depo
     },
     {
       method: 'POST',
-      url: BASE + '/' + encodeURIComponent("'HISTORICO_APP'!A1") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+      url: BASE + '/' + encodeURIComponent("'HISTORICO_APP'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
       body: { values: [['h1', 'T', 'Baixa', 'PENDENTE']] }
     }
   ]);
@@ -134,7 +134,7 @@ test('appendOrUpdate sem linha vira append (antes do batchUpdate), na ordem do c
     op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', { deal_id: '700', os: '7', atualizado_em: 'T' })
   ]);
   assert.equal(r.length, 2);
-  assert.equal(r[0].url, BASE + '/' + encodeURIComponent("'CAIXAS_PCP'!A1") + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS');
+  assert.equal(r[0].url, BASE + '/' + encodeURIComponent("'CAIXAS_PCP'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE');
   assert.deepEqual(r[0].body, { values: [['700', '7', '', '', 'T']] });
   assert.equal(r[1].url, BASE + ':batchUpdate');
 });
@@ -244,9 +244,9 @@ test('acao real: processarAcao (gerar_pedido) -> requisicoes', () => {
   assert.equal(saida.status, 200, JSON.stringify(saida.body));
   const r = limpo(ctx.requisicoesDeEscrita(saida.operacoes, saida.historicos, p, DOC));
   assert.deepEqual(r.map((x) => decodeURIComponent(x.url.replace(BASE, ''))),
-    ["/'PEDIDOS'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
-      "/'PEDIDOS_ITENS'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
-      "/'HISTORICO_APP'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"]);
+    ["/'PEDIDOS'!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
+      "/'PEDIDOS_ITENS'!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
+      "/'HISTORICO_APP'!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE"]);
   assert.equal(r[1].body.values[0][7], 20);
   assert.equal(r[2].body.values.length, saida.historicos.length);
 });

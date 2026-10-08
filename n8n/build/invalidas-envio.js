@@ -1779,7 +1779,9 @@ function conferirOperacao(o) {
 // operacoes[] + historicos[] -> [{ method, url, body }] na ordem de execucao:
 // 1) cabecalhos novos (campo sem coluna vai para a proxima coluna livre);
 // 2) values:append por aba (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP),
-//    incluindo appendOrUpdate cuja chave nao existe;
+//    incluindo appendOrUpdate cuja chave nao existe. OVERWRITE: escreve nas
+//    linhas vazias depois da tabela sem deslocar linhas, entao os row_number
+//    lidos seguem valendo para o batchUpdate da mesma acao;
 // 3) um values:batchUpdate com todas as atualizacoes (so as colunas presentes
 //    na operacao, sem a coluna de casamento; a linha vem dos dados lidos);
 // 4) values:append no HISTORICO_APP.
@@ -1881,7 +1883,7 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
     return {
       method: 'POST',
       url: base + '/' + encodeURIComponent(rangeDaAba(aba, 'A' + e.linhaCab)) +
-        ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+        ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
       body: { values: linhas.map(function (l) { return linhaNoCabecalho(e, l); }) }
     };
   }
