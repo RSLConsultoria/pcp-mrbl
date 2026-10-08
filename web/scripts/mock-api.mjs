@@ -1,6 +1,9 @@
 // Servidor local de conferência: imita pcp-login, pcp-board e pcp-acao com dados fictícios.
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
+// Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
+// 90005 em Aguardando entrega (partes em etapas diferentes); 90007 com tudo na última etapa (pode ir à oficina);
+// 90006 já enviada (material todo na última etapa). Enviar à oficina fora da última etapa: 409, como no servidor.
 import http from 'node:http';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
@@ -44,7 +47,11 @@ const estado = {
       historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Material no almoxarifado)')] }),
     caixa(90006, 'PEDIDO', 'ACABAMENTO', 'PECA TESTE F', 'CLIENTE GAMA', 'Lucca', [
       item('f1', 'ELASTICO CHATO 30MM', 'MT', 80, { separada: 20, status: 'PARCIAL' })
-    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4), tratativa: 'ENVIADO', tratativaEm: diaIso(-2) })
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4), tratativa: 'ENVIADO', tratativaEm: diaIso(-2) }),
+    caixa(90007, 'CORTE', 'COSTURA', 'PECA TESTE G', 'CLIENTE ALFA', 'Renata', [
+      item('g1', 'BOTAO PRESSAO 12MM', 'UN', 200),
+      item('g2', 'ENTRETELA FINA', 'MT', 15)
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-2) })
   ],
   etapas: [
     { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' },
@@ -58,10 +65,13 @@ const estado = {
     { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Maria', criadoEm: diaIso(-1), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
     { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Maria', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
     // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
+    // material da 90006 (já enviada à oficina) e da 90007 (pronta para enviar): todo na última etapa
+    { id: 'PED-0006', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-3), responsavel: 'Lucca', criadoEm: diaIso(-6), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'f1', dealId: '700006', qtd: 80, fornecedor: '' }] },
+    { id: 'PED-0007', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'SAO_PAULO', previsao: diaIso(-1), responsavel: 'Renata', criadoEm: diaIso(-3), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'g1', dealId: '700007', qtd: 200, fornecedor: '' }, { itemId: 'g2', dealId: '700007', qtd: 15, fornecedor: '' }] },
     { id: 'PED-0005', etapa: 'conferencia', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(4), responsavel: 'Renata', criadoEm: diaIso(-15), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd2', dealId: '700004', qtd: 120, fornecedor: '' }] }
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
-  dealsEditaveis: ['700001', '700003', '700004', '700005', '700006']
+  dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007']
 };
 
 // ---------- utilidades ----------
@@ -403,6 +413,14 @@ function oficina(c, usuario, recebeu) {
   if (!cx) throw new Erro(404, 'Caixa não encontrada.');
   exigirEditavel([cx.dealId]);
   conferirVersao(cx.versao, c.versao);
+  if (!recebeu) {
+    // Só com todo o material na última etapa: todo item aberto com pedido e todos os pedidos dele lá.
+    const naUltima = cx.itens.filter(aberto).every((it) => {
+      const ps = pedidosAbertosDoItem(cx.dealId, it.id);
+      return ps.length > 0 && ps.every((p) => p.etapa === ultimaEtapa());
+    });
+    if (!naUltima) throw new Erro(409, `O material desta caixa ainda não chegou (etapa ${nomeEtapa(ultimaEtapa())}).`);
+  }
   cx.versao = agoraIso(); cx.tratativaEm = diaIso();
   const historicos = [];
   if (recebeu) {

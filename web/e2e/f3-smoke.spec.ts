@@ -25,7 +25,7 @@ test('guias trocam de tela e o hash mantém a guia ao recarregar', async ({ page
   await entrar(page);
   await guias(page).getByRole('button', { name: 'Saídas com falta' }).click();
   await expect(page).toHaveURL(/#saidas$/);
-  const sem = page.getByRole('region', { name: 'Sem tratativa' });
+  const sem = page.getByRole('region', { name: 'Sem pedido' });
   await expect(sem.getByRole('button', { name: 'OS 90003' })).toContainText('saiu 18/09 · há 19 dias');
   await expect(sem.getByRole('button', { name: 'OS 90003' })).toContainText('sem pedido');
   await page.reload();

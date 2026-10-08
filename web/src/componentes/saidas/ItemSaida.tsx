@@ -1,5 +1,6 @@
 import type { EtapaPedido, Item, Pedido } from '../../api/tipos';
 import { itemAberto } from '../../regras/colunas';
+import { pedidosDoItem } from '../../regras/pedidos';
 import { contaDoItem } from '../../regras/quantidade';
 import { textoPedidoDoItem } from '../../regras/saidas';
 
@@ -8,7 +9,7 @@ interface Props { item: Item; pedidos: Pedido[]; etapas: EtapaPedido[] }
 // Item no painel de Saídas: só leitura, com o pedido em que está.
 export function ItemSaida({ item, pedidos, etapas }: Props) {
   const aberto = itemAberto(item);
-  const tag = !aberto ? 'tag tag--ok' : item.pedidoId ? 'tag tag--pedido' : 'tag tag--falta';
+  const tag = !aberto ? 'tag tag--ok' : pedidosDoItem(item).length > 0 ? 'tag tag--pedido' : 'tag tag--falta';
   return (
     <li className={aberto ? 'item' : 'item item--resolvido'}>
       <div className="item__topo">

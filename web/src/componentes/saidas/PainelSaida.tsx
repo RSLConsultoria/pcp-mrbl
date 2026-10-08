@@ -3,7 +3,7 @@ import type { Executar } from '../../hooks/useAcao';
 import { useTeclaEsc } from '../../hooks/useTeclaEsc';
 import { itemAberto } from '../../regras/colunas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
-import { COLUNAS_SAIDA, textoSaiu, textoTratativa, type ColunaSaidaId } from '../../regras/saidas';
+import { nomeColunaSaida, textoSaiu, textoTratativa, type ColunaDaSaida } from '../../regras/saidas';
 import { CabecalhoCaixa } from '../painel/CabecalhoCaixa';
 import { Historico } from '../painel/Historico';
 import { AcoesSaida } from './AcoesSaida';
@@ -11,7 +11,7 @@ import { ItemSaida } from './ItemSaida';
 
 interface Props {
   caixa: Caixa;
-  coluna: ColunaSaidaId;
+  coluna: ColunaDaSaida;
   pedidos: Pedido[];
   etapas: EtapaPedido[];
   hoje: Date;
@@ -30,13 +30,13 @@ export function PainelSaida({ caixa, coluna, pedidos, etapas, hoje, editavel, ex
       <div className="painel__corpo">
         {!editavel && <p className="item__nota" role="note">{MSG_SOMENTE_LEITURA}</p>}
         <dl className="leitura">
-          <div><dt>Etapa</dt><dd>{COLUNAS_SAIDA.find((c) => c.id === coluna)?.nome}</dd></div>
+          <div><dt>Etapa</dt><dd>{nomeColunaSaida(coluna.coluna, etapas)}{coluna.etapasDiferentes && ' · pedidos em etapas diferentes'}</dd></div>
           <div><dt>Saída</dt><dd>{textoSaiu(caixa, hoje)}</dd></div>
           <div><dt>Oficina</dt><dd>{textoTratativa(caixa)}</dd></div>
           <div><dt>Responsável</dt><dd>{caixa.responsavel || '—'}</dd></div>
         </dl>
         {editavel && (
-          <AcoesSaida key={caixa.versao} caixa={caixa} coluna={coluna} executar={executar} onSelecionarParaPedido={onSelecionarParaPedido} />
+          <AcoesSaida key={caixa.versao} caixa={caixa} coluna={coluna.coluna} pedidos={pedidos} etapas={etapas} executar={executar} onSelecionarParaPedido={onSelecionarParaPedido} />
         )}
         <section className="secao">
           <h3 className="secao__titulo">Itens <span>{itens.length}</span></h3>

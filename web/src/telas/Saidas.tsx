@@ -6,7 +6,7 @@ import { PainelSaida } from '../componentes/saidas/PainelSaida';
 import type { Executar } from '../hooks/useAcao';
 import { caixaAtendeBusca } from '../regras/busca';
 import { caixaEditavelNoApp } from '../regras/edicao';
-import { COLUNAS_SAIDA, saidasComColuna } from '../regras/saidas';
+import { colunasSaida, saidasComColuna } from '../regras/saidas';
 
 interface Props {
   board: Board;
@@ -16,7 +16,8 @@ interface Props {
   onSelecionarParaPedido: (c: Caixa) => void;
 }
 
-// Caixas que saíram do almoxarifado com falta, pela etapa da tratativa.
+// Caixas que saíram do almoxarifado com falta, pelas etapas dos pedidos (as mesmas de
+// Solicitações de faltas): cada caixa na etapa do pedido mais atrasado dela.
 export function Saidas({ board, q, hoje, executar, onSelecionarParaPedido }: Props) {
   const [selId, setSelId] = useState<string | null>(null);
   const fechar = useCallback(() => setSelId(null), []);
@@ -24,16 +25,18 @@ export function Saidas({ board, q, hoje, executar, onSelecionarParaPedido }: Pro
   const etapas = board.etapasPedido ?? [];
   // O dia (e não o instante) entra na chave: hoje muda a cada render do App.
   const dia = hoje.toDateString();
-  const caixas = useMemo(
-    () => saidasComColuna(board, new Date(dia)).filter((x) => caixaAtendeBusca(x.caixa, q)),
-    [board, q, dia]
+  const todas = useMemo(() => saidasComColuna(board, new Date(dia)), [board, dia]);
+  const caixas = useMemo(() => todas.filter((x) => caixaAtendeBusca(x.caixa, q)), [todas, q]);
+  const colunas = useMemo(
+    () => colunasSaida(etapas, todas.some((x) => x.coluna.coluna === 'sem_pedido')),
+    [etapas, todas]
   );
   const sel = caixas.find((x) => x.caixa.id === selId) ?? null;
   return (
     <div className="quadro">
       <div className="quadro__rolagem">
         <div className="quadro__trilho">
-          {COLUNAS_SAIDA.map((col) => {
+          {colunas.map((col) => {
             const cs = caixas.filter((x) => x.coluna.coluna === col.id);
             return (
               <ColunaQuadro key={col.id} nome={col.nome} cor={col.cor} qtd={cs.length}
@@ -48,7 +51,7 @@ export function Saidas({ board, q, hoje, executar, onSelecionarParaPedido }: Pro
         </div>
       </div>
       {sel && (
-        <PainelSaida key={sel.caixa.id} caixa={sel.caixa} coluna={sel.coluna.coluna} pedidos={pedidos} etapas={etapas}
+        <PainelSaida key={sel.caixa.id} caixa={sel.caixa} coluna={sel.coluna} pedidos={pedidos} etapas={etapas}
           hoje={hoje} editavel={caixaEditavelNoApp(board, sel.caixa)} executar={executar}
           onSelecionarParaPedido={onSelecionarParaPedido} onFechar={fechar} />
       )}

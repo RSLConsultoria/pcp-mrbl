@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Acao, Caixa } from '../../api/tipos';
+import type { Acao, Caixa, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
 import { itensAbertos } from '../../regras/colunas';
-import { itensParaPedido, type ColunaSaidaId } from '../../regras/saidas';
+import { itensParaPedido, podeEnviarOficina, textoEnviarSoNaUltima, type ColunaSaidaId } from '../../regras/saidas';
 
 interface Props {
   caixa: Caixa;
   coluna: ColunaSaidaId;
+  pedidos: Pedido[];
+  etapas: EtapaPedido[];
   executar: Executar;
   onSelecionarParaPedido: (c: Caixa) => void;
 }
 
 // Próximos passos da caixa que saiu com falta. Um só botão principal por etapa.
-export function AcoesSaida({ caixa, coluna, executar, onSelecionarParaPedido }: Props) {
+// Enviar à oficina só aparece com todo o material na última etapa dos pedidos.
+export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecionarParaPedido }: Props) {
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const confirmarRef = useRef<HTMLButtonElement>(null);
@@ -29,6 +32,7 @@ export function AcoesSaida({ caixa, coluna, executar, onSelecionarParaPedido }: 
   const paraPedido = itensParaPedido(caixa).length;
   const abertos = itensAbertos(caixa).length;
   const enviada = caixa.tratativa === 'ENVIADO';
+  const podeEnviar = !enviada && podeEnviarOficina(caixa, pedidos, etapas);
 
   async function agir(acao: Acao) {
     setEnviando(true);
@@ -41,13 +45,13 @@ export function AcoesSaida({ caixa, coluna, executar, onSelecionarParaPedido }: 
       <h3 className="secao__titulo">O que fazer</h3>
       <div className="acoes">
         {paraPedido > 0 && (
-          <button type="button" className={coluna === 'sem_tratativa' ? 'botao botao--navy' : 'botao botao--contorno'}
+          <button type="button" className={coluna === 'sem_pedido' ? 'botao botao--navy' : 'botao botao--contorno'}
             onClick={() => onSelecionarParaPedido(caixa)}>
             Selecionar para pedido
           </button>
         )}
-        {!enviada && (
-          <button type="button" className={coluna === 'almoxarifado' ? 'botao botao--signal' : 'botao botao--contorno'}
+        {podeEnviar && (
+          <button type="button" className="botao botao--signal"
             disabled={enviando} onClick={() => agir({ tipo: 'enviar_oficina', dealId: caixa.dealId, versao: caixa.versao })}>
             Enviar à oficina
           </button>
@@ -58,7 +62,8 @@ export function AcoesSaida({ caixa, coluna, executar, onSelecionarParaPedido }: 
           </button>
         )}
       </div>
-      {!enviada && <p className="acoes__nota">Marca a caixa como enviada e registra no Ploomes.</p>}
+      {podeEnviar && <p className="acoes__nota">Marca a caixa como enviada e registra no Ploomes.</p>}
+      {!enviada && !podeEnviar && <p className="acoes__nota">{textoEnviarSoNaUltima(etapas)}</p>}
       {enviada && confirmando && (
         <div className="confirmacao" role="group" aria-label="Confirmar recebimento da oficina">
           <p className="confirmacao__texto">

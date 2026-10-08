@@ -118,8 +118,54 @@ test('dar baixa nas caixas só aparece na última etapa e envia baixar_pedido', 
   await expect(page.getByRole('button', { name: 'Dar baixa nas caixas' })).toHaveCount(0);
 });
 
+const VIES = { itemId: 'c1', dealId: '700003', os: '90003', nome: 'VIES LINEAR 6 CM', un: 'MT', qtd: 450 };
+// Caixa 90003 (saiu com falta) com o VIÉS no PED-0042 na etapa dada.
+function vies(b: Board, etapa: string) {
+  b.pedidos = [pedido('PED-0042', etapa, [VIES])] as never;
+  b.caixas[2].itens[0].pedidoId = 'PED-0042';
+}
+const nomesDasColunas = (page: Page) => page.locator('.coluna__nome').allInnerTexts();
+
+test('Saídas: colunas seguem as etapas de Solicitações; Sem pedido só com caixa sem pedido', async ({ page }) => {
+  await preparar(page, '#saidas');
+  await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
+  expect(await nomesDasColunas(page)).toEqual(['Sem pedido', 'A pedir', 'Solicitado', 'Aguardando entrega', 'Entregue', 'Enviado à oficina', 'Resolvido']);
+});
+
+test('Saídas: caixa na etapa do pedido mais atrasado; enviar à oficina escondido até a última etapa', async ({ page }) => {
+  await preparar(page, '#saidas', {
+    ajustar: (b) => {
+      b.pedidos = [pedido('PED-0042', 'solicitado', [VIES]), pedido('PED-0043', 'entregue', [{ ...VIES, itemId: 'c2', nome: 'LINHA 120', un: 'cones', qtd: 4 }])] as never;
+      const c = b.caixas[2];
+      c.itens[0].pedidoId = 'PED-0042';
+      c.itens.push({ ...c.itens[0], id: 'c2', nome: 'LINHA 120', un: 'cones', pedidoId: 'PED-0043' });
+    }
+  });
+  expect(await nomesDasColunas(page)).toEqual(['A pedir', 'Solicitado', 'Aguardando entrega', 'Entregue', 'Enviado à oficina', 'Resolvido']);
+  const card = page.getByRole('region', { name: 'Solicitado' }).getByRole('button', { name: 'OS 90003' });
+  await expect(card).toContainText('PED-0042 · Solicitado');
+  await expect(card).toContainText('PED-0043 · Entregue');
+  await expect(card).toContainText('pedidos em etapas diferentes');
+  await card.click();
+  const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
+  await expect(painel.getByRole('button', { name: 'Enviar à oficina' })).toHaveCount(0);
+  await expect(painel).toContainText('Para enviar à oficina, todo o material precisa estar na última etapa (Entregue).');
+});
+
+test('Saídas: enviar à oficina recusado pelo servidor mostra a mensagem dele', async ({ page }) => {
+  const mock = await preparar(page, '#saidas', {
+    ajustar: (b) => vies(b, 'entregue'),
+    resposta: () => ({ status: 409, json: { erro: 'O material desta caixa ainda não chegou (etapa Entregue).' } })
+  });
+  await page.getByRole('region', { name: 'Entregue' }).getByRole('button', { name: 'OS 90003' }).click();
+  await page.getByRole('complementary', { name: 'Caixa da OS 90003' }).getByRole('button', { name: 'Enviar à oficina' }).click();
+  await expect(aviso(page, 'O material desta caixa ainda não chegou (etapa Entregue).')).toBeVisible();
+  expect(mock.bodies).toHaveLength(1);
+});
+
 test('Saídas: enviar à oficina e depois confirmar que a oficina recebeu', async ({ page }) => {
   const mock = await preparar(page, '#saidas', {
+    ajustar: (b) => vies(b, 'entregue'),
     aoAgir: (b, corpo) => {
       const c = b.caixas[2] as Corpo & { tratativa: string; versao: string; itens: { resta: number; falta: number; baixada: number; status: string }[] };
       c.versao = 'v2';
@@ -127,8 +173,9 @@ test('Saídas: enviar à oficina e depois confirmar que a oficina recebeu', asyn
       else { c.tratativa = 'RECEBIDO'; c.itens[0].resta = 0; c.itens[0].baixada = c.itens[0].falta; c.itens[0].status = 'RESOLVIDO'; }
     }
   });
-  await page.getByRole('region', { name: 'Sem tratativa' }).getByRole('button', { name: 'OS 90003' }).click();
+  await page.getByRole('region', { name: 'Entregue' }).getByRole('button', { name: 'OS 90003' }).click();
   const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
+  await expect(painel.getByRole('button', { name: 'Enviar à oficina' })).toHaveClass(/botao--signal/);
   await painel.getByRole('button', { name: 'Enviar à oficina' }).click();
   await expect(aviso(page, 'Caixa enviada à oficina')).toBeVisible();
   expect(mock.bodies[0]).toEqual({ tipo: 'enviar_oficina', dealId: '700003', versao: '2026-10-06T09:00:00.000Z' });
