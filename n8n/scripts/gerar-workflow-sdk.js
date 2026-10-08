@@ -238,10 +238,9 @@ export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
 })
   .add(agenda)
   .to(lerHistorico)
-  .to([
-    marcarInvalidas.to(gravarInvalidas),
-    selecionarEnvio.to(buscarContato).to(montarRegistro).to(criarRegistro).to(resultadoEnvio).to(gravarEnvio)
-  ]);
+  .to(marcarInvalidas.to(gravarInvalidas))
+  .add(lerHistorico)
+  .to(selecionarEnvio.to(buscarContato).to(montarRegistro).to(criarRegistro).to(resultadoEnvio).to(gravarEnvio));
 `;
 
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });

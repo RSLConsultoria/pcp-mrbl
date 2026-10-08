@@ -186,3 +186,8 @@ test('caixa so em GANHAS com falta e sem itens detalhados ganha item generico ab
     versao: '', editavel: false
   }]);
 });
+
+test('resta arredondada em 3 casas (0.3 - 0.1 = 0.2 exato)', () => {
+  const r = limpo(ctx.montarCaixas([linha({ qtd_falta: 0.3, qtd_baixada: 0.1 })], [], HOJE));
+  assert.strictEqual(r.caixas[0].itens[0].resta, 0.2);
+});
