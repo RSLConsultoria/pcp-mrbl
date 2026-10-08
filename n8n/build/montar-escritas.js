@@ -1,4 +1,4 @@
-// ===== Code node "Pre Validar Acao" =====
+// ===== Code node "Montar Escritas" =====
 // GERADO por n8n/scripts/gerar-code-nodes.js. Nao edite no n8n.
 // Para mudar a logica, edite n8n/src/ e rode: npm run build
 
@@ -2106,10 +2106,17 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   return saida;
 }
 
-// ===== adaptador: Pre Validar Acao =====
-// Sessao e corpo antes de ler a planilha. Saida { ok: true } segue para as
-// leituras; { ok: false, status, body } vai direto ao "Responder Pre".
-var estado = $getWorkflowStaticData('global');
-var entrada = $('Acao').first().json;
-var cabecalho = (entrada.headers || {}).authorization;
-return [{ json: preValidarAcao(estado, cabecalho, entrada.body || {}, Date.now()) }];
+// ===== adaptador: Montar Escritas =====
+// operacoes[]/historicos[] do Processar Acao -> um item por requisicao
+// ({ method, url, body }), na ordem em que o loop "Gravar Lote" executa.
+// Nada a gravar (ou acao com erro) -> um item { vazio: true }, que o IF
+// "Tem Escritas?" manda direto ao Responder Acao. Erro de conferencia
+// (destino desconhecido, update sem linha) derruba o node antes de gravar.
+var resultado = $('Processar Acao').first().json;
+if (resultado.status !== 200) return [{ json: { vazio: true } }];
+var planilha = planilhaDoLote($('Ler Planilha Acao').first().json, LEITURAS_ACAO);
+var reqs = requisicoesDeEscrita(resultado.operacoes || [], resultado.historicos || [], planilha, PLANILHA_ID);
+if (!reqs.length) return [{ json: { vazio: true } }];
+return reqs.map(function (r, i) {
+  return { json: { vazio: false, passo: i + 1, de: reqs.length, method: r.method, url: r.url, body: r.body } };
+});

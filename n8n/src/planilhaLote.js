@@ -7,6 +7,7 @@
 // ordem segura (pedidos antes da baixa, historico por ultimo).
 
 var URL_PLANILHAS = 'https://sheets.googleapis.com/v4/spreadsheets/';
+var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha do PCP MRBL
 
 // Abas lidas por ramo, na ordem do batchGet. { soCabecalho } le so a linha 1
 // (o ramo acao so precisa do cabecalho do HISTORICO_APP para o append).

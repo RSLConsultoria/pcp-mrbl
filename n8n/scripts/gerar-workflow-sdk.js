@@ -6,10 +6,12 @@ const path = require('path');
 const raiz = path.join(__dirname, '..');
 const lerBuild = (n) => JSON.stringify(fs.readFileSync(path.join(raiz, 'build', n + '.js'), 'utf8'));
 
-const DOC = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';
+// URLs do lote (batchGet) e id da planilha vem de src/planilhaLote.js.
+const { carregar } = require('../test/carregar');
+const lote = carregar();
+const DOC = lote.PLANILHA_ID;
 const ORIGENS = 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173';
 
-const { DESTINOS, codigoFiltrar } = require('./destinos');
 
 // Layout: esquerda -> direita, um ramo por faixa horizontal (Login y=0,
 // Board y=300, Acao y=600, gravacoes da acao em 3 faixas abaixo). Cada node
@@ -25,21 +27,12 @@ const posicao = (nome) => {
 };
 
 linha(0, 0, ['Login', 'Ler USUARIOS', 'Processar Login', 'Responder Login']);
-linha(300, 0, ['Board', 'Validar Pedido', 'Precisa Ler?', 'Ler FALTANTES', 'Ler CAIXAS GANHAS', 'Ler CAIXAS_PCP',
-  'Ler HISTORICO_APP', 'Ler USUARIOS Board', 'Ler PEDIDOS', 'Ler PEDIDOS_ITENS', 'Ler ETAPAS_PEDIDO', 'Montar Board', 'Responder Board']);
-linha(600, 0, ['Acao', 'Pre Validar Acao', 'Pre OK?', 'Ler FALTANTES Acao', 'Ler CAIXAS_PCP Acao', 'Ler CAIXAS GANHAS Acao',
-  'Ler PEDIDOS Acao', 'Ler PEDIDOS_ITENS Acao', 'Ler ETAPAS_PEDIDO Acao', 'Processar Acao', 'Acao OK?']);
+linha(300, 0, ['Board', 'Validar Pedido', 'Precisa Ler?', 'Ler Planilha', 'Montar Board', 'Responder Board']);
+linha(600, 0, ['Acao', 'Pre Validar Acao', 'Pre OK?', 'Ler Planilha Acao', 'Processar Acao', 'Acao OK?',
+  'Montar Escritas', 'Tem Escritas?', 'Loop Escritas', null, 'Responder Acao']);
 POS['Responder Pre'] = [3 * DX, 780];
-// Gravacoes: 3 destinos por faixa (Filtrar -> Tem? -> Sheets acima, o "nao"
-// segue reto para o proximo Filtrar). Faixas em y = 1000, 1300, 1600.
-DESTINOS.forEach((d, i) => {
-  const x = 3 * DX + (i % 3) * 3 * DX;
-  const y = 1000 + Math.floor(i / 3) * 300;
-  POS[d.filtrar] = [x, y];
-  POS[d.tem] = [x + DX, y];
-  POS[d.gravar] = [x + 2 * DX, y - 120];
-});
-POS['Responder Acao'] = [3 * DX + 9 * DX, 1600];
+// Loop: Gravar Lote fica acima do Loop Escritas (volta para ele a cada requisicao).
+POS['Gravar Lote'] = [9 * DX, 420];
 
 const POS_ENVIO = {};
 posAtual = POS_ENVIO;
@@ -119,12 +112,12 @@ const sheets = (varName, nome, aba, extra) => `const ${varName} = node({
   output: [{ email: 'a@b.com' }]
 });`;
 
-const responder = (varName, nome, corpoExpr, statusExpr) => `const ${varName} = node({
+const responder = (varName, nome, corpoExpr, statusExpr, extra) => `const ${varName} = node({
   type: 'n8n-nodes-base.respondToWebhook',
   version: 1.5,
   config: {
     name: '${nome}',
-    parameters: {
+    ${extra || ''}parameters: {
       respondWith: 'json',
       responseBody: expr(${JSON.stringify(corpoExpr || '{{ $json.body }}')}),
       options: {
@@ -198,54 +191,72 @@ const precisaLer = `const precisaLer = ifElse({
   }
 });`;
 
-// Cadeia de gravacao: Filtrar i -> Tem i? -> (sim) Sheets i -> Filtrar i+1;
-// (nao) -> Filtrar i+1. O ultimo segue para Responder Acao. O ramo "nao"
-// referencia so o node seguinte (a continuacao ja esta no ramo "sim").
-const proximo = (i) => (i + 1 < DESTINOS.length ? 'filtrar' + (i + 1) : 'responderAcao');
-const cadeiaGravacao = (i) => (i >= DESTINOS.length ? 'responderAcao'
-  : 'filtrar' + i + '.to(tem' + i + '\n      .onTrue(gravar' + i + '.to(' + cadeiaGravacao(i + 1) + '))\n      .onFalse(' + proximo(i) + '))');
+// HTTP Request na API do Google Sheets com a credencial googleApi
+// (service account; precisa de "Set up for use in HTTP Request node" com o
+// escopo spreadsheets). Leitura: GET fixo. Gravacao: POST com url/corpo do item.
+const CRED_GOOGLE_HTTP = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
+const httpGoogle = (varName, nome, metodo, urlCodigo, comCorpo, extra) => `const ${varName} = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.2,
+  config: {
+    name: '${nome}',
+    ${extra || ''}${RETRY}parameters: {
+      method: '${metodo}',
+      url: ${urlCodigo},
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'googleApi',
+      ${comCorpo ? "sendBody: true,\n      specifyBody: 'json',\n      jsonBody: expr('{{ JSON.stringify($json.body) }}'),\n      " : ''}options: { timeout: 30000 }
+    },
+    ${CRED_GOOGLE_HTTP}
+    position: ${posicao(nome)}
+  },
+  output: [{ valueRanges: [] }]
+});`;
+
+// Loop de gravacao: uma requisicao por volta, em ordem. O HTTP Request
+// dispara todos os itens de uma vez (Promise.allSettled) e o retry dele
+// repetiria as que ja deram certo; dentro do loop cada execucao do Gravar
+// Lote e uma requisicao so.
+const loopEscritas = `const loopEscritas = splitInBatches({
+  version: 3,
+  config: {
+    name: 'Loop Escritas',
+    parameters: { batchSize: 1, options: {} },
+    position: ${posicao('Loop Escritas')}
+  }
+});`;
+
+const temEscritas = 'const temEscritas = ' + condicao('Tem Escritas?', '{{ $json.vazio === true }}', 'boolean', 'false', "''")
+  .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';';
 
 RETRY = RETRY_API;
-const api = IMPORT + [
-  webhook('loginWebhook', 'Login', 'POST', 'pcp-login'),
+const IMPORT_API = IMPORT.replace('ifElse, expr', 'ifElse, splitInBatches, nextBatch, expr');
+const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
+  webhook('loginWebhook', 'Login', 'POST', 'pcp-login' + sufixo),
   sheets('lerUsuarios', 'Ler USUARIOS', 'USUARIOS', ''),
   code('processarLogin', 'Processar Login', 'processar-login'),
   responder('responderLogin', 'Responder Login'),
-  webhook('boardWebhook', 'Board', 'GET', 'pcp-board'),
+  webhook('boardWebhook', 'Board', 'GET', 'pcp-board' + sufixo),
   code('validarPedido', 'Validar Pedido', 'validar-pedido'),
   precisaLer,
-  sheets('lerFaltantes', 'Ler FALTANTES', 'FALTANTES', unico),
-  sheets('lerGanhas', 'Ler CAIXAS GANHAS', 'CAIXAS GANHAS', unico),
-  sheets('lerCaixasPcp', 'Ler CAIXAS_PCP', 'CAIXAS_PCP', unico),
-  sheets('lerHistorico', 'Ler HISTORICO_APP', 'HISTORICO_APP', unico),
-  sheets('lerUsuariosBoard', 'Ler USUARIOS Board', 'USUARIOS', unico),
-  sheets('lerPedidos', 'Ler PEDIDOS', 'PEDIDOS', unico),
-  sheets('lerPedidosItens', 'Ler PEDIDOS_ITENS', 'PEDIDOS_ITENS', unico),
-  sheets('lerEtapas', 'Ler ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', unico),
+  httpGoogle('lerPlanilha', 'Ler Planilha', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_BOARD)), false, unico),
   code('montarBoard', 'Montar Board', 'montar-board'),
   responder('responderBoard', 'Responder Board'),
-  webhook('acaoWebhook', 'Acao', 'POST', 'pcp-acao'),
+  webhook('acaoWebhook', 'Acao', 'POST', 'pcp-acao' + sufixo),
   code('preValidarAcao', 'Pre Validar Acao', 'pre-validar-acao'),
   'const preOk = ' + condicao('Pre OK?', '{{ $json.ok }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
   responder('responderPre', 'Responder Pre'),
-  sheets('lerFaltantesAcao', 'Ler FALTANTES Acao', 'FALTANTES', unico),
-  sheets('lerCaixasPcpAcao', 'Ler CAIXAS_PCP Acao', 'CAIXAS_PCP', unico),
-  sheets('lerGanhasAcao', 'Ler CAIXAS GANHAS Acao', 'CAIXAS GANHAS', unico),
-  sheets('lerPedidosAcao', 'Ler PEDIDOS Acao', 'PEDIDOS', unico),
-  sheets('lerPedidosItensAcao', 'Ler PEDIDOS_ITENS Acao', 'PEDIDOS_ITENS', unico),
-  sheets('lerEtapasAcao', 'Ler ETAPAS_PEDIDO Acao', 'ETAPAS_PEDIDO', unico),
+  httpGoogle('lerPlanilhaAcao', 'Ler Planilha Acao', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_ACAO)), false, unico),
   code('processarAcao', 'Processar Acao', 'processar-acao'),
   'const acaoOk = ' + condicao('Acao OK?', '{{ $json.status }}', 'number', 'equals', '200') + ';',
-  ...DESTINOS.map((d, i) => [
-    code('filtrar' + i, d.filtrar, d.arquivo),
-    'const tem' + i + ' = ' + condicao(d.tem, '{{ $json._vazio === true }}', 'boolean', 'false', "''")
-      .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';',
-    escrever('gravar' + i, d.gravar, d.operacao, d.aba, d.operacao === 'append' ? [] : [d.chave], 'alwaysOutputData: true,\n    ')
-  ].join('\n\n')),
-  responder('responderAcao', 'Responder Acao', "{{ $('Processar Acao').first().json.body }}", "{{ $('Processar Acao').first().json.status }}")
+  code('montarEscritas', 'Montar Escritas', 'montar-escritas'),
+  temEscritas,
+  loopEscritas,
+  httpGoogle('gravarLote', 'Gravar Lote', 'POST', "expr('{{ $json.url }}')", true),
+  responder('responderAcao', 'Responder Acao', "{{ $('Processar Acao').first().json.body }}", "{{ $('Processar Acao').first().json.status }}", unico)
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-api', 'PCP MRBL - API', {
+export default workflow('${id}', '${nomeWf}', {
   timezone: 'America/Sao_Paulo',
   saveDataSuccessExecution: 'none',
   saveDataErrorExecution: 'none'
@@ -257,17 +268,23 @@ export default workflow('pcp-mrbl-api', 'PCP MRBL - API', {
   .add(boardWebhook)
   .to(validarPedido)
   .to(precisaLer
-    .onTrue(lerFaltantes.to(lerGanhas).to(lerCaixasPcp).to(lerHistorico).to(lerUsuariosBoard).to(lerPedidos).to(lerPedidosItens).to(lerEtapas).to(montarBoard).to(responderBoard))
+    .onTrue(lerPlanilha.to(montarBoard).to(responderBoard))
     .onFalse(responderBoard))
   .add(acaoWebhook)
   .to(preValidarAcao)
   .to(preOk
-    .onTrue(lerFaltantesAcao.to(lerCaixasPcpAcao).to(lerGanhasAcao).to(lerPedidosAcao).to(lerPedidosItensAcao)
-      .to(lerEtapasAcao).to(processarAcao).to(acaoOk
-    .onTrue(${cadeiaGravacao(0)})
-    .onFalse(responderAcao)))
+    .onTrue(lerPlanilhaAcao.to(processarAcao).to(acaoOk
+      .onTrue(montarEscritas.to(temEscritas
+        .onTrue(loopEscritas
+          .onDone(responderAcao)
+          .onEachBatch(gravarLote.to(nextBatch(loopEscritas))))
+        .onFalse(responderAcao)))
+      .onFalse(responderAcao)))
     .onFalse(responderPre));
 `;
+
+const api = gerarApi('pcp-mrbl-api', 'PCP MRBL - API', '');
+const apiHomolog = gerarApi('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)', '-h');
 
 posAtual = POS_ENVIO;
 RETRY = '';
@@ -308,5 +325,7 @@ export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api.sdk.js'), api);
 console.log('workflows/pcp-api.sdk.js');
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api-homolog.sdk.js'), apiHomolog);
+console.log('workflows/pcp-api-homolog.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-envio.sdk.js'), envio);
 console.log('workflows/pcp-envio.sdk.js');

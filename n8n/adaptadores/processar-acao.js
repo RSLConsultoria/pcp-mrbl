@@ -1,16 +1,17 @@
 // ===== adaptador: Processar Acao =====
+// Linhas: resposta do values:batchGet do HTTP "Ler Planilha Acao" (LEITURAS_ACAO).
 var estado = $getWorkflowStaticData('global');
 var entrada = $('Acao').first().json;
 var cabecalho = (entrada.headers || {}).authorization;
 var corpo = entrada.body || {};
-var ler = function (nome) { return $(nome).all().map(function (i) { return i.json; }); };
+var abas = planilhaDoLote($('Ler Planilha Acao').first().json, LEITURAS_ACAO).linhas;
 var linhas = {
-  faltantes: ler('Ler FALTANTES Acao'),
-  caixasPcp: ler('Ler CAIXAS_PCP Acao'),
-  ganhas: ler('Ler CAIXAS GANHAS Acao'),
-  pedidos: ler('Ler PEDIDOS Acao'),
-  pedidosItens: ler('Ler PEDIDOS_ITENS Acao'),
-  etapas: ler('Ler ETAPAS_PEDIDO Acao')
+  faltantes: abas['FALTANTES'],
+  caixasPcp: abas['CAIXAS_PCP'],
+  ganhas: abas['CAIXAS GANHAS'],
+  pedidos: abas['PEDIDOS'],
+  pedidosItens: abas['PEDIDOS_ITENS'],
+  etapas: abas['ETAPAS_PEDIDO']
 };
 var gerarId = function () { return require('crypto').randomUUID(); };
 return [{ json: processarAcao(estado, cabecalho, corpo, linhas, Date.now(), gerarId) }];

@@ -9,7 +9,7 @@ const loginWebhook = trigger({
     name: 'Login',
     parameters: {
       httpMethod: 'POST',
-      path: 'pcp-login',
+      path: 'pcp-login-h',
       responseMode: 'responseNode',
       options: { allowedOrigins: 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173' }
     },
@@ -76,7 +76,7 @@ const boardWebhook = trigger({
     name: 'Board',
     parameters: {
       httpMethod: 'GET',
-      path: 'pcp-board',
+      path: 'pcp-board-h',
       responseMode: 'responseNode',
       options: { allowedOrigins: 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173' }
     },
@@ -169,7 +169,7 @@ const acaoWebhook = trigger({
     name: 'Acao',
     parameters: {
       httpMethod: 'POST',
-      path: 'pcp-acao',
+      path: 'pcp-acao-h',
       responseMode: 'responseNode',
       options: { allowedOrigins: 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173' }
     },
@@ -348,7 +348,7 @@ const responderAcao = node({
   output: [{}]
 });
 
-export default workflow('pcp-mrbl-api', 'PCP MRBL - API', {
+export default workflow('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)', {
   timezone: 'America/Sao_Paulo',
   saveDataSuccessExecution: 'none',
   saveDataErrorExecution: 'none'

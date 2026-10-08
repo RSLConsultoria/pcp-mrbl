@@ -4,7 +4,6 @@
 const fs = require('fs');
 const path = require('path');
 const { ARQUIVOS } = require('../test/carregar');
-const { DESTINOS, codigoFiltrar } = require('./destinos');
 
 const raiz = path.join(__dirname, '..');
 const NODES = {
@@ -13,6 +12,7 @@ const NODES = {
   'montar-board': 'Montar Board',
   'pre-validar-acao': 'Pre Validar Acao',
   'processar-acao': 'Processar Acao',
+  'montar-escritas': 'Montar Escritas',
   'selecionar-envio': 'Selecionar Envio',
   'invalidas-envio': 'Marcar Invalidas',
   'montar-registro': 'Montar Registro',
@@ -35,14 +35,3 @@ for (const [arq, nome] of Object.entries(NODES)) {
   console.log('build/' + arq + '.js');
 }
 
-// Code nodes "Filtrar <aba> <operacao>" do ramo acao: so o adaptador (nao
-// precisam de src/), com o destino embutido.
-const template = fs.readFileSync(path.join(raiz, 'adaptadores', 'filtrar-operacoes.js'), 'utf8');
-DESTINOS.forEach((d, i) => {
-  const txt =
-    '// ===== Code node "' + d.filtrar + '" =====\n' +
-    '// GERADO por n8n/scripts/gerar-code-nodes.js. Nao edite no n8n.\n\n' +
-    codigoFiltrar(template, d, i);
-  fs.writeFileSync(path.join(raiz, 'build', d.arquivo + '.js'), txt);
-  console.log('build/' + d.arquivo + '.js');
-});

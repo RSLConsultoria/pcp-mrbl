@@ -1,181 +1,193 @@
-// Cadeia de gravacao do ramo acao (F3 Task 4): roda o texto dos Code nodes
-// "Filtrar <aba> <operacao>" (build/filtrar-*.js) num vm com um $ falso e
-// simula os IF "Tem ...?". Garante: toda operacao gravada uma vez, no destino
-// certo, na ordem dos destinos, e nenhum item vazio chega a um Sheets.
+// Ramos board e acao do workflow "PCP MRBL - API" com leitura/gravacao em
+// lote: roda o texto dos Code nodes (src/ + adaptador, como o build monta)
+// num vm com um $ falso, e confere o SDK gerado.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { carregar, limpo } = require('./carregar');
-const { DESTINOS, codigoFiltrar } = require('../scripts/destinos');
+const { ARQUIVOS, limpo } = require('./carregar');
 
-const TEMPLATE = fs.readFileSync(path.join(__dirname, '..', 'adaptadores', 'filtrar-operacoes.js'), 'utf8');
+const RAIZ = path.join(__dirname, '..');
 
-function rodarFiltrar(i, saida) {
-  const ctx = vm.createContext({
-    $: (nome) => {
-      assert.equal(nome, 'Processar Acao');
-      return { first: () => ({ json: saida }) };
-    }
-  });
-  const codigo = '(function () {\n' + codigoFiltrar(TEMPLATE, DESTINOS[i], i) + '\n})()';
-  return limpo(vm.runInContext(codigo, ctx));
+// Executa o Code node "arq" (todos os src/ + adaptadores/<arq>.js) com os globais dados.
+function rodarNode(arq, globais) {
+  const ctx = vm.createContext(Object.assign({ require }, globais));
+  for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8'), ctx, { filename: f });
+  ctx.DEALS_EDITAVEIS = [];
+  const adaptador = fs.readFileSync(path.join(RAIZ, 'adaptadores', arq + '.js'), 'utf8');
+  return limpo(vm.runInContext('(function () {\n' + adaptador + '\n})()', ctx, { filename: arq + '.js' }));
 }
 
-// Devolve [{ gravar, aba, operacao, linhas }] na ordem em que o workflow grava.
-function simular(saida) {
-  const escritas = [];
-  DESTINOS.forEach((d, i) => {
-    const itens = rodarFiltrar(i, saida);
-    assert.ok(itens.length > 0, 'Code sempre devolve ao menos um item');
-    const vazios = itens.filter((it) => it.json._vazio === true);
-    if (vazios.length) {
-      assert.deepEqual(itens, [{ json: { _vazio: true } }]);
-      return; // IF "Tem ...?" -> nao: pula o Sheets
-    }
-    itens.forEach((it) => assert.ok(Object.keys(it.json).length > 0, 'linha vazia'));
-    escritas.push({ gravar: d.gravar, aba: d.aba, operacao: d.operacao, linhas: itens.map((it) => it.json) });
-  });
-  return escritas;
+// $ falso: cada nome devolve os itens dados.
+function cifrao(nodes) {
+  return (nome) => {
+    if (!(nome in nodes)) throw new Error('node inesperado: ' + nome);
+    const itens = nodes[nome].map((json) => ({ json }));
+    return { first: () => itens[0], all: () => itens };
+  };
 }
 
-function esperado(saida) {
-  // Operacoes agrupadas por destino, na ordem dos DESTINOS; historicos no fim.
-  const out = [];
-  DESTINOS.forEach((d) => {
-    const linhas = d.fonte === 'historicos' ? saida.historicos
-      : saida.operacoes.filter((o) => o.aba === d.aba && o.operacao === d.operacao).map((o) => o.linha);
-    if (linhas.length) out.push({ gravar: d.gravar, aba: d.aba, operacao: d.operacao, linhas });
-  });
-  return out;
-}
+const vr = (aba, values) => ({ range: "'" + aba + "'!A1:Z100", majorDimension: 'ROWS', values });
+const CAB_FALT = ['id', 'os', 'deal_id', 'ciclo', 'descricao_item', 'unidade', 'qtd_falta', 'qtd_baixada', 'status', 'atualizado_em_app', 'responsavel'];
+const FALT = [CAB_FALT,
+  ['a', '90001', 600001, 'PEDIDO', 'VIÉS', 'MT', 100, '', 'ABERTO', '', ''],
+  ['b', '90001', 600001, 'PEDIDO', 'ZÍPER', 'UN', 10, 4, 'ABERTO', '', '']];
+const CAB_HIST = ['id', 'quando', 'usuario', 'email', 'deal_id', 'os', 'item_id', 'acao', 'texto', 'ploomes_status', 'ploomes_id', 'tentativas', 'erro'];
+const LEITURA_ACAO = {
+  spreadsheetId: 'x',
+  valueRanges: [
+    vr('FALTANTES', FALT),
+    vr('CAIXAS_PCP', [['deal_id', 'os', 'responsavel', 'previsao', 'observacao', 'atualizado_em', 'tratativa', 'tratativa_em']]),
+    vr('CAIXAS GANHAS', [['deal_id', 'os']]),
+    vr('PEDIDOS', [['id', 'etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel', 'criado_em', 'criado_por', 'baixado_em', 'atualizado_em', 'pai']]),
+    vr('PEDIDOS_ITENS', [['id', 'pedido_id', 'item_id', 'deal_id', 'os', 'nome', 'un', 'qtd', 'fornecedor', 'previsao']]),
+    vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']]),
+    { range: "'HISTORICO_APP'!A1:M1", majorDimension: 'ROWS', values: [CAB_HIST] }
+  ]
+};
 
-const ctx = carregar();
-const T0 = Date.UTC(2026, 9, 8, 15, 0, 0);
-const USUARIOS = [{ email: 'lucca@exemplo.com', nome: 'Lucca', perfil: 'adm', senha_hash: ctx.gerarHash(crypto, 'senha-forte-123'), ativo: 'SIM' }];
+const T0 = Date.now();
 function sessao() {
-  const e = {};
-  const r = ctx.processarLogin(crypto, e, { email: 'lucca@exemplo.com', senha: 'senha-forte-123' }, USUARIOS, T0);
-  return { e, cab: 'Bearer ' + r.body.token };
+  const estado = {};
+  const ctx = vm.createContext({});
+  for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8'), ctx);
+  const U = [{ email: 'l@x.com', nome: 'Lucca', perfil: 'adm', senha_hash: ctx.gerarHash(crypto, 'senha-forte-123'), ativo: 'SIM' }];
+  const r = ctx.processarLogin(crypto, estado, { email: 'l@x.com', senha: 'senha-forte-123' }, U, T0);
+  return { estado, cab: 'Bearer ' + r.body.token };
 }
-let n = 0;
-const gerarId = () => 'h-' + (++n);
-const FALT = [
-  { id: 'a', os: '90001', deal_id: '600001', ciclo: 'PEDIDO', descricao_item: 'VIÉS', unidade: 'MT', qtd_falta: 100, qtd_baixada: '', status: 'ABERTO', atualizado_em_app: '', responsavel: '' },
-  { id: 'b', os: '90001', deal_id: '600001', ciclo: 'PEDIDO', descricao_item: 'ZÍPER', unidade: 'UN', qtd_falta: 10, qtd_baixada: 4, status: 'ABERTO', atualizado_em_app: '', responsavel: '' }
-];
+
 function acao(corpo) {
   const s = sessao();
-  const linhas = { faltantes: FALT, caixasPcp: [], ganhas: [], pedidos: [], pedidosItens: [], etapas: [] };
-  return limpo(ctx.processarAcao(s.e, s.cab, corpo, linhas, T0, gerarId));
+  const $ = cifrao({ Acao: [{ headers: { authorization: s.cab }, body: corpo }], 'Ler Planilha Acao': [LEITURA_ACAO] });
+  const [proc] = rodarNode('processar-acao', { $, $getWorkflowStaticData: () => s.estado });
+  const escritas = rodarNode('montar-escritas', {
+    $: cifrao({ 'Processar Acao': [proc.json], 'Ler Planilha Acao': [LEITURA_ACAO] })
+  });
+  return { proc: proc.json, escritas: escritas.map((i) => i.json) };
 }
 
-test('destinos: um Code, um IF e um Sheets por (aba, operacao), nomes unicos', () => {
-  const nomes = DESTINOS.flatMap((d) => [d.filtrar, d.tem, d.gravar]);
-  assert.equal(new Set(nomes).size, nomes.length);
-  assert.deepEqual(DESTINOS.map((d) => d.aba),
-    ['PEDIDOS', 'PEDIDOS', 'PEDIDOS_ITENS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', 'FALTANTES', 'CAIXAS_PCP', 'HISTORICO_APP']);
+const URL_BASE = 'https://sheets.googleapis.com/v4/spreadsheets/1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww/values';
+const alvo = (e) => (e.url.endsWith(':batchUpdate') ? 'batchUpdate' : decodeURIComponent(/values\/([^:]+):append/.exec(e.url)[1]));
+
+test('F2 baixa: Processar Acao le do lote; Montar Escritas = batchUpdate em FALTANTES + append no historico', () => {
+  const { proc, escritas } = acao({ tipo: 'baixa', dealId: '600001', itemId: 'b', valor: 2, versao: '' });
+  assert.equal(proc.status, 200, JSON.stringify(proc.body));
+  assert.deepEqual(escritas.map(alvo), ['batchUpdate', "'HISTORICO_APP'!A1"]);
+  assert.ok(escritas.every((e) => e.method === 'POST' && e.url.startsWith(URL_BASE) && e.vazio === false));
+  assert.deepEqual(escritas.map((e) => [e.passo, e.de]), [[1, 2], [2, 2]]);
+  const ranges = escritas[0].body.data.map((d) => d.range);
+  assert.ok(ranges.every((r) => r.startsWith("'FALTANTES'!") && /3(:|$)/.test(r)), ranges.join());
+  assert.deepEqual(escritas[0].body.data.find((d) => d.range.startsWith("'FALTANTES'!H")).values, [[6]]);
+  assert.equal(escritas[1].body.values[0][0], proc.historicos[0].id);
 });
 
-test('F2 baixa: uma linha em FALTANTES (update) e uma no HISTORICO_APP, como antes', () => {
-  const saida = acao({ tipo: 'baixa', dealId: '600001', itemId: 'a', valor: 20, versao: '' });
-  assert.equal(saida.status, 200);
-  const escritas = simular(saida);
-  assert.deepEqual(escritas.map((e) => e.gravar), ['Atualizar FALTANTES', 'Incluir HISTORICO_APP']);
-  // mesma linha que a F2 gravava (linhaDeGravacao) e o mesmo historico
-  assert.deepEqual(escritas[0].linhas, [limpo(ctx.linhaDeGravacao(saida.gravacao))]);
-  assert.deepEqual(escritas[1].linhas, [saida.historico]);
+test('F2 coluna da caixa sem linha em CAIXAS_PCP: append antes do historico', () => {
+  const { escritas } = acao({ tipo: 'obs_caixa', dealId: '600001', valor: 'oi', versao: '' });
+  assert.deepEqual(escritas.map(alvo), ["'CAIXAS_PCP'!A1", "'HISTORICO_APP'!A1"]);
 });
 
-test('F2 coluna da caixa: CAIXAS_PCP appendOrUpdate', () => {
-  const saida = acao({ tipo: 'obs_caixa', dealId: '600001', valor: 'oi', versao: '' });
-  assert.equal(saida.status, 200);
-  assert.deepEqual(simular(saida).map((e) => e.gravar), ['Gravar CAIXAS_PCP', 'Incluir HISTORICO_APP']);
-});
-
-test('F3 gerar_pedido: PEDIDOS append, PEDIDOS_ITENS append, historicos', () => {
-  const saida = acao({
+test('F3 gerar_pedido: PEDIDOS, PEDIDOS_ITENS e historico, nessa ordem', () => {
+  const { proc, escritas } = acao({
     tipo: 'gerar_pedido',
     itens: [{ itemId: 'a', dealId: '600001', qtd: 20, fornecedor: '' }, { itemId: 'b', dealId: '600001', qtd: 6, fornecedor: 'X' }],
     origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: ''
   });
-  assert.equal(saida.status, 200, JSON.stringify(saida.body));
-  const escritas = simular(saida);
-  assert.deepEqual(escritas, esperado(saida));
-  assert.deepEqual(escritas.map((e) => e.gravar), ['Incluir PEDIDOS', 'Incluir PEDIDOS_ITENS', 'Incluir HISTORICO_APP']);
-  assert.equal(escritas[1].linhas.length, 2);
+  assert.equal(proc.status, 200, JSON.stringify(proc.body));
+  assert.deepEqual(escritas.map(alvo), ["'PEDIDOS'!A1", "'PEDIDOS_ITENS'!A1", "'HISTORICO_APP'!A1"]);
+  assert.equal(escritas[1].body.values.length, 2);
 });
 
-test('todos os destinos de uma vez: cada operacao exatamente uma vez, na ordem', () => {
-  const op = (aba, operacao, chave, linha) => ({ aba, operacao, chave, linha });
-  const saida = {
-    status: 200,
-    operacoes: [
-      op('ETAPAS_PEDIDO', 'update', 'id', { id: 'x', nome: '', ordem: '' }),
-      op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', { deal_id: '1', tratativa: 'RECEBIDO' }),
-      op('FALTANTES', 'update', 'id', { id: 'a', qtd_baixada: 1 }),
-      op('FALTANTES', 'update', 'id', { id: 'b', qtd_baixada: 2 }),
-      op('PEDIDOS', 'append', 'id', { id: 'PED-0001' }),
-      op('PEDIDOS', 'update', 'id', { id: 'PED-0002', etapa: 'y' }),
-      op('PEDIDOS_ITENS', 'append', 'id', { id: 'PED-0001|a' }),
-      op('PEDIDOS_ITENS', 'update', 'id', { id: 'PED-0002|b', qtd: 3 }),
-      op('ETAPAS_PEDIDO', 'appendOrUpdate', 'id', { id: 'y', nome: 'Y', ordem: 1 })
-    ],
-    historicos: [{ id: 'h1' }, { id: 'h2' }]
+test('acao recusada ou sem nada a gravar: um item { vazio: true }', () => {
+  const { proc, escritas } = acao({ tipo: 'baixa', dealId: '600001', itemId: 'zz', valor: 2, versao: '' });
+  assert.equal(proc.status, 404);
+  assert.deepEqual(escritas, [{ vazio: true }]);
+  const nada = rodarNode('montar-escritas', {
+    $: cifrao({ 'Processar Acao': [{ status: 200, operacoes: [], historicos: [] }], 'Ler Planilha Acao': [LEITURA_ACAO] })
+  });
+  assert.deepEqual(nada, [{ json: { vazio: true } }]);
+});
+
+test('Montar Escritas: update sem linha derruba o node antes de gravar', () => {
+  assert.throws(() => rodarNode('montar-escritas', {
+    $: cifrao({
+      'Processar Acao': [{ status: 200, operacoes: [{ aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'zz', qtd_baixada: 1 } }], historicos: [] }],
+      'Ler Planilha Acao': [LEITURA_ACAO]
+    })
+  }), /não encontrada/);
+});
+
+test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets)', () => {
+  const s = sessao();
+  const leitura = {
+    valueRanges: [
+      vr('FALTANTES', FALT), vr('CAIXAS GANHAS', [['deal_id', 'os']]), vr('CAIXAS_PCP', []), vr('HISTORICO_APP', [CAB_HIST]),
+      vr('USUARIOS', [['email', 'nome', 'perfil', 'senha_hash', 'ativo'], ['l@x.com', 'Lucca', 'ADM', 'h', 'SIM'], ['b@x.com', 'Bia', 'PCP', 'h', 'NAO']]),
+      vr('PEDIDOS', [['id']]), vr('PEDIDOS_ITENS', [['id']]), vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']])
+    ]
   };
-  const escritas = simular(saida);
-  assert.deepEqual(escritas, esperado(saida));
-  assert.deepEqual(escritas.map((e) => e.aba),
-    ['PEDIDOS', 'PEDIDOS', 'PEDIDOS_ITENS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'ETAPAS_PEDIDO', 'FALTANTES', 'CAIXAS_PCP', 'HISTORICO_APP']);
-  const total = escritas.reduce((s, e) => s + e.linhas.length, 0);
-  assert.equal(total, saida.operacoes.length + saida.historicos.length);
+  const [saida] = rodarNode('montar-board', { $: cifrao({ 'Ler Planilha': [leitura] }), $getWorkflowStaticData: () => s.estado });
+  assert.equal(saida.json.status, 200);
+  assert.deepEqual(saida.json.body.usuarios, ['Lucca']);
+  assert.equal(saida.json.body.caixas.length, 1);
+  assert.equal(saida.json.body.caixas[0].itens.length, 2);
 });
 
-test('sem operacoes nem historicos: nada e gravado', () => {
-  assert.deepEqual(simular({ status: 200, operacoes: [], historicos: [] }), []);
+// ---------- SDK gerado ----------
+
+function lerSdk(nome) {
+  return fs.readFileSync(path.join(RAIZ, 'workflows', nome), 'utf8');
+}
+function blocos(sdk) {
+  return sdk.split(/\nconst \w+ = /).slice(1).map((b) => ({ nome: (/name: '([^']+)'/.exec(b) || [])[1], txt: b }));
+}
+
+test('pcp-api.sdk.js: nodes do lote, sem Filtrar/Tem/Gravar por aba', () => {
+  const sdk = lerSdk('pcp-api.sdk.js');
+  const nomes = blocos(sdk).map((b) => b.nome);
+  for (const n of ['Ler Planilha', 'Montar Board', 'Ler Planilha Acao', 'Processar Acao', 'Montar Escritas',
+    'Tem Escritas?', 'Loop Escritas', 'Gravar Lote', 'Responder Acao', 'Ler USUARIOS']) {
+    assert.ok(nomes.includes(n), n);
+  }
+  assert.ok(!/Filtrar |Tem PEDIDOS|Incluir |Atualizar |Ler FALTANTES|Ler CAIXAS/.test(sdk));
+  assert.equal(blocos(sdk).filter((b) => b.txt.includes("type: 'n8n-nodes-base.googleSheets'")).length, 1);
 });
 
-// Pedido antes da baixa: se uma escrita falhar no meio, sobra baixa a menos
-// (o pedido nao finalizado pode ser movido de novo), nunca baixa em dobro.
-test('ordem: PEDIDOS/PEDIDOS_ITENS/ETAPAS_PEDIDO antes de FALTANTES e CAIXAS_PCP; historico por ultimo', () => {
-  assert.deepEqual(DESTINOS.map((d) => d.gravar), [
-    'Incluir PEDIDOS', 'Atualizar PEDIDOS', 'Incluir PEDIDOS_ITENS', 'Atualizar PEDIDOS_ITENS',
-    'Gravar ETAPAS_PEDIDO', 'Atualizar ETAPAS_PEDIDO', 'Atualizar FALTANTES', 'Gravar CAIXAS_PCP', 'Incluir HISTORICO_APP'
-  ]);
-});
-
-test('Filtrar do primeiro destino confere a lista antes de qualquer escrita', () => {
-  const sai = (operacoes) => () => rodarFiltrar(0, { status: 200, operacoes, historicos: [] });
-  assert.throws(sai([{ aba: 'OUTRA', operacao: 'update', chave: 'id', linha: { id: 'a' } }]), /sem destino/);
-  assert.throws(sai([{ aba: 'PEDIDOS', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'a' } }]), /sem destino/);
-  assert.throws(sai([{ aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'a' } }]), /sem destino/);
-  assert.throws(sai([{ aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { qtd_baixada: 1 } }]), /sem chave/);
-  assert.throws(sai([{ aba: 'PEDIDOS', operacao: 'append', chave: 'id', linha: {} }]), /sem linha/);
-});
-
-test('build: o texto dos Code nodes Filtrar e o mesmo do template', () => {
-  DESTINOS.forEach((d, i) => {
-    const arq = path.join(__dirname, '..', 'build', d.arquivo + '.js');
-    if (!fs.existsSync(arq)) return; // antes do primeiro npm run build
-    assert.ok(fs.readFileSync(arq, 'utf8').endsWith(codigoFiltrar(TEMPLATE, d, i)), d.arquivo);
+test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi e retry 3x / 3 s', () => {
+  const sdk = lerSdk('pcp-api.sdk.js');
+  const google = blocos(sdk).filter((b) => /type: 'n8n-nodes-base\.(httpRequest|googleSheets)'/.test(b.txt));
+  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
+  google.forEach((b) => {
+    assert.ok(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b.txt), b.nome);
+    assert.ok(b.txt.includes("googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' }"), b.nome);
+    if (b.nome !== 'Ler USUARIOS') {
+      assert.ok(b.txt.includes("authentication: 'predefinedCredentialType'") && b.txt.includes("nodeCredentialType: 'googleApi'"), b.nome);
+    }
   });
+  const ler = blocos(sdk).find((b) => b.nome === 'Ler Planilha').txt;
+  assert.ok(ler.includes('valueRenderOption=UNFORMATTED_VALUE') && ler.includes('executeOnce: true'));
+  const gravar = blocos(sdk).find((b) => b.nome === 'Gravar Lote').txt;
+  assert.ok(gravar.includes("method: 'POST'") && gravar.includes("url: expr('{{ $json.url }}')"));
+  assert.ok(gravar.includes("jsonBody: expr('{{ JSON.stringify($json.body) }}')"));
+  const resp = blocos(sdk).find((b) => b.nome === 'Responder Acao').txt;
+  assert.ok(resp.includes('executeOnce: true') && resp.includes("$('Processar Acao').first().json.body"));
 });
 
-// Revisao final: todo Google Sheets da API com retry; ramo acao sem a leitura
-// morta do HISTORICO_APP (processarAcao nao usa linhas.historico).
-test('pcp-api.sdk.js: todo Google Sheets tenta 3x; sem Ler HISTORICO_APP Acao', () => {
-  const arq = path.join(__dirname, '..', 'workflows', 'pcp-api.sdk.js');
-  const sdk = fs.readFileSync(arq, 'utf8');
-  const blocos = sdk.split(/\nconst \w+ = /).filter((b) => b.includes("type: 'n8n-nodes-base.googleSheets'"));
-  assert.ok(blocos.length >= 20, 'nodes Sheets: ' + blocos.length);
-  blocos.forEach((b) => {
-    const nome = /name: '([^']+)'/.exec(b)[1];
-    assert.ok(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b), nome);
-  });
-  assert.ok(!sdk.includes('Ler HISTORICO_APP Acao'));
-  assert.ok(!fs.readFileSync(path.join(__dirname, '..', 'adaptadores', 'processar-acao.js'), 'utf8').includes('HISTORICO_APP'));
-  const envio = fs.readFileSync(path.join(__dirname, '..', 'workflows', 'pcp-envio.sdk.js'), 'utf8');
-  assert.ok(!envio.includes('retryOnFail'));
+test('pcp-api-homolog.sdk.js: igual ao de producao, so nome, id e caminhos dos webhooks mudam', () => {
+  const prod = lerSdk('pcp-api.sdk.js');
+  const hom = lerSdk('pcp-api-homolog.sdk.js');
+  assert.ok(hom.includes("workflow('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)'"));
+  for (const p of ['pcp-login', 'pcp-board', 'pcp-acao']) {
+    assert.ok(prod.includes("path: '" + p + "'"));
+    assert.ok(hom.includes("path: '" + p + "-h'"));
+  }
+  const normal = hom
+    .replace("workflow('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)'", "workflow('pcp-mrbl-api', 'PCP MRBL - API'")
+    .replace(/path: '(pcp-\w+)-h'/g, "path: '$1'");
+  assert.equal(normal, prod);
+});
+
+test('pcp-envio.sdk.js: sem retry (como antes)', () => {
+  assert.ok(!lerSdk('pcp-envio.sdk.js').includes('retryOnFail'));
 });
