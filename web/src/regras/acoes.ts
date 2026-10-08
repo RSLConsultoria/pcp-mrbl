@@ -2,7 +2,7 @@ import { ApiError } from '../api/client';
 import type { Acao, EntradaHistorico, Item, StatusPloomes } from '../api/tipos';
 import { COLUNAS } from './colunas';
 import { ddmm } from './datas';
-import { formatarNumero } from './quantidade';
+import { qtdComUn } from './quantidade';
 
 export const MIN_JUSTIFICATIVA = 15;
 
@@ -24,7 +24,7 @@ export function validarBaixa(qtdTexto: string, item: Item): string | null {
   if (qtd === null || arredondar3(qtd) <= 0) return 'Informe uma quantidade maior que zero';
   if (item.resta === null) return 'Item sem quantidade faltante registrada.';
   const resta = arredondar3(item.resta);
-  if (arredondar3(qtd) > resta) return `Falta só ${formatarNumero(resta)} ${item.un}`.trimEnd();
+  if (arredondar3(qtd) > resta) return `Falta só ${qtdComUn(resta, item.un)}`;
   return null;
 }
 
@@ -44,12 +44,22 @@ export function dataPronta(v: string): boolean {
   return !!m && Number(m[1]) >= 2000 && Number(m[1]) <= 2099;
 }
 
+export type PassoData = 'salvar' | 'esperar' | 'reverter';
+
+// O que fazer com a data do campo. Data digitada pela metade (o navegador marca badInput e
+// devolve '') ou com o ano ainda incompleto fica pendente enquanto se digita; ao sair do
+// campo, volta ao valor do board sem gravar. Só o campo limpo de propósito grava ''.
+export function passoDaData(valor: string, incompleta: boolean, aoSair: boolean): PassoData {
+  if (incompleta || !dataPronta(valor)) return aoSair ? 'reverter' : 'esperar';
+  return 'salvar';
+}
+
 // Aviso de uma linha mostrado quando o servidor aceita a ação.
 export function mensagemSucesso(acao: Acao, item?: Pick<Item, 'nome' | 'un'>): string {
   const nome = item?.nome ?? 'item';
   switch (acao.tipo) {
     case 'baixa':
-      return `Baixa registrada · ${[formatarNumero(acao.valor), item?.un].filter(Boolean).join(' ')} de ${nome}`;
+      return `Baixa registrada · ${qtdComUn(acao.valor, item?.un ?? '')} de ${nome}`;
     case 'previsao_item':
       return acao.valor ? `Previsão de ${nome}: ${ddmm(acao.valor)}` : `Previsão de ${nome} removida`;
     case 'obs_item':
@@ -105,4 +115,14 @@ export function versaoAtual(versao: string, trocas: Map<string, string> | undefi
   let v = versao;
   for (let i = 0; trocas && trocas.has(v) && i < 100; i++) v = trocas.get(v)!;
   return v;
+}
+
+// Grava no Map como a entrada mais recente e descarta as mais antigas acima de max.
+export function gravarRecente<K, V>(m: Map<K, V>, chave: K, valor: V, max = 50): void {
+  m.delete(chave);
+  m.set(chave, valor);
+  for (const k of m.keys()) {
+    if (m.size <= max) break;
+    m.delete(k);
+  }
 }

@@ -9,10 +9,13 @@ export class ApiError extends Error {
   }
 }
 
+// Sem resposta em 20 s, o pedido é cancelado e conta como falta de conexão.
+export const TEMPO_LIMITE_MS = 20_000;
+
 async function pedir<T>(url: string, init: RequestInit): Promise<T> {
   let r: Response;
   try {
-    r = await fetch(url, init);
+    r = await fetch(url, { ...init, signal: AbortSignal.timeout(TEMPO_LIMITE_MS) });
   } catch {
     throw new ApiError(0, 'Sem conexão com o servidor.');
   }

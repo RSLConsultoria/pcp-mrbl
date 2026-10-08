@@ -14,6 +14,22 @@ describe('client', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('pedido sem resposta é cancelado em 20 s e vira ApiError status 0', async () => {
+    const ctrl = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(ctrl.signal);
+    // fetch que nunca responde; só termina quando o sinal cancela.
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_ok, falha) => {
+      init.signal?.addEventListener('abort', () => falha(init.signal?.reason));
+    })));
+    const p = buscarBoard('t').catch((x) => x);
+    expect(timeout).toHaveBeenCalledWith(20_000);
+    ctrl.abort(new DOMException('signal timed out', 'TimeoutError'));
+    const e = await p;
+    expect(e).toBeInstanceOf(ApiError);
+    expect(e).toMatchObject({ status: 0, message: 'Sem conexão com o servidor.' });
   });
 
   it('entrar faz POST com JSON e devolve a sessão', async () => {

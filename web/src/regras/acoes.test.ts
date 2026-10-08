@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client';
 import {
-  chaveDaAcao, dataPronta, desfechoDoErro, justificativaValida, mensagemSucesso, MSG_CONFLITO, MSG_FALHA,
-  ordenarHistorico, SELO_PLOOMES, tamanhoJustificativa, validarBaixa, versaoAtual
+  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, justificativaValida, mensagemSucesso, MSG_CONFLITO, MSG_FALHA,
+  ordenarHistorico, passoDaData, SELO_PLOOMES, tamanhoJustificativa, validarBaixa, versaoAtual
 } from './acoes';
 import { item } from './teste-util';
 
@@ -21,6 +21,7 @@ describe('validarBaixa', () => {
   it('rejeita acima do que resta, com o número em pt-BR', () => {
     expect(validarBaixa('27', it26)).toBe('Falta só 26 UN');
     expect(validarBaixa('3', item({ un: 'cones', falta: 2.5, resta: 2.5 }))).toBe('Falta só 2,5 cones');
+    expect(validarBaixa('2', item({ un: 'cones', falta: 1, resta: 1 }))).toBe('Falta só 1 cone');
   });
   it('compara com tolerância de 3 casas', () => {
     expect(validarBaixa('0,2', item({ falta: 0.3, baixada: 0.1, resta: 0.19999999999999998 }))).toBeNull();
@@ -48,6 +49,36 @@ describe('dataPronta', () => {
   });
 });
 
+describe('passoDaData', () => {
+  it('data completa (ou limpa de propósito) salva', () => {
+    expect(passoDaData('2026-10-09', false, false)).toBe('salvar');
+    expect(passoDaData('', false, false)).toBe('salvar');
+    expect(passoDaData('', false, true)).toBe('salvar');
+  });
+  it('data pela metade (badInput) não é remoção: espera e, ao sair, volta', () => {
+    expect(passoDaData('', true, false)).toBe('esperar');
+    expect(passoDaData('', true, true)).toBe('reverter');
+  });
+  it('pausa no meio do ano fica pendente; ao sair, volta', () => {
+    expect(passoDaData('0202-10-09', false, false)).toBe('esperar');
+    expect(passoDaData('0202-10-09', false, true)).toBe('reverter');
+  });
+});
+
+describe('gravarRecente', () => {
+  it('guarda só as entradas mais recentes', () => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < 60; i++) gravarRecente(m, `k${i}`, i);
+    expect(m.size).toBe(50);
+    expect(m.has('k9')).toBe(false);
+    expect(m.has('k10')).toBe(true);
+    gravarRecente(m, 'k10', 99); // regravar torna a entrada a mais recente
+    gravarRecente(m, 'novo', 1);
+    expect(m.get('k10')).toBe(99);
+    expect(m.has('k11')).toBe(false);
+  });
+});
+
 describe('mensagemSucesso', () => {
   const z = { nome: 'ZÍPER METAL', un: 'UN' };
   const base = { dealId: '1', versao: '' };
@@ -55,6 +86,12 @@ describe('mensagemSucesso', () => {
     expect(mensagemSucesso({ ...base, tipo: 'baixa', itemId: 'i', valor: 20 }, z)).toBe('Baixa registrada · 20 UN de ZÍPER METAL');
     expect(mensagemSucesso({ ...base, tipo: 'baixa', itemId: 'i', valor: 2.5 }, { nome: 'LINHA', un: 'cones' }))
       .toBe('Baixa registrada · 2,5 cones de LINHA');
+    expect(mensagemSucesso({ ...base, tipo: 'baixa', itemId: 'i', valor: 1 }, { nome: 'LINHA', un: 'cones' }))
+      .toBe('Baixa registrada · 1 cone de LINHA');
+    expect(mensagemSucesso({ ...base, tipo: 'baixa', itemId: 'i', valor: 2 }, { nome: 'LINHA', un: 'cones' }))
+      .toBe('Baixa registrada · 2 cones de LINHA');
+    expect(mensagemSucesso({ ...base, tipo: 'baixa', itemId: 'i', valor: 1 }, { nome: 'ZÍPER', un: 'UN' }))
+      .toBe('Baixa registrada · 1 UN de ZÍPER');
     expect(mensagemSucesso({ ...base, tipo: 'previsao_item', itemId: 'i', valor: '2026-10-09' }, z)).toBe('Previsão de ZÍPER METAL: 09/10');
     expect(mensagemSucesso({ ...base, tipo: 'previsao_item', itemId: 'i', valor: '' }, z)).toBe('Previsão de ZÍPER METAL removida');
     expect(mensagemSucesso({ ...base, tipo: 'obs_item', itemId: 'i', valor: 'x' }, z)).toBe('Observação de ZÍPER METAL salva');

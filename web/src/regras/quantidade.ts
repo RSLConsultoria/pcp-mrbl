@@ -4,10 +4,20 @@ export function formatarNumero(n: number): string {
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 }
 
+// "<qtd> <un>": cones vai para o singular em 1 (1 cone, 2 cones, 1,5 cones); UN, MT, G ficam como estão.
+export function qtdComUn(qtd: number, un: string): string {
+  const num = formatarNumero(qtd);
+  if (!un) return num;
+  if (!/^cones?$/i.test(un)) return `${num} ${un}`;
+  const singular = un.slice(0, 4);
+  const plural = singular + (singular === singular.toUpperCase() ? 'S' : 's');
+  return `${num} ${num === '1' ? singular : plural}`;
+}
+
 // Linha e fio chegam em cones com o peso em gramas ao lado (faltaG).
 export function formatarQtd(qtd: number | null, un: string, g: number | null): string {
   if (qtd === null) return '—';
-  const base = un ? `${formatarNumero(qtd)} ${un}` : formatarNumero(qtd);
+  const base = qtdComUn(qtd, un);
   return g !== null && g > 0 ? `${base} · ${formatarNumero(g)} g` : base;
 }
 

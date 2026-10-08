@@ -42,6 +42,7 @@ function Baixa({ item, dealId, executar }: Props) {
       <div className="baixa__linha">
         <div className="baixa__campo">
           <input id={idCampo} ref={campo} type="text" inputMode="decimal" autoComplete="off" value={qtd}
+            aria-label={item.un ? `Chegou (${item.un})` : undefined}
             aria-invalid={erro ? true : undefined} aria-describedby={erro ? idErro : undefined}
             onChange={(e) => { setQtd(e.target.value); setErro(null); }} />
           {item.un && <span className="baixa__un" aria-hidden="true">{item.un}</span>}
@@ -55,6 +56,7 @@ function Baixa({ item, dealId, executar }: Props) {
 
 export function ItemEditavel({ item, dealId, executar }: Props) {
   const aberto = itemAberto(item);
+  const zerado = item.resta === 0; // tudo chegou: nada mais a baixar nem a prever
   const base = { dealId, itemId: item.id, versao: item.versao };
   const enviar = (acao: Acao) => executar(acao, mensagemSucesso(acao, item));
   const detalhes = [
@@ -76,6 +78,11 @@ export function ItemEditavel({ item, dealId, executar }: Props) {
         <>
           {item.obsPcp && <p className="item__obs">{item.obsPcp}</p>}
           <p className="item__nota">Item lido da planilha de caixas ganhas; não pode ser alterado aqui.</p>
+        </>
+      ) : zerado ? (
+        <>
+          {item.obsPcp && <p className="item__obs">{item.obsPcp}</p>}
+          <p className="item__nota">Item resolvido.</p>
         </>
       ) : (
         <div className="item__edicao">

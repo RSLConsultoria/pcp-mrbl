@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { enviarAcao } from '../api/client';
 import type { Acao } from '../api/tipos';
 import type { Avisar } from '../componentes/Aviso';
-import { chaveDaAcao, desfechoDoErro, versaoAtual } from '../regras/acoes';
+import { chaveDaAcao, desfechoDoErro, gravarRecente, versaoAtual } from '../regras/acoes';
 
 export type Executar = (acao: Acao, mensagemSucesso: string) => Promise<boolean>;
 
@@ -30,9 +30,10 @@ export function useAcao({ token, recarregar, aoExpirar, avisar }: Opcoes) {
     try {
       const r = await enviarAcao(token, { ...acao, versao });
       if (r.versao !== versao) {
+        // Só as ~50 trocas mais recentes importam: as antigas já chegaram pela recarga.
         const t = trocas.current.get(chave) ?? new Map<string, string>();
-        t.set(versao, r.versao);
-        trocas.current.set(chave, t);
+        gravarRecente(t, versao, r.versao);
+        gravarRecente(trocas.current, chave, t);
       }
       avisar(mensagemSucesso);
       await recarregar();

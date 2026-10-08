@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Acao, Caixa } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { justificativaValida, mensagemSucesso, MIN_JUSTIFICATIVA, tamanhoJustificativa } from '../../regras/acoes';
@@ -30,6 +30,21 @@ export function MoverPara({ caixa, perfil, executar }: Props) {
   };
 
   const fechar = () => { setDestino(null); setJust(''); };
+  const aberta = destino !== null && !adm;
+
+  // Com a justificativa aberta, Esc cancela a justificativa em vez de fechar o painel.
+  // Ouve na captura da janela, antes do Esc do painel (no document), e para a propagação.
+  useEffect(() => {
+    if (!aberta) return;
+    const aoTecla = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setDestino(null);
+      setJust('');
+    };
+    window.addEventListener('keydown', aoTecla, true);
+    return () => window.removeEventListener('keydown', aoTecla, true);
+  }, [aberta]);
   const nomeDestino = COLUNAS.find((c) => c.id === destino)?.nome;
   const n = tamanhoJustificativa(just);
 
@@ -48,7 +63,7 @@ export function MoverPara({ caixa, perfil, executar }: Props) {
           </button>
         ))}
       </div>
-      {destino && !adm && (
+      {aberta && (
         <div className="justificativa">
           <p className="justificativa__destino">Mover para <strong>{nomeDestino}</strong></p>
           <div className="campo campo--largo">
@@ -62,7 +77,7 @@ export function MoverPara({ caixa, perfil, executar }: Props) {
             </span>
             <button type="button" className="botao botao--leve" onClick={fechar}>Cancelar</button>
             <button type="button" className="botao botao--navy" disabled={!justificativaValida(just) || enviando}
-              onClick={async () => { if (await mover(destino, just.trim())) fechar(); }}>
+              onClick={async () => { if (destino && await mover(destino, just.trim())) fechar(); }}>
               Confirmar e mover
             </button>
           </div>
