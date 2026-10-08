@@ -1490,17 +1490,102 @@ function linhasInvalidas(linhas) {
   });
 }
 
-function selecionarPendentes(linhas, max) {
-  var limite = max === undefined ? 20 : max;
-  var lista = (linhas || []).filter(function (l) {
-    return l && texto(l.ploomes_status) === 'PENDENTE' && tentativasDe(l) < MAX_TENTATIVAS_PLOOMES && dealIdValido(l);
+function ordemQuando(a, b) {
+  var x = texto(a.quando);
+  var y = texto(b.quando);
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+function msQuando(linha) {
+  var t = Date.parse(texto(linha && linha.quando));
+  return isNaN(t) ? null : t;
+}
+
+// Registro compilado: as linhas PENDENTE (deal valido, tentativas < max) por
+// deal. O grupo so sai quando a linha mais nova tem esperaMs (10 min) ou mais,
+// para juntar a rajada de acoes num registro so. Ate maxLinhas (30) por grupo,
+// as mais antigas (o resto vai na proxima rodada); ate maxGrupos (20) por
+// rodada, o grupo com a linha mais antiga primeiro. Saida:
+// [{ deal_id, os, linhas: [...] }].
+function selecionarGrupos(linhas, agora, opcoes) {
+  var o = opcoes || {};
+  var espera = o.esperaMs === undefined ? 10 * 60 * 1000 : o.esperaMs;
+  var maxLinhas = o.maxLinhas === undefined ? 30 : o.maxLinhas;
+  var maxGrupos = o.maxGrupos === undefined ? 20 : o.maxGrupos;
+  var porDeal = {};
+  var ordem = [];
+  (linhas || []).forEach(function (l) {
+    if (!l || texto(l.ploomes_status) !== 'PENDENTE' || tentativasDe(l) >= MAX_TENTATIVAS_PLOOMES || !dealIdValido(l)) return;
+    var d = String(numero(l.deal_id));
+    if (!porDeal[d]) {
+      porDeal[d] = [];
+      ordem.push(d);
+    }
+    porDeal[d].push(l);
   });
-  lista.sort(function (a, b) {
-    var x = texto(a.quando);
-    var y = texto(b.quando);
-    return x < y ? -1 : x > y ? 1 : 0;
+  var grupos = [];
+  ordem.forEach(function (d) {
+    var ls = porDeal[d].slice().sort(ordemQuando);
+    var maisNova = null;
+    ls.forEach(function (l) {
+      var t = msQuando(l);
+      if (t !== null && (maisNova === null || t > maisNova)) maisNova = t;
+    });
+    if (maisNova !== null && agora - maisNova < espera) return;
+    var os = '';
+    ls.forEach(function (l) { if (!os) os = texto(l.os); });
+    grupos.push({ deal_id: d, os: os, linhas: ls.slice(0, maxLinhas) });
   });
-  return lista.slice(0, limite);
+  grupos.sort(function (a, b) { return ordemQuando(a.linhas[0], b.linhas[0]); });
+  return grupos.slice(0, maxGrupos);
+}
+
+// 'HH:mm' em America/Sao_Paulo ('' se quando nao for data).
+function horaSaoPaulo(quando) {
+  var t = Date.parse(texto(quando));
+  if (isNaN(t)) return '';
+  try {
+    var f = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    return f.format(new Date(t));
+  } catch (e) {
+    var d = new Date(t - 3 * 3600 * 1000);  // sem fuso no runtime: UTC-3 (sem horario de verao desde 2019)
+    return pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+  }
+}
+
+var PREFIXO_PCP = /^\s*\[PCP · OS [^\]]*\]\s*/;
+
+function montarRegistroCompilado(grupo, contactId) {
+  var linhas = grupo.linhas || [];
+  var reg = { DealId: numero(grupo.deal_id) };
+  var cid = numero(contactId);
+  if (cid !== null && isFinite(cid) && cid > 0) reg.ContactId = cid;
+  var itens = linhas.map(function (l) {
+    var h = horaSaoPaulo(l.quando);
+    return '• ' + (h ? h + ' ' : '') + texto(l.texto).replace(PREFIXO_PCP, '');
+  });
+  reg.Content = '[PCP · OS ' + texto(grupo.os) + '] Atualizações do app PCP\n' + itens.join('\n');
+  var data = linhas.length ? linhas[linhas.length - 1].quando : '';
+  var maisNova = null;
+  linhas.forEach(function (l) {
+    var t = msQuando(l);
+    if (t !== null && (maisNova === null || t >= maisNova)) { maisNova = t; data = l.quando; }
+  });
+  reg.Date = data;
+  return reg;
+}
+
+// Mesmo resultado para todas as linhas do grupo (cada uma com suas
+// tentativas). 429 = nenhuma linha gravada (seguem PENDENTE).
+function resultadoGrupo(grupo, resposta) {
+  var saida = [];
+  var linhas = grupo.linhas || [];
+  for (var i = 0; i < linhas.length; i++) {
+    var r = resultadoEnvio(linhas[i], resposta);
+    if (r.parar) return [];
+    saida.push(r);
+  }
+  return saida;
 }
 
 function respostaOk(status) {
@@ -1526,15 +1611,6 @@ function decidirContato(resposta) {
   var v = resposta.body && resposta.body.value;
   var cid = v && v[0] ? v[0].ContactId : null;
   return { pular: false, contactId: cid === undefined ? null : cid };
-}
-
-function montarRegistro(linha, contactId) {
-  var reg = { DealId: numero(linha.deal_id) };
-  var cid = numero(contactId);
-  if (cid !== null && isFinite(cid) && cid > 0) reg.ContactId = cid;
-  reg.Content = '[PCP · OS ' + texto(linha.os) + '] ' + texto(linha.texto);
-  reg.Date = linha.quando;
-  return reg;
 }
 
 function mensagemErroPloomes(resposta) {
@@ -2107,17 +2183,18 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 }
 
 // ===== adaptador: Resultado Envio =====
-// Linha a linha: so a que recebeu 429 e pulada (fica PENDENTE); as demais gravam.
-// Erro de rede/timeout chega como item com $json.error e sem statusCode
-// (onError continueRegularOutput): conta como tentativa falha.
+// Grupo a grupo: todas as linhas do grupo recebem o mesmo resultado, um item
+// por linha do HISTORICO_APP (o Gravar Envio atualiza por id). 429 pula o
+// grupo inteiro (fica PENDENTE). Erro de rede/timeout chega como item com
+// $json.error e sem statusCode (onError continueRegularOutput): conta como
+// tentativa falha.
 var base = $('Montar Registro').all();
 var resp = $input.all();
 var saida = [];
 for (var i = 0; i < base.length; i++) {
-  var linha = base[i].json.linha;
+  var grupo = base[i].json.grupo;
   var r = (resp[i] && resp[i].json) || {};
-  var res = resultadoEnvio(linha, { status: r.statusCode, body: r.body, statusText: r.statusMessage, erro: r.error });
-  if (res && res.parar) continue;
-  saida.push({ json: res });
+  resultadoGrupo(grupo, { status: r.statusCode, body: r.body, statusText: r.statusMessage, erro: r.error })
+    .forEach(function (res) { saida.push({ json: res }); });
 }
 return saida;

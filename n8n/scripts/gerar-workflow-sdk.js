@@ -303,7 +303,7 @@ const envio = IMPORT + [
   code('marcarInvalidas', 'Marcar Invalidas', 'invalidas-envio'),
   escrever('gravarInvalidas', 'Gravar Invalidas', 'update', 'HISTORICO_APP', ['id']),
   code('selecionarEnvio', 'Selecionar Envio', 'selecionar-envio'),
-  http('buscarContato', 'Buscar Contato', 'GET', "expr('https://api2.ploomes.com/Deals({{ $json.linha.deal_id }})?$select=Id,ContactId')", false),
+  http('buscarContato', 'Buscar Contato', 'GET', "expr('https://api2.ploomes.com/Deals({{ $json.grupo.deal_id }})?$select=Id,ContactId')", false),
   code('montarRegistro', 'Montar Registro', 'montar-registro'),
   http('criarRegistro', 'Criar Registro', 'POST', "'https://api2.ploomes.com/InteractionRecords'", true),
   code('resultadoEnvio', 'Resultado Envio', 'resultado-envio'),
