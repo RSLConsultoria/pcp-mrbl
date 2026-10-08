@@ -13,3 +13,14 @@ Nenhuma credencial fica neste repositório. Ele é público.
 
 1. Adicionar uma linha na aba USUARIOS (`email, nome, perfil, senha_hash, ativo=SIM`).
 2. Quem vai usar roda `cd n8n && node scripts/hash-senha.js` (no PowerShell, `npm run` pode ser bloqueado pela política de scripts) na própria máquina e cola o resultado em `senha_hash`.
+
+## Conferência local
+
+Para ver as telas sem o n8n, com dados fictícios e todas as ações funcionando em memória:
+
+```
+cd web
+npm run dev:mock
+```
+
+Depois abra http://localhost:5174/pcp-mrbl/ e entre com qualquer e-mail e senha. O servidor de mentira roda em http://localhost:8787 (troque com `MOCK_PORT`) e volta ao estado inicial quando é reiniciado. A OS 90002 fica somente leitura de propósito.
