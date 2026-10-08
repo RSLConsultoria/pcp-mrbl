@@ -652,7 +652,15 @@ var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 30 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
+var DEALS_EDITAVEIS = ['607479158'];  // vazio = todos. Até o go-live, só a OS de teste.
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
+
+function dealEditavel(dealId) {
+  if (!DEALS_EDITAVEIS.length) return true;
+  return DEALS_EDITAVEIS.indexOf(texto(dealId)) >= 0;
+}
+
+var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
 
 function proprio(obj, chave) {
   return Object.prototype.hasOwnProperty.call(obj, chave) ? obj[chave] : undefined;
@@ -731,7 +739,7 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .filter(function (u) { return u && !!VALORES_ATIVO[semAcento(u.ativo)] && texto(u.nome) !== ''; })
     .map(function (u) { return texto(u.nome); })
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-  var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios };
+  var corpo = { geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos, usuarios: usuarios, dealsEditaveis: DEALS_EDITAVEIS.slice() };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
 }
@@ -742,6 +750,7 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
 function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  if (!dealEditavel(corpo && corpo.dealId)) return { ok: false, status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
   var v = validarAcao(corpo, sessao.perfil);
   if (!v.ok) return { ok: false, status: v.status, body: { erro: v.erro } };
   return { ok: true };
@@ -753,6 +762,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
+  if (!dealEditavel(corpo && corpo.dealId)) return { status: 403, body: { erro: ERRO_NAO_EDITAVEL } };
 
   var v = validarAcao(corpo, sessao.perfil);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };

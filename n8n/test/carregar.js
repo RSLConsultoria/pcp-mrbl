@@ -6,13 +6,16 @@ const vm = require('vm');
 
 const ARQUIVOS = ['util.js', 'auth.js', 'montarCaixas.js', 'acoes.js', 'envioPloomes.js', 'api.js'];
 
-function carregar() {
+// Por padrao os testes rodam com DEALS_EDITAVEIS vazio (todos editaveis);
+// { real: true } mantem o valor de producao.
+function carregar(opcoes) {
   const ctx = vm.createContext({});
   for (const f of ARQUIVOS) {
     const caminho = path.join(__dirname, '..', 'src', f);
     if (!fs.existsSync(caminho)) continue;
     vm.runInContext(fs.readFileSync(caminho, 'utf8'), ctx, { filename: f });
   }
+  if (!(opcoes && opcoes.real)) ctx.DEALS_EDITAVEIS = [];
   return ctx;
 }
 

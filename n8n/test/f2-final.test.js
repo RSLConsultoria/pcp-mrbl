@@ -110,3 +110,29 @@ test('montarCaixas: qtd_baixada ilegivel deixa resta null, editavel e gera aviso
   const ok = r.caixas[0].itens.find((i) => i.id === 'ok');
   assert.equal(ok.resta, 10);
 });
+
+// ---- edicao restrita (DEALS_EDITAVEIS) ----
+test('edicao restrita: 403 em preValidarAcao e processarAcao para caixa fora da lista', () => {
+  const e = {}; const cab = sessao(e, 'ana@x.com');
+  c.DEALS_EDITAVEIS = ['607479158'];
+  try {
+    const corpo = { tipo: 'obs_caixa', dealId: '1', valor: 'x', versao: '' };
+    const pre = limpo(c.preValidarAcao(e, cab, corpo, T0));
+    assert.deepEqual(pre, { ok: false, status: 403, body: { erro: 'Edição liberada em breve para esta caixa.' } });
+    const p = limpo(c.processarAcao(e, cab, corpo, {}, T0, () => 'x'));
+    assert.equal(p.status, 403);
+    assert.equal(p.body.erro, 'Edição liberada em breve para esta caixa.');
+    // 401 vem antes do 403; corpo invalido da caixa de teste cai no 400 normal
+    assert.equal(limpo(c.preValidarAcao({}, 'Bearer ' + '0'.repeat(64), corpo, T0)).status, 401);
+    assert.equal(limpo(c.preValidarAcao(e, cab, { tipo: 'baixa', dealId: '607479158' }, T0)).status, 400);
+    assert.deepEqual(limpo(c.preValidarAcao(e, cab, { ...corpo, dealId: '607479158' }, T0)), { ok: true });
+  } finally { c.DEALS_EDITAVEIS = []; }
+});
+
+test('edicao restrita: board leva dealsEditaveis e o padrao de producao e a OS de teste', () => {
+  assert.deepEqual(limpo(c.montarRespostaBoard({}, [], [], T0).body.dealsEditaveis), []);
+  const real = carregar({ real: true });
+  assert.deepEqual(limpo(real.montarRespostaBoard({}, [], [], T0).body.dealsEditaveis), ['607479158']);
+  assert.equal(real.dealEditavel('607479158'), true);
+  assert.equal(real.dealEditavel('1'), false);
+});
