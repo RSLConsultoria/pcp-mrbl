@@ -84,8 +84,14 @@ describe('validarEtapas', () => {
     expect(validarEtapas(novas, pedidos, etapas)).toBe('A etapa Solicitado tem pedidos abertos.');
   });
   it('remove etapa sem pedido aberto (finalizados não contam)', () => {
-    const novas = [{ id: 'a', nome: 'A pedir' }, { id: 'b', nome: 'Solicitado' }];
-    expect(validarEtapas(novas, pedidos, etapas)).toBeNull();
+    const novas = [{ id: 'a', nome: 'A pedir' }, { id: 'c', nome: 'Entregue' }];
+    expect(validarEtapas(novas, [ped({ etapa: 'b', finalizado: true })], etapas)).toBeNull();
+  });
+  it('a última etapa continua por último (pode ser renomeada)', () => {
+    const msg = 'A última etapa (Entregue) precisa continuar por último.';
+    expect(validarEtapas([{ id: 'a', nome: 'A pedir' }, { id: 'b', nome: 'Solicitado' }], [], etapas)).toBe(msg);
+    expect(validarEtapas([{ id: 'a', nome: 'A pedir' }, { id: 'c', nome: 'Entregue' }, { nome: 'Depois' }], [], etapas)).toBe(msg);
+    expect(validarEtapas([{ id: 'a', nome: 'A pedir' }, { nome: 'Nova' }, { id: 'c', nome: 'Resolvido' }], [], etapas)).toBeNull();
   });
 });
 

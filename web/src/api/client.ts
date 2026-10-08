@@ -53,5 +53,6 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
   if (typeof r.versao !== 'string' || r.historico === undefined) throw new ApiError(200, 'Resposta inválida do servidor.');
   const resp: RespostaAcao = { versao: r.versao, historico: r.historico };
   if (typeof r.pedidoId === 'string') resp.pedidoId = r.pedidoId;
+  if (Array.isArray(r.partes) && r.partes.every((x) => typeof x === 'string')) resp.partes = r.partes;
   return resp;
 }

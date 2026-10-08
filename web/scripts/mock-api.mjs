@@ -459,6 +459,8 @@ function salvarEtapas(c) {
     nomes.add(chaveNome(nome));
     if (e.id && !estado.etapas.some((x) => x.id === e.id)) throw bad('Etapa desconhecida.');
   }
+  const ultima = estado.etapas[estado.etapas.length - 1];
+  if (lista[lista.length - 1].id !== ultima.id) throw bad(`A última etapa (${ultima.nome}) precisa continuar por último.`);
   const mantidos = new Set(lista.filter((e) => e.id).map((e) => e.id));
   for (const antiga of estado.etapas) {
     if (mantidos.has(antiga.id)) continue;
@@ -514,7 +516,9 @@ function processar(corpo, usuario) {
     case 'baixar_pedido': return baixarPedido(corpo, usuario);
     case 'dividir_pedido': return dividirPedido(corpo, usuario);
     case 'dividir_por_previsao': return dividirPorPrevisao(corpo, usuario);
-    case 'salvar_etapas': return salvarEtapas(corpo);
+    case 'salvar_etapas':
+      if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
+      return salvarEtapas(corpo);
     case 'enviar_oficina': return oficina(corpo, usuario, false);
     case 'oficina_recebeu': return oficina(corpo, usuario, true);
     default: throw bad('Tipo de ação inválido.');
@@ -522,6 +526,8 @@ function processar(corpo, usuario) {
 }
 
 // ---------- HTTP ----------
+// MOCK_PERFIL=OPERADOR simula um usuário sem acesso às etapas do quadro.
+const PERFIL = (process.env.MOCK_PERFIL ?? 'ADM').toUpperCase();
 function cors(req, res) {
   const o = req.headers.origin ?? '';
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o)) res.setHeader('Access-Control-Allow-Origin', o);
@@ -545,7 +551,7 @@ const servidor = http.createServer(async (req, res) => {
   const rota = (req.url ?? '').split('?')[0];
   try {
     if (rota === '/pcp-login' && req.method === 'POST') {
-      return enviar(res, 200, { token: 'm'.repeat(64), nome: 'Lucca', perfil: 'ADM', expiraEm: new Date(Date.now() + 12 * 3_600_000).toISOString() });
+      return enviar(res, 200, { token: 'm'.repeat(64), nome: 'Lucca', perfil: PERFIL, expiraEm: new Date(Date.now() + 12 * 3_600_000).toISOString() });
     }
     if (rota === '/pcp-board' && req.method === 'GET') return enviar(res, 200, montarBoard());
     if (rota === '/pcp-acao' && req.method === 'POST') {

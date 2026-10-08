@@ -46,6 +46,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   const hoje = new Date();
   const q = buscas[tela];
   const selecionados = board ? itensSelecionados(board, selecao).length : 0;
+  const ehAdm = sessao.perfil.toUpperCase() === 'ADM';
 
   const selecionarParaPedido = useCallback((c: Caixa) => {
     const itens = itensParaPedido(c);
@@ -59,7 +60,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
       <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} tela={tela} onTela={irPara} onSair={onSair} />
       <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
         {tela === 'pedidos'
-          ? <AcoesPedidos filtro={filtro} onFiltro={setFiltro} selecionados={selecionados}
+          ? <AcoesPedidos filtro={filtro} onFiltro={setFiltro} selecionados={selecionados} podeEditarEtapas={ehAdm}
               onEtapas={() => setJanela('etapas')} onGerar={() => setJanela('gerar')} />
           : <Legenda />}
       </Subnav>

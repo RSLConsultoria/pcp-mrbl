@@ -139,6 +139,7 @@
 .etapas__linha input:focus { outline: 0; border-color: var(--signal); box-shadow: var(--focus-ring); }
 .etapas__remover:disabled { opacity: .45; }
 .etapas__trava { grid-column: 2 / -1; font-size: 12px; color: var(--suave); }
+.etapas__final { grid-column: 2 / -1; font-size: 12px; color: var(--suave); }
 .etapas__adicionar { align-self: flex-start; }
 
 /* Dividir pedido: partes PED-xxxx.n */

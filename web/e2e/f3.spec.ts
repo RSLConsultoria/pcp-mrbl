@@ -14,6 +14,7 @@ interface Opcoes {
   ajustar?: (b: Board) => void;
   aoAgir?: (b: Board, corpo: Corpo) => void;
   resposta?: (corpo: Corpo) => { status: number; json: unknown } | undefined;
+  perfil?: string;
 }
 
 function pedido(id: string, etapa: string, itens: { itemId: string; dealId: string; os: string; nome: string; un: string; qtd: number }[], extra: Corpo = {}) {
@@ -28,7 +29,7 @@ const PED_TAG = [{ itemId: 'a2', dealId: '700001', os: '90001', nome: 'TAG CUIDA
 async function preparar(page: Page, hash: string, opts: Opcoes = {}): Promise<Mock> {
   const mock: Mock = { bodies: [], board: structuredClone(base) as Board };
   opts.ajustar?.(mock.board);
-  await page.route(LOGIN, (r) => r.fulfill({ json: SESSAO }));
+  await page.route(LOGIN, (r) => r.fulfill({ json: { ...SESSAO, perfil: opts.perfil ?? 'ADM' } }));
   await page.route(BOARD, (r) => r.fulfill({ json: mock.board }));
   await page.route(ACAO, (r) => {
     const corpo = r.request().postDataJSON() as Corpo;
@@ -284,26 +285,31 @@ test('Saídas: caixa com toda a falta baixada fica em Resolvido e vai à oficina
   await expect(page.getByRole('region', { name: 'Enviado à oficina' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
 });
 
-test('Etapas: renomear e adicionar enviam salvar_etapas com os ids existentes', async ({ page }) => {
+test('Etapas: renomear e adicionar (antes da última) enviam salvar_etapas com os ids existentes', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', {
-    aoAgir: (b) => { b.etapasPedido = [{ id: 'a_pedir', nome: 'Compras', ordem: 1 }, ...b.etapasPedido.slice(1), { id: 'em_transito', nome: 'Em trânsito', ordem: 5 }]; }
+    aoAgir: (b) => {
+      b.etapasPedido = [{ id: 'a_pedir', nome: 'Compras', ordem: 1 }, ...b.etapasPedido.slice(1, 3),
+        { id: 'em_transito', nome: 'Em trânsito', ordem: 4 }, { ...b.etapasPedido[3], ordem: 5 }];
+    }
   });
   await page.getByRole('button', { name: 'Etapas do quadro' }).click();
   const janela = page.getByRole('dialog', { name: 'Etapas do quadro' });
   await janela.getByRole('textbox', { name: 'Nome da etapa 1' }).fill('Compras');
   await janela.getByRole('button', { name: '+ Adicionar etapa' }).click();
-  await janela.getByRole('textbox', { name: 'Nome da etapa 5' }).fill('Em trânsito');
+  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 4' })).toBeFocused();
+  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 5' })).toHaveValue('Resolvido');
+  await janela.getByRole('textbox', { name: 'Nome da etapa 4' }).fill('Em trânsito');
   await janela.getByRole('button', { name: 'Salvar etapas' }).click();
   await expect(aviso(page, 'Etapas do quadro salvas')).toBeVisible();
   expect(mock.bodies).toEqual([{
     tipo: 'salvar_etapas',
-    etapas: [{ id: 'a_pedir', nome: 'Compras' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' }, { id: 'entregue', nome: 'Resolvido' }, { nome: 'Em trânsito' }]
+    etapas: [{ id: 'a_pedir', nome: 'Compras' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' }, { nome: 'Em trânsito' }, { id: 'entregue', nome: 'Resolvido' }]
   }]);
   await expect(page.getByRole('region', { name: 'Em trânsito' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Compras' })).toBeVisible();
 });
 
-test('Etapas: etapa com pedido aberto não pode ser removida e o mínimo é 2', async ({ page }) => {
+test('Etapas: etapa com pedido aberto não pode ser removida; a última fica fixa', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', {
     ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
   });
@@ -311,12 +317,31 @@ test('Etapas: etapa com pedido aberto não pode ser removida e o mínimo é 2', 
   const janela = page.getByRole('dialog', { name: 'Etapas do quadro' });
   await expect(janela.getByRole('button', { name: 'Remover etapa Solicitado' })).toBeDisabled();
   await expect(janela).toContainText('Tem 1 pedido aberto nesta etapa');
+  // A última (Resolvido) pode ser renomeada, mas não tem Remover.
+  await expect(janela.getByRole('button', { name: 'Remover etapa Resolvido' })).toHaveCount(0);
+  await expect(janela).toContainText('Etapa final: mover um pedido para cá dá baixa nas caixas.');
+  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 4' })).toBeEditable();
+  await expect(janela).not.toContainText('Dar baixa nas caixas');
   await janela.getByRole('button', { name: 'Remover etapa A pedir' }).click();
-  await janela.getByRole('button', { name: 'Remover etapa Resolvido' }).click();
-  await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toBeDisabled();
+  await janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' }).click();
   await expect(janela.getByRole('button', { name: 'Remover etapa Solicitado' })).toBeDisabled();
-  await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toHaveAttribute('title', 'O quadro precisa de pelo menos 2 etapas');
   expect(mock.bodies).toHaveLength(0);
+});
+
+test('Etapas: o mínimo é 2 (com a última fixa)', async ({ page }) => {
+  await preparar(page, '#pedidos');
+  await page.getByRole('button', { name: 'Etapas do quadro' }).click();
+  const janela = page.getByRole('dialog', { name: 'Etapas do quadro' });
+  await janela.getByRole('button', { name: 'Remover etapa A pedir' }).click();
+  await janela.getByRole('button', { name: 'Remover etapa Solicitado' }).click();
+  await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toBeDisabled();
+  await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toHaveAttribute('title', 'O quadro precisa de pelo menos 2 etapas');
+});
+
+test('Etapas do quadro só para ADM', async ({ page }) => {
+  await preparar(page, '#pedidos', { perfil: 'OPERADOR' });
+  await expect(page.getByRole('button', { name: 'Gerar pedido' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Etapas do quadro' })).toHaveCount(0);
 });
 
 test('caixa fora de dealsEditaveis: Saídas sem botões e pedido que não arrasta nem edita', async ({ page }) => {

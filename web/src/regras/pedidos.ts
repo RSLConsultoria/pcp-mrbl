@@ -120,6 +120,9 @@ export function validarEtapas(
     if (vistos.has(chave)) return `Já existe uma etapa chamada ${n}.`;
     vistos.add(chave);
   }
+  // A última etapa (Resolvido: mover para ela dá baixa) fica sempre por último.
+  const ultima = atuais.length ? atuais[atuais.length - 1] : null;
+  if (ultima && etapas[etapas.length - 1].id !== ultima.id) return `A última etapa (${ultima.nome}) precisa continuar por último.`;
   const mantidas = new Set(etapas.map((e) => e.id).filter(Boolean));
   for (const a of atuais) {
     if (!mantidas.has(a.id) && pedidos.some((p) => !p.finalizado && p.etapa === a.id)) {

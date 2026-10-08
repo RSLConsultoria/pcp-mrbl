@@ -101,6 +101,12 @@ describe('client', () => {
     }));
   });
 
+  it('enviarAcao repassa pedidoId e partes (dividir por previsão)', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => resposta(200, { ok: true, versao: 'v2', historico: null, pedidoId: 'PED-0001.1', partes: ['PED-0001.1', 'PED-0001.2'] })));
+    const r = await enviarAcao('t', { tipo: 'dividir_por_previsao', pedidoId: 'PED-0001', versao: 'v1' });
+    expect(r).toEqual({ versao: 'v2', historico: null, pedidoId: 'PED-0001.1', partes: ['PED-0001.1', 'PED-0001.2'] });
+  });
+
   it('enviarAcao: 409 vira ApiError(409) com a mensagem do servidor', async () => {
     vi.stubGlobal('fetch', vi.fn(() => resposta(409, { erro: 'Alguém alterou esta caixa agora há pouco.' })));
     const e = await enviarAcao('t', { tipo: 'obs_caixa', dealId: '1', valor: 'x', versao: '' }).catch((x) => x);

@@ -15,7 +15,9 @@ interface Props {
   onFechar: () => void;
 }
 
-// Renomear, adicionar e remover etapas do quadro de pedidos.
+// Renomear, adicionar e remover etapas do quadro de pedidos. A última etapa
+// (Resolvido: mover um pedido para ela dá baixa) fica fixa no fim: pode ser
+// renomeada, mas não removida, e as etapas novas entram antes dela.
 export function JanelaEtapas({ etapas, pedidos, executar, onFechar }: Props) {
   const proxima = useRef(etapas.length);
   const lista = useRef<HTMLOListElement>(null);
@@ -29,8 +31,9 @@ export function JanelaEtapas({ etapas, pedidos, executar, onFechar }: Props) {
   };
   const adicionar = () => {
     setErro(null);
-    setRascunho((r) => [...r, { chave: proxima.current++, nome: '' }]);
-    requestAnimationFrame(() => lista.current?.querySelector<HTMLInputElement>('li:last-child input')?.focus());
+    const chave = proxima.current++;
+    setRascunho((r) => [...r.slice(0, -1), { chave, nome: '' }, ...r.slice(-1)]);
+    requestAnimationFrame(() => lista.current?.querySelector<HTMLInputElement>(`li[data-chave="${chave}"] input`)?.focus());
   };
 
   async function salvar() {
@@ -50,21 +53,25 @@ export function JanelaEtapas({ etapas, pedidos, executar, onFechar }: Props) {
         <button type="button" className="botao botao--leve" onClick={onFechar}>Cancelar</button>
         <button type="button" className="botao botao--navy" disabled={enviando} onClick={salvar}>Salvar etapas</button>
       </>}>
-      <p className="janela__ajuda">A primeira etapa recebe os pedidos gerados. Na última, o pedido ganha o botão Dar baixa nas caixas. Etapa com pedido aberto não pode ser removida.</p>
+      <p className="janela__ajuda">A primeira etapa recebe os pedidos gerados. A última fica sempre no fim: mover um pedido para ela dá baixa nas caixas. Etapa com pedido aberto não pode ser removida.</p>
       <ol ref={lista} className="etapas">
         {rascunho.map((x, i) => {
+          const final = i === rascunho.length - 1;
           const trava = motivoTravaEtapa(x.id, rascunho.length, pedidos);
           return (
-            <li key={x.chave} className="etapas__linha">
+            <li key={x.chave} data-chave={x.chave} className="etapas__linha">
               <span className="etapas__n" aria-hidden="true">{i + 1}</span>
               <input type="text" maxLength={40} value={x.nome} aria-label={`Nome da etapa ${i + 1}`}
                 onChange={(e) => mudar(x.chave, e.target.value)} />
-              <button type="button" className="botao botao--leve etapas__remover" disabled={trava !== null}
-                title={trava ?? 'Remover etapa'} aria-label={`Remover etapa ${x.nome.trim() || i + 1}`}
-                onClick={() => { setErro(null); setRascunho((r) => r.filter((y) => y.chave !== x.chave)); }}>
-                Remover
-              </button>
-              {trava && x.id && pedidos.some((p) => !p.finalizado && p.etapa === x.id) && <span className="etapas__trava">{trava}</span>}
+              {!final && (
+                <button type="button" className="botao botao--leve etapas__remover" disabled={trava !== null}
+                  title={trava ?? 'Remover etapa'} aria-label={`Remover etapa ${x.nome.trim() || i + 1}`}
+                  onClick={() => { setErro(null); setRascunho((r) => r.filter((y) => y.chave !== x.chave)); }}>
+                  Remover
+                </button>
+              )}
+              {final && <span className="etapas__final">Etapa final: mover um pedido para cá dá baixa nas caixas.</span>}
+              {!final && trava && x.id && pedidos.some((p) => !p.finalizado && p.etapa === x.id) && <span className="etapas__trava">{trava}</span>}
             </li>
           );
         })}

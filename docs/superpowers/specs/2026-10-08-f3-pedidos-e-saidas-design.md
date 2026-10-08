@@ -78,7 +78,7 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
 | `dividir_pedido` | `{ pedidoId, versao, etapa, itens: [{ itemId, qtd }] }` | Cria a parte `<PAI>.<n>` na etapa escolhida com os itens/quantidades que chegaram; o original fica com o resto. Na última etapa a parte já nasce com a baixa. | `Lucca dividiu PED-0002: 20 UN de ZÍPER METAL foram para PED-0002.1 (Recebidos)` |
 | `dividir_por_previsao` | `{ pedidoId, versao }` | Uma parte por data de previsão dos itens, na etapa do pedido; a data mais próxima fica. 400 com uma data só. | `Lucca dividiu PED-0044 por previsão: 6 UN de ZÍPER foram para PED-0044.1 (previsão 20/10)` |
 | `baixar_pedido` | `{ pedidoId, versao }` | Compatibilidade (sem botão na tela). Só na última etapa. Dá baixa da `qtd` de cada item na FALTANTES (soma em `qtd_baixada`, limitada ao que resta) e grava `baixado_em`. | `Lucca deu baixa do PED-0044: 20 MT de VIÉS… (resta 80 MT)` |
-| `salvar_etapas` | `{ etapas: [{ id?, nome }] }` | Regrava a ETAPAS_PEDIDO. Valida: no mínimo 2 etapas, nomes não vazios e únicos, e não remove etapa que tenha pedido aberto. | Não gera histórico de OS. |
+| `salvar_etapas` | `{ etapas: [{ id?, nome }] }` | Regrava a ETAPAS_PEDIDO. Só perfil ADM (403 `Só administradores podem alterar as etapas do quadro.`). Valida: no mínimo 2 etapas, nomes não vazios e únicos, não remove etapa que tenha pedido aberto, e a última etapa atual (Resolvido) continua por último: pode ser renomeada, mas não removida nem movida (400 `A última etapa (Resolvido) precisa continuar por último.`). | Não gera histórico de OS. |
 | `enviar_oficina` | `{ dealId, versao }` | Só com a caixa sem item aberto (tudo baixado) ou com todo o material na última etapa (todo item aberto com pedido aberto e todos os pedidos abertos dele, original e partes, na última etapa); senão 409 `O material desta caixa ainda não chegou (etapa <nome da última etapa>).` Grava `tratativa = ENVIADO`. | `Lucca enviou o material faltante à oficina` |
 | `oficina_recebeu` | `{ dealId, versao }` | Baixa total dos itens abertos da caixa e `tratativa = RECEBIDO`. | `Lucca registrou que a oficina recebeu o material` |
 
@@ -115,7 +115,7 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
   - itens abertos e editáveis sem `pedidoId`, agrupados por caixa;
   - caixa de seleção por item e por caixa;
   - contagem selecionada no topo.
-- **Subnav:** busca, filtro `Em aberto | Finalizados | Todos` (padrão Em aberto), "Etapas do quadro" e **Gerar pedido** (ouro, desabilitado sem seleção).
+- **Subnav:** busca, filtro `Em aberto | Finalizados | Todos` (padrão Em aberto), "Etapas do quadro" (só ADM) e **Gerar pedido** (ouro, desabilitado sem seleção).
 - **Direita:** quadro com as etapas configuradas, arrastar e soltar (a coluna de destino fica com fundo `--signal-tint` e anel em ouro).
   - **Card:** id, selo Fornecedor/Cliente, quem (ou "Vários fornecedores"), até 3 linhas "item · qtd · OS", previsão, local e "Ploomes · N OS".
   - Previsão: a mais próxima dos itens; selo "previsões diferentes" quando os itens têm datas diferentes.
@@ -130,7 +130,7 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
   - Dividir pedido (com confirmação quando o destino é a última etapa) e o atalho **Dividir por previsão** (só com previsões diferentes), com a prévia das partes;
   - mostra o **resumo exato** do que vai ser gravado antes de **Salvar alterações** ("Nada alterado" desabilitado);
   - mostra o histórico do pedido (as linhas do HISTORICO_APP que citam o PED).
-- **Janela "Etapas do quadro":** renomear, adicionar, remover, com as regras acima.
+- **Janela "Etapas do quadro":** renomear, adicionar, remover, com as regras acima. "+ Adicionar etapa" insere antes da última; a última não tem Remover e mostra "Etapa final: mover um pedido para cá dá baixa nas caixas."
 
 ## Testes
 
@@ -155,3 +155,10 @@ Cada ação gera, para cada OS envolvida, uma linha no HISTORICO_APP no formato 
 - Card de Compras no Ploomes.
 - Edição de pedidos finalizados.
 - Pedidos com itens de caixas não editáveis (bloqueados até o go-live).
+
+## Revisão final (08/10/2026)
+
+- **Ordem das escritas do ramo acao:** PEDIDOS append, PEDIDOS update, PEDIDOS_ITENS append, PEDIDOS_ITENS update, ETAPAS_PEDIDO appendOrUpdate, ETAPAS_PEDIDO update, FALTANTES update, CAIXAS_PCP appendOrUpdate, HISTORICO_APP append. Uma falha no meio deixa baixa a menos (corrigível), nunca baixa em dobro.
+- Todo Google Sheets do workflow da API com `retryOnFail` (3 tentativas, 3 s).
+- Sem a leitura `Ler HISTORICO_APP Acao` (o Processar Acao não usa). Cache do board de 55 s.
+- A baixa ao entrar na última etapa só vale para linhas ABERTO/PARCIAL.
