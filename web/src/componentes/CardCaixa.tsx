@@ -36,7 +36,7 @@ export function CardCaixa({ caixa, hoje, selecionada, onAbrir }: Props) {
                 {i.nome}{i.cor && <span className="card__item-cor"> {i.cor}</span>}
                 {i.previsao && <span className="card__item-prev"> · previsão {ddmm(i.previsao)}</span>}
               </span>
-              <span className="card__item-qtd">{formatarQtd(i.falta, i.un, i.faltaG)}</span>
+              <span className="card__item-qtd">{i.resta !== null ? formatarQtd(i.resta, i.un, i.restaG) : formatarQtd(i.falta, i.un, i.faltaG)}</span>
             </li>
           ))}
           {ocultos > 0 && <li className="card__mais">+ {ocultos} {ocultos > 1 ? 'itens' : 'item'}</li>}
