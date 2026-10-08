@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
-    "build": "node scripts/gerar-code-nodes.js && node scripts/gerar-workflow-sdk.js",
+    "build": "node scripts/gerar-code-nodes.js && node scripts/gerar-workflow-sdk.js && node scripts/sdk-para-json.js",
     "hash-senha": "node scripts/hash-senha.js"
   }
 }
