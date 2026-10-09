@@ -602,3 +602,33 @@ test('painel: Responsável vem da lista de responsáveis e mostra o atual mesmo 
   await painel.getByLabel('Solicitar a').selectOption('CLIENTE');
   await expect(painel.getByRole('combobox', { name: 'Cliente', exact: true })).toHaveValue('CLIENTE BETA');
 });
+
+test('painel: salvar pelo teclado mantém o foco no painel', async ({ page }) => {
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_TAG)] as never; }
+  });
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
+  await painel.getByLabel('Responsável').selectOption('Gi');
+  const salvar = painel.getByRole('button', { name: 'Salvar alterações' });
+  await salvar.focus();
+  await page.keyboard.press('Enter');
+  await expect(aviso(page, /PED-0042/)).toBeVisible();
+  await expect(painel.getByRole('button', { name: 'Nada alterado' })).toBeDisabled();
+  // o foco fica no título do painel, não cai no <body>
+  await expect(painel.getByRole('heading', { name: 'PED-0042' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  expect(await painel.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+});
+
+test('painel: cancelar a confirmação do Resolvido devolve o foco para Salvar', async ({ page }) => {
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_TAG)] as never; }
+  });
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
+  await painel.getByLabel('Etapa').selectOption('entregue');
+  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
+  await page.keyboard.press('Escape');
+  await expect(painel.getByRole('button', { name: 'Salvar alterações' })).toBeFocused();
+});

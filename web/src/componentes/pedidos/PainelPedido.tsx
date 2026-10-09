@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Board, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { useTeclaEsc } from '../../hooks/useTeclaEsc';
@@ -49,6 +49,16 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
   const form = comAlterados(formInicial, formAlterado);
   const textos = Object.fromEntries(Object.entries(textosIniciais).map(([k, t]) => [k, comAlterados(t, textosAlterados[k] ?? {})])) as Record<string, TextoItem>;
   const [confirmando, setConfirmando] = useState(false);
+  // Depois de salvar o botão vira "Nada alterado" (desabilitado) e, ao cancelar a confirmação,
+  // ela some: o foco iria para o <body>. Vai para o título do painel ou de volta ao Salvar.
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+  const salvarRef = useRef<HTMLButtonElement>(null);
+  const [focar, setFocar] = useState<'titulo' | 'salvar' | null>(null);
+  useEffect(() => {
+    if (!focar) return;
+    (focar === 'titulo' ? tituloRef : salvarRef).current?.focus();
+    setFocar(null);
+  }, [focar]);
 
   const restaDe = (dealId: string, itemId: string) =>
     board.caixas.find((c) => c.dealId === dealId)?.itens.find((i) => i.id === itemId)?.resta ?? Number.POSITIVE_INFINITY;
@@ -80,6 +90,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     setFormAlterado({});
     setTextosAlterados({});
     setConfirmando(false);
+    setFocar('titulo');
   }
 
   function salvar() {
@@ -98,7 +109,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
           <span className="tipo"><span className="tipo__ponto" style={{ background: pedido.origem === 'CLIENTE' ? 'var(--signal)' : 'var(--navy)' }} />Pedido de itens</span>
           <button type="button" className="painel__fechar" title="Fechar" aria-label="Fechar" onClick={onFechar}>×</button>
         </div>
-        <div className="painel__os">{pedido.id}</div>
+        <h2 ref={tituloRef} className="painel__os painel__titulo-foco" tabIndex={-1}>{pedido.id}</h2>
         <div className="painel__peca">{[nomeOrigem(pedido.origem), quemDoPedido(pedido)].filter(Boolean).join(' · ')}</div>
         <div className="painel__meta">{[pedido.criadoEm && `criado ${ddmm(pedido.criadoEm)}`, nomeEtapa].filter(Boolean).join(' · ')}</div>
         {familia && <div className="painel__meta painel__familia">{familia}</div>}
@@ -126,11 +137,11 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
             {confirmando ? (
               <ConfirmarResolvido rotulo={`Confirmar ${nomeDestino} do ${pedido.id}`}
                 texto={textoConfirmarResolvido(pedido.itens, nomeDestino)} ocupado={false}
-                onConfirmar={gravar} onCancelar={() => setConfirmando(false)} />
+                onConfirmar={gravar} onCancelar={() => { setConfirmando(false); setFocar('salvar'); }} />
             ) : (
               <div className="acoes">
                 {erroDados && <p className="campo__erro" role="alert">{erroDados}</p>}
-                <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro} onClick={salvar}>
+                <button ref={salvarRef} type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro} onClick={salvar}>
                   {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
                 </button>
               </div>
