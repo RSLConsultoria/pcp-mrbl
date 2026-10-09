@@ -49,7 +49,7 @@ const ITENS_P = [
 ];
 const ETAPAS = [
   { id: 'a_pedir', nome: 'A pedir', ordem: 1 }, { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
-  { id: 'recebidos', nome: 'Recebidos', ordem: 3 }, { id: 'entregue', nome: 'Entregue', ordem: 4 }
+  { id: 'recebidos', nome: 'Recebidos', ordem: 3 }, { id: 'concluido', nome: 'Entregue', ordem: 4 }
 ];
 function linhas(extra) {
   return Object.assign({ faltantes: FALT, caixasPcp: [], ganhas: [], pedidos: [ped({})], pedidosItens: ITENS_P.slice(), etapas: ETAPAS }, extra);

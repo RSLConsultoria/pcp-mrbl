@@ -51,7 +51,7 @@ test('board: etapasPedido padrao com aba vazia; ordenadas pela coluna ordem', ()
   const r = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [
     { id: 'c', nome: 'Três', ordem: '3' }, { id: 'a', nome: 'Um', ordem: 1 }, { id: 'x', nome: '', ordem: '' }, { id: 'b', nome: 'Dois', ordem: 2 }
   ] }));
-  assert.deepEqual(r.body.etapasPedido.map((e) => e.id), ['a', 'b', 'c']);
+  assert.deepEqual(r.body.etapasPedido.map((e) => e.id), ['a', 'b', 'c', 'concluido']); // sem `concluido`: etapa virtual no fim
   // finalizado usa a ultima etapa configurada
   const f = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [{ id: 'a', nome: 'Um', ordem: 1 }, { id: 'entregue', nome: 'Fim', ordem: 2 }],
     pedidos: PEDIDOS, pedidosItens: ITENS }));

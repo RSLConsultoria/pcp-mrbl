@@ -84,14 +84,14 @@ test('mover_pedido para a ultima etapa: SUBSTITUIDO e item ja resolvido ficam se
 });
 
 test('mover_pedido: etapas configuradas, a penultima pela ordem e a que da baixa', () => {
-  const etapas = [{ id: 'x', nome: 'Pedir', ordem: 1 }, { id: 'fim', nome: 'Recebido', ordem: 4 }, { id: 'y', nome: 'Chegou', ordem: 3 }, { id: 'z', nome: 'Meio', ordem: 2 }];
+  const etapas = [{ id: 'x', nome: 'Pedir', ordem: 1 }, { id: 'concluido', nome: 'Recebido', ordem: 4 }, { id: 'y', nome: 'Chegou', ordem: 3 }, { id: 'z', nome: 'Meio', ordem: 2 }];
   const lin = linhas({ etapas, pedidos: [ped({ etapa: 'x' })] });
   const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'y' }, lin);
   assert.equal(r.operacoes[r.operacoes.length - 1].linha.baixado_em, ISO);
   assert.match(r.historicos[0].texto, /^Lucca moveu PED-0044 para Chegou e deu baixa: /);
   const meio = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'z' }, lin);
   assert.deepEqual(meio.operacoes, [{ aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0044', etapa: 'z', atualizado_em: ISO } }]);
-  assert.deepEqual(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'fim' }, lin),
+  assert.deepEqual(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'concluido' }, lin),
     { status: 400, body: { erro: 'Mova o pedido primeiro para Chegou.' } });
 });
 

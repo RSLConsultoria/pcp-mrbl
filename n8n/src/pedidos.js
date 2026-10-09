@@ -81,8 +81,22 @@ function proximoIdFilho(pedidos, raiz) {
   return raiz + '.' + (max + 1);
 }
 
-// Etapas validas (com id e nome), ordenadas; aba vazia = padrao.
+var ID_ETAPA_CONCLUIDO = 'concluido';
+
+// Etapas validas (com id e nome), ordenadas; aba vazia = padrao. Sem a etapa de id
+// `concluido` (aba antiga, de 4 linhas, de antes das etapas novas) entra uma etapa
+// virtual Concluido no fim (maior ordem + 1): a penultima passa a ser a ultima da
+// aba (`entregue`), que da a baixa, e o deploy nao depende de mexer na aba antes.
+// O salvar_etapas grava a linha que falta.
 function lerEtapas(linhas) {
+  var e = lerEtapasDaAba(linhas);
+  if (e.some(function (x) { return x.id === ID_ETAPA_CONCLUIDO; })) return e;
+  var max = 0;
+  e.forEach(function (x) { if (x.ordem > max) max = x.ordem; });
+  return e.concat([{ id: ID_ETAPA_CONCLUIDO, nome: 'Concluído', ordem: max + 1 }]);
+}
+
+function lerEtapasDaAba(linhas) {
   var lidas = (linhas || []).filter(function (e) { return e && texto(e.id) !== '' && texto(e.nome) !== ''; })
     .map(function (e) {
       var o = numero(e.ordem);
@@ -161,8 +175,15 @@ function pedidoBaixado(p) {
 }
 
 // Pedido concluido (o destino confirmou o recebimento): finalizado, nao muda mais.
-function pedidoConcluido(p) {
-  return texto(p.linha.concluido_em) !== '';
+// Tambem conta o pedido que a API antiga levou para a ultima etapa (ela dava a baixa
+// la e nao gravava concluido_em): etapa final + baixado_em, sem concluido_em.
+function pedidoConcluido(p, etapas) {
+  return texto(p.linha.concluido_em) !== '' || concluidoPelaApiAntiga(p.linha, etapas);
+}
+
+function concluidoPelaApiAntiga(linha, etapas) {
+  var final = etapas && etapas.length ? etapaFinal(etapas) : null;
+  return !!final && texto(linha.concluido_em) === '' && texto(linha.baixado_em) !== '' && texto(linha.etapa) === final.id;
 }
 
 // Etapas ja ordenadas (lerEtapas). Penultima: entrar nela da a baixa.
@@ -230,7 +251,8 @@ function montarPedidos(extras, ano) {
     .map(function (p) {
       var l = p.linha;
       var baixadoEm = texto(l.baixado_em);
-      var concluidoEm = texto(l.concluido_em);
+      // concluido pela API antiga: a data da baixa faz as vezes da conclusao
+      var concluidoEm = texto(l.concluido_em) || (concluidoPelaApiAntiga(l, etapas) ? baixadoEm : '');
       var etapa = texto(l.etapa);
       var previsao = dataISO(l.previsao, ano);
       var itens = p.itens.map(function (it) {
@@ -607,7 +629,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   if (!p.itens.length) return erroAcao(409, 'Pedido sem itens válidos.');
   var dealsP = p.itens.map(function (x) { return texto(x.deal_id); });
   if (primeiroNaoEditavel(dealsP) !== null) return erroAcao(403, ERRO_NAO_EDITAVEL);
-  if (pedidoConcluido(p)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
+  if (pedidoConcluido(p, etapas)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
   var baixa = etapaDaBaixa(etapas);
   var final = etapaFinal(etapas);
   // Com a baixa dada o pedido so anda para a etapa final (o destino confirmou).
@@ -915,7 +937,7 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
   var removidas = atuais.filter(function (e) { return !mantidas[e.id]; });
   for (i = 0; i < removidas.length; i++) {
     var rid = removidas[i].id;
-    var comPedido = lista.some(function (p) { return !pedidoConcluido(p) && texto(p.linha.etapa) === rid; });
+    var comPedido = lista.some(function (p) { return !pedidoConcluido(p, atuais) && texto(p.linha.etapa) === rid; });
     if (comPedido) return erroAcao(409, 'A etapa ' + removidas[i].nome + ' tem pedidos abertos.');
   }
   var operacoes = acao.etapas.map(function (e, idx) {

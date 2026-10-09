@@ -77,7 +77,7 @@ const estado = {
   etapas: [
     { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' },
     { id: 'entregue', nome: 'Enviado ao destino final' }, { id: 'concluido', nome: 'Concluído' }
-  ],
+  ].filter((e) => !(process.env.MOCK_ETAPAS_ANTIGAS && e.id === 'concluido')),
   pedidos: [
     { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA', previsao: '' }, { itemId: 'a2', dealId: '700001', qtd: 30, fornecedor: '', previsao: diaIso(12) }] },
     { id: 'PED-0002', etapa: 'aguardando', origem: 'CLIENTE', quem: 'CLIENTE BETA', local: 'BRAGANCA', previsao: diaIso(10), responsavel: 'Lucca', criadoEm: diaIso(-4), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'b1', dealId: '700002', qtd: 52, fornecedor: '' }] },
@@ -101,9 +101,14 @@ const bad = (m) => new Erro(400, m);
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const fmtNum = (n) => String(Math.round(n * 1000) / 1000).replace('.', ',');
 const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
-const etapaFinal = () => estado.etapas[estado.etapas.length - 1];
-const etapaDaBaixa = () => estado.etapas[estado.etapas.length - 2];
-const nomeEtapa = (id) => estado.etapas.find((e) => e.id === id)?.nome ?? id;
+// Como o servidor (lerEtapas): sem a etapa `concluido` (aba antiga de 4 linhas), entra uma
+// Concluído virtual no fim. MOCK_ETAPAS_ANTIGAS=1 começa com a aba antiga.
+const etapas = () => (estado.etapas.some((e) => e.id === 'concluido') ? estado.etapas : [...estado.etapas, { id: 'concluido', nome: 'Concluído' }]);
+const etapaFinal = () => etapas()[etapas().length - 1];
+const etapaDaBaixa = () => etapas()[etapas().length - 2];
+const nomeEtapa = (id) => etapas().find((e) => e.id === id)?.nome ?? id;
+// Concluído também o pedido que a API antiga levou para a última etapa (a baixa era lá, sem concluido_em).
+const concluidoEm = (p) => p.concluidoEm || (p.etapa === etapaFinal().id && p.baixadoEm ? p.baixadoEm : '');
 const resta = (it) => Math.max(0, it.falta - it.baixada);
 const aberto = (it) => it.status !== 'RESOLVIDO' && resta(it) > 0;
 const caixaDe = (dealId) => estado.caixas.find((c) => c.dealId === dealId);
@@ -168,14 +173,14 @@ function montarBoard() {
     avisos: [],
     usuarios: USUARIOS,
     dealsEditaveis: estado.dealsEditaveis,
-    etapasPedido: estado.etapas.map((e, i) => ({ ...e, ordem: i + 1 })),
+    etapasPedido: etapas().map((e, i) => ({ ...e, ordem: i + 1 })),
     fornecedores: ativos(FORNECEDORES),
     responsaveis: ativos(RESPONSAVEIS),
     pedidos: [...estado.pedidos].sort(compararPedidos).map((p) => ({
       ...p,
       pai: p.pai ?? '',
-      concluidoEm: p.concluidoEm ?? '',
-      finalizado: !!p.concluidoEm,
+      concluidoEm: concluidoEm(p),
+      finalizado: !!concluidoEm(p),
       previsaoMaisProxima: previsoesDistintas(p)[0] || p.previsao,
       previsoesDiferentes: previsoesDistintas(p).length > 1,
       itens: itensValidos(p).map((i) => {
@@ -256,7 +261,7 @@ const dealsDe = (p) => [...new Set(itensValidos(p).map((i) => i.dealId))];
 // Como o servidor: concluído não muda; com a baixa, só mover para a etapa final.
 function pedidoAlteravel(p, corpo) {
   exigirEditavel(dealsDe(p));
-  if (p.concluidoEm) throw new Erro(409, 'Pedido finalizado não pode ser alterado.');
+  if (concluidoEm(p)) throw new Erro(409, 'Pedido finalizado não pode ser alterado.');
   const final = etapaFinal();
   if (p.baixadoEm && !(corpo.tipo === 'mover_pedido' && corpo.etapa === final.id)) throw new Erro(409, `Pedido com baixa só pode ir para ${final.nome}.`);
 }
@@ -360,7 +365,7 @@ function moverPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
-  if (!estado.etapas.some((e) => e.id === c.etapa)) throw bad('Etapa inválida.');
+  if (!etapas().some((e) => e.id === c.etapa)) throw bad('Etapa inválida.');
   if (p.etapa === c.etapa) throw bad('O pedido já está nessa etapa.');
   const historicos = [];
   if (c.etapa === etapaFinal().id) {
@@ -411,7 +416,7 @@ function dividirPedido(c, usuario) {
   pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   // só de Aguardando entrega (a etapa antes da baixa); a parte já vai para a etapa da baixa
-  const de = estado.etapas[estado.etapas.length - 3];
+  const de = etapas()[etapas().length - 3];
   if (!de || p.etapa !== de.id) throw bad(`Dividir só com o pedido em ${de ? de.nome : 'Aguardando entrega'}.`);
   const etapa = etapaDaBaixa();
   if (!Array.isArray(c.itens) || c.itens.length === 0) throw bad('Marque ao menos um item que chegou.');
@@ -495,16 +500,16 @@ function salvarEtapas(c) {
     if (!nome) throw bad('Dê um nome a todas as etapas.');
     if (nomes.has(chaveNome(nome))) throw bad(`Já existe uma etapa chamada ${nome}.`);
     nomes.add(chaveNome(nome));
-    if (e.id && !estado.etapas.some((x) => x.id === e.id)) throw bad('Etapa desconhecida.');
+    if (e.id && !etapas().some((x) => x.id === e.id)) throw bad('Etapa desconhecida.');
   }
   const baixa = etapaDaBaixa();
   const final = etapaFinal();
   const n = lista.length;
   if (lista[n - 2].id !== baixa.id || lista[n - 1].id !== final.id) throw bad(`As etapas ${baixa.nome} e ${final.nome} precisam continuar no fim, nessa ordem.`);
   const mantidos = new Set(lista.filter((e) => e.id).map((e) => e.id));
-  for (const antiga of estado.etapas) {
+  for (const antiga of etapas()) {
     if (mantidos.has(antiga.id)) continue;
-    if (estado.pedidos.some((p) => !p.concluidoEm && p.etapa === antiga.id)) throw new Erro(409, `A etapa ${antiga.nome} tem pedidos abertos.`);
+    if (estado.pedidos.some((p) => !concluidoEm(p) && p.etapa === antiga.id)) throw new Erro(409, `A etapa ${antiga.nome} tem pedidos abertos.`);
   }
   const ids = new Set();
   estado.etapas = lista.map((e) => {
