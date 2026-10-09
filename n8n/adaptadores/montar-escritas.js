@@ -10,5 +10,7 @@ var planilha = planilhaDoLote($('Ler Planilha Acao').first().json, LEITURAS_ACAO
 var reqs = requisicoesDeEscrita(resultado.operacoes || [], resultado.historicos || [], planilha, PLANILHA_ID);
 if (!reqs.length) return [{ json: { vazio: true } }];
 return reqs.map(function (r, i) {
-  return { json: { vazio: false, passo: i + 1, de: reqs.length, method: r.method, url: r.url, body: r.body } };
+  // repetir: o IF "Repetir?" manda o batchUpdate ao Gravar Lote (com retry) e o append ao
+  // Gravar Anexo (sem retry: repetir um append que deu certo duplicaria as linhas).
+  return { json: { vazio: false, passo: i + 1, de: reqs.length, method: r.method, url: r.url, body: r.body, repetir: r.repetir === true } };
 });

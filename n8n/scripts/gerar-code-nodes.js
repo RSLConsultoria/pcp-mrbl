@@ -14,6 +14,7 @@ const NODES = {
   'processar-acao': 'Processar Acao',
   'montar-escritas': 'Montar Escritas',
   'limpar-cache': 'Limpar Cache',
+  'montar-erro': 'Montar Erro',
   'selecionar-envio': 'Selecionar Envio',
   'invalidas-envio': 'Marcar Invalidas',
   'montar-registro': 'Montar Registro',

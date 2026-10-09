@@ -31,8 +31,14 @@ linha(300, 0, ['Board', 'Validar Pedido', 'Precisa Ler?', 'Ler Planilha', 'Monta
 linha(600, 0, ['Acao', 'Pre Validar Acao', 'Pre OK?', 'Ler Planilha Acao', 'Processar Acao', 'Acao OK?',
   'Montar Escritas', 'Tem Escritas?', 'Loop Escritas', 'Limpar Cache', 'Responder Acao']);
 POS['Responder Pre'] = [3 * DX, 780];
-// Loop: Gravar Lote fica acima do Loop Escritas (volta para ele a cada requisicao).
-POS['Gravar Lote'] = [9 * DX, 420];
+// Loop: Repetir? e as duas gravacoes ficam acima do Loop Escritas (voltam para ele a cada
+// requisicao); a saida de erro vai para Montar Erro -> Gravar Erro -> Responder Erro.
+POS['Repetir?'] = [9 * DX, 400];
+POS['Gravar Lote'] = [10 * DX, 320];
+POS['Gravar Anexo'] = [10 * DX, 460];
+POS['Montar Erro'] = [11 * DX, 390];
+POS['Gravar Erro'] = [12 * DX, 390];
+POS['Responder Erro'] = [13 * DX, 390];
 
 const POS_ENVIO = {};
 posAtual = POS_ENVIO;
@@ -175,6 +181,8 @@ const webhook = (varName, nome, metodo, caminho) => `const ${varName} = trigger(
 
 const IMPORT = "import { workflow, node, trigger, ifElse, expr } from '@n8n/workflow-sdk';\n\n// GERADO por n8n/scripts/gerar-workflow-sdk.js a partir de n8n/build/*.js. Nao edite a mao.\n\n";
 const unico = 'executeOnce: true,\n    ';
+// Falha vai para a saida de erro (index 1) em vez de parar o workflow sem resposta.
+const ERRO_SAIDA = "onError: 'continueErrorOutput',\n    ";
 
 const precisaLer = `const precisaLer = ifElse({
   version: 2.3,
@@ -195,12 +203,12 @@ const precisaLer = `const precisaLer = ifElse({
 // (service account; precisa de "Set up for use in HTTP Request node" com o
 // escopo spreadsheets). Leitura: GET fixo. Gravacao: POST com url/corpo do item.
 const CRED_GOOGLE_HTTP = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
-const httpGoogle = (varName, nome, metodo, urlCodigo, comCorpo, extra) => `const ${varName} = node({
+const httpGoogle = (varName, nome, metodo, urlCodigo, comCorpo, extra, retry) => `const ${varName} = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.2,
   config: {
     name: '${nome}',
-    ${extra || ''}${RETRY}parameters: {
+    ${extra || ''}${retry === undefined ? RETRY : retry}parameters: {
       method: '${metodo}',
       url: ${urlCodigo},
       authentication: 'predefinedCredentialType',
@@ -252,8 +260,15 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   code('montarEscritas', 'Montar Escritas', 'montar-escritas'),
   temEscritas,
   loopEscritas,
-  httpGoogle('gravarLote', 'Gravar Lote', 'POST', "expr('{{ $json.url }}')", true),
+  'const repetir = ' + condicao('Repetir?', '{{ $json.repetir }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  // batchUpdate (idempotente): retry 3x. Append: sem retry (repetir duplicaria linhas).
+  // Os dois mandam a falha para a saida de erro (Montar Erro).
+  httpGoogle('gravarLote', 'Gravar Lote', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
+  httpGoogle('gravarAnexo', 'Gravar Anexo', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
   code('limparCache', 'Limpar Cache', 'limpar-cache'),
+  code('montarErro', 'Montar Erro', 'montar-erro'),
+  httpGoogle('gravarErro', 'Gravar Erro', 'POST', "expr('{{ $json.url }}')", true, "onError: 'continueRegularOutput',\n    ", ''),
+  responder('responderErro', 'Responder Erro', "{{ $('Montar Erro').first().json.resposta }}", '{{ 500 }}', unico),
   responder('responderAcao', 'Responder Acao', "{{ $('Processar Acao').first().json.body }}", "{{ $('Processar Acao').first().json.status }}", unico)
 ].join('\n\n') + `
 
@@ -278,7 +293,9 @@ export default workflow('${id}', '${nomeWf}', {
       .onTrue(montarEscritas.to(temEscritas
         .onTrue(loopEscritas
           .onDone(limparCache.to(responderAcao))
-          .onEachBatch(gravarLote.to(nextBatch(loopEscritas))))
+          .onEachBatch(repetir
+            .onTrue(gravarLote.onError(montarErro.to(gravarErro).to(responderErro)).to(nextBatch(loopEscritas)))
+            .onFalse(gravarAnexo.onError(montarErro).to(nextBatch(loopEscritas)))))
         .onFalse(responderAcao)))
       .onFalse(responderAcao)))
     .onFalse(responderPre));

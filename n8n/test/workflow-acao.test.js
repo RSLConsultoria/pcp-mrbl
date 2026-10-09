@@ -77,6 +77,8 @@ test('F2 baixa: Processar Acao le do lote; Montar Escritas = batchUpdate em FALT
   assert.deepEqual(escritas.map(alvo), ['batchUpdate', "'HISTORICO_APP'!A1"]);
   assert.ok(escritas.every((e) => e.method === 'POST' && e.url.startsWith(URL_BASE) && e.vazio === false));
   assert.deepEqual(escritas.map((e) => [e.passo, e.de]), [[1, 2], [2, 2]]);
+  // so o batchUpdate (idempotente) pode ser repetido; append repetido duplicaria linhas
+  assert.deepEqual(escritas.map((e) => e.repetir), [true, false]);
   const ranges = escritas[0].body.data.map((d) => d.range);
   assert.ok(ranges.every((r) => r.startsWith("'FALTANTES'!") && /3(:|$)/.test(r)), ranges.join());
   assert.deepEqual(escritas[0].body.data.find((d) => d.range.startsWith("'FALTANTES'!H")).values, [[6]]);
@@ -147,6 +149,39 @@ test('Limpar Cache: no fim das gravacoes apaga o cache do board (um board lido d
   assert.deepEqual(saida, [{ json: { ok: true } }]);
 });
 
+test('Montar Erro: linha best-effort no ERROS_APP (sem retry) e a resposta 500 para o site; apaga o cache', () => {
+  const s = sessao();
+  s.estado.board = { corpo: {}, guardadoEm: T0 };
+  const corpo = { tipo: 'baixa', dealId: '600001', itemId: 'b', valor: 2, versao: '' };
+  const lote = { vazio: false, passo: 2, de: 3, method: 'POST', url: URL_BASE + ':batchUpdate', body: {}, repetir: true };
+  const [saida] = rodarNode('montar-erro', {
+    $: cifrao({ Acao: [{ headers: { authorization: s.cab }, body: corpo }], 'Processar Acao': [{ status: 200, historicos: [{ deal_id: '600001' }, { deal_id: '600001' }] }], 'Loop Escritas': [lote] }),
+    $input: { first: () => ({ json: { error: { message: 'Quota exceeded for quota metric' } } }) },
+    $getWorkflowStaticData: () => s.estado
+  });
+  const j = saida.json;
+  assert.equal(j.method, 'POST');
+  assert.equal(decodeURIComponent(j.url.replace(URL_BASE, '')), "/'ERROS_APP'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS");
+  assert.equal(j.body.values.length, 1);
+  const [quando, usuario, tipo, deal, passo, url, erro] = j.body.values[0];
+  assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(quando));
+  assert.deepEqual([usuario, tipo, deal, passo, url, erro], ['Lucca', 'baixa', '600001', '2/3', URL_BASE + ':batchUpdate', 'Quota exceeded for quota metric']);
+  assert.deepEqual(j.resposta, { erro: 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.' });
+  assert.equal(s.estado.board, undefined);
+  // nunca grava senha nem o corpo da acao
+  assert.ok(!JSON.stringify(j.body).includes('senha'));
+});
+
+test('Montar Erro: sem nada para ler (best-effort) ainda devolve a linha e a resposta, sem derrubar o node', () => {
+  const [saida] = rodarNode('montar-erro', {
+    $: () => { throw new Error('node nao executado'); },
+    $input: { first: () => { throw new Error('sem entrada'); } },
+    $getWorkflowStaticData: () => ({})
+  });
+  assert.equal(saida.json.body.values[0].length, 7);
+  assert.equal(saida.json.resposta.erro, 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.');
+});
+
 // ---------- SDK gerado ----------
 
 function lerSdk(nome) {
@@ -167,12 +202,13 @@ test('pcp-api.sdk.js: nodes do lote, sem Filtrar/Tem/Gravar por aba', () => {
   assert.equal(blocos(sdk).filter((b) => b.txt.includes("type: 'n8n-nodes-base.googleSheets'")).length, 1);
 });
 
-test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi e retry 3x / 3 s', () => {
+test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi; retry 3x / 3 s so onde repetir nao duplica', () => {
   const sdk = lerSdk('pcp-api.sdk.js');
   const google = blocos(sdk).filter((b) => /type: 'n8n-nodes-base\.(httpRequest|googleSheets)'/.test(b.txt));
-  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
+  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Anexo', 'Gravar Erro', 'Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
+  const COM_RETRY = ['Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS'];
   google.forEach((b) => {
-    assert.ok(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b.txt), b.nome);
+    assert.equal(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b.txt), COM_RETRY.includes(b.nome), b.nome);
     assert.ok(b.txt.includes("googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' }"), b.nome);
     if (b.nome !== 'Ler USUARIOS') {
       assert.ok(b.txt.includes("authentication: 'predefinedCredentialType'") && b.txt.includes("nodeCredentialType: 'googleApi'"), b.nome);
@@ -185,6 +221,14 @@ test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi e retry 3x / 3 s
   assert.ok(gravar.includes("jsonBody: expr('{{ JSON.stringify($json.body) }}')"));
   const resp = blocos(sdk).find((b) => b.nome === 'Responder Acao').txt;
   assert.ok(resp.includes('executeOnce: true') && resp.includes("$('Processar Acao').first().json.body"));
+  // falha de gravacao: saida de erro (sem salvar execucao com erro: o login traz a senha)
+  const node = (n) => blocos(sdk).find((b) => b.nome === n).txt;
+  assert.ok(node('Gravar Lote').includes("onError: 'continueErrorOutput'"));
+  assert.ok(node('Gravar Anexo').includes("onError: 'continueErrorOutput'"));
+  assert.ok(node('Gravar Erro').includes("onError: 'continueRegularOutput'"));
+  const rerr = node('Responder Erro');
+  assert.ok(rerr.includes('executeOnce: true') && rerr.includes("$('Montar Erro').first().json.resposta") && rerr.includes('500'));
+  assert.ok(sdk.includes("saveDataErrorExecution: 'none'"));
 });
 
 test('pcp-api-homolog.sdk.js: igual ao de producao, so nome, id e caminhos dos webhooks mudam', () => {

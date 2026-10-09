@@ -30,6 +30,8 @@ function converter(arquivo) {
     const o = cadeia(n, n);
     o.onTrue = (x) => { ligar(n, 0, x._head); return o; };
     o.onFalse = (x) => { ligar(n, 1, x._head); return o; };
+    // node com onError: 'continueErrorOutput': saida 0 = sucesso, saida 1 = erro
+    o.onError = (x) => { ligar(n, 1, x._head); return o; };
     // splitInBatches: saida 0 = done, saida 1 = cada lote
     o.onDone = (x) => { ligar(n, 0, x._head); return o; };
     o.onEachBatch = (x) => { ligar(n, 1, x._head); return o; };

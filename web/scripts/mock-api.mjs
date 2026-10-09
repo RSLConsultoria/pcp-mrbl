@@ -2,7 +2,8 @@
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
 // MOCK_ATRASO_MS=4000 segura cada resposta da pcp-acao (imita o servidor lento: a tela tem de
 // mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
-// ?atraso=4000 na URL da ação.
+// ?atraso=4000 na URL da ação. MOCK_FALHA_GRAVACAO=1 (ou ?falha=gravacao) responde toda ação como a
+// API quando uma gravação na planilha falha no meio: 500 com o aviso (a falha vai para a aba ERROS_APP).
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
 // Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
 // 90005 em Aguardando entrega (partes em etapas diferentes); 90007 com tudo na última etapa (pode ir à oficina);
@@ -623,6 +624,9 @@ const servidor = http.createServer(async (req, res) => {
       const atraso = Number(new URLSearchParams(busca).get('atraso')) || ATRASO_MS;
       if (atraso > 0) await esperar(atraso);
       if (!corpo) return enviar(res, 400, { erro: 'Corpo inválido.' });
+      if (process.env.MOCK_FALHA_GRAVACAO || new URLSearchParams(busca).get('falha') === 'gravacao') {
+        return enviar(res, 500, { erro: 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.' });
+      }
       const r = processar(corpo, 'Lucca');
       console.log(`[acao] ${corpo.tipo} ok`);
       return enviar(res, 200, r);

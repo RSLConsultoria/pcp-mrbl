@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client';
 import {
-  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_CONFLITO_PEDIDO, MSG_FALHA,
+  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_CONFLITO_PEDIDO, MSG_FALHA, MSG_FALHA_GRAVACAO,
   ordenarHistorico, passoDaData, SELO_PLOOMES, validarBaixa, versaoAtual
 } from './acoes';
 import { item } from './teste-util';
@@ -109,6 +109,11 @@ describe('desfechoDoErro', () => {
     expect(desfechoDoErro(new ApiError(500, 'Erro 500'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
     expect(desfechoDoErro(new ApiError(0, 'Sem conexão com o servidor.'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
     expect(desfechoDoErro(new Error('x'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
+  });
+  it('500 da falha de gravação (ERROS_APP) mostra o aviso do servidor e recarrega (parte pode ter sido gravada)', () => {
+    expect(MSG_FALHA_GRAVACAO).toBe('Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.');
+    expect(desfechoDoErro(new ApiError(500, MSG_FALHA_GRAVACAO))).toEqual({ tipo: 'conflito', texto: MSG_FALHA_GRAVACAO });
+    expect(desfechoDoErro(new ApiError(500, 'Error in workflow'))).toEqual({ tipo: 'aviso', texto: MSG_FALHA });
   });
   it('409 que não é de versão mostra a mensagem do servidor (e ainda recarrega, como conflito)', () => {
     for (const msg of ['Item já está no PED-0003.', 'Item não encontrado.', 'Pedido finalizado não pode ser alterado.', 'A etapa Solicitado tem pedidos abertos.']) {

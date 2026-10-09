@@ -1769,6 +1769,10 @@ var DESTINOS_ESCRITA = [
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
 var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES'];
 var ABA_HISTORICO = 'HISTORICO_APP';
+// Falha numa gravacao (depois das tentativas): uma linha na aba ERROS_APP (colunas
+// quando, usuario, tipo, deal_id, passo, url, erro) e 500 com este aviso para o site.
+var ABA_ERROS = 'ERROS_APP';
+var ERRO_GRAVACAO = 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.';
 
 function nomeDaLeitura(l) {
   return typeof l === 'string' ? l : l.aba;
@@ -1862,6 +1866,45 @@ function planilhaDoLote(resposta, leituras) {
     p.ultimaLinha[aba] = typeof l !== 'string' && l.soCabecalho ? null : ultimaLinhaComDados(values, inicio);
   });
   return p;
+}
+
+// Linha do ERROS_APP, best-effort (nada aqui pode falhar): [quando, usuario, tipo,
+// deal_id, passo, url, erro]. Nunca leva o corpo da acao nem dados do login.
+// d = { agora (ms), sessao, corpo, historicos, lote: { passo, de, url }, erro }
+function linhaErroApp(d) {
+  d = d || {};
+  var corpo = d.corpo && typeof d.corpo === 'object' ? d.corpo : {};
+  var deals = [];
+  function juntar(x) {
+    var t = texto(x);
+    if (t !== '' && deals.indexOf(t) < 0) deals.push(t);
+  }
+  juntar(corpo.dealId);
+  (Array.isArray(d.historicos) ? d.historicos : []).forEach(function (h) { if (h) juntar(h.deal_id); });
+  var lote = d.lote || {};
+  var passo = lote.passo !== undefined && lote.passo !== null ? texto(lote.passo) + (lote.de ? '/' + texto(lote.de) : '') : '';
+  var erro = d.erro;
+  var msg = '';
+  if (erro && typeof erro === 'object') msg = texto(erro.message) || texto(erro.description) || tentarJson(erro);
+  else msg = texto(erro);
+  var quando = '';
+  try { quando = new Date(typeof d.agora === 'number' ? d.agora : Date.now()).toISOString(); } catch (e) { quando = ''; }
+  return [quando, texto(d.sessao && d.sessao.nome), texto(corpo.tipo), deals.join(', '), passo, texto(lote.url), msg.slice(0, 500)];
+}
+
+function tentarJson(x) {
+  try { return JSON.stringify(x); } catch (e) { return ''; }
+}
+
+// Append da linha no ERROS_APP. INSERT_ROWS: aba de registro, nunca sobrescreve.
+function requisicaoErroApp(linha, docId) {
+  return {
+    method: 'POST',
+    url: URL_PLANILHAS + docId + '/values/' + encodeURIComponent(rangeDaAba(ABA_ERROS, 'A1')) +
+      ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+    body: { values: [linha] },
+    repetir: false
+  };
 }
 
 function valorGravado(v) {

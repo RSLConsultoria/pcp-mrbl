@@ -154,6 +154,20 @@ test('recusa do servidor desfaz a mudança: o card volta e aparece o aviso', asy
   await expect(page.getByText('Salvando…')).toHaveCount(0);
 });
 
+test('falha ao gravar na planilha (500 com aviso): mostra o aviso do servidor, desfaz e relê o board', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos', {
+    ajustar: comPedido('a_pedir'),
+    resposta: () => ({ status: 500, json: { erro: 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.' } })
+  });
+  await expect.poll(() => mock.boardGets()).toBe(1);
+  await page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' }).dragTo(page.getByRole('region', { name: 'Solicitado' }));
+  mock.soltar();
+  await expect(aviso(page, 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.')).toBeVisible();
+  await expect(card(page, 'A pedir')).toBeVisible();
+  await expect(card(page, 'Solicitado')).toHaveCount(0);
+  await expect.poll(() => mock.boardGets()).toBeGreaterThan(1); // parte pode ter sido gravada: relê
+});
+
 test('a recarga do minuto não apaga o que ainda está na fila', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', { ajustar: comPedido('a_pedir') });
   await page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' }).dragTo(page.getByRole('region', { name: 'Solicitado' }));

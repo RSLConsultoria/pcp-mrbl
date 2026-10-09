@@ -96,6 +96,9 @@ export const MSG_CONFLITO_PEDIDO = 'Alguém alterou este pedido agora há pouco.
 // ERRO_VERSAO e ERRO_VERSAO_PEDIDO): "Alguém alterou esta caixa/este pedido agora há pouco."
 export const MSG_VERSAO_SERVIDOR = 'Alguém alterou ';
 export const MSG_FALHA = 'Não foi possível salvar. Tente de novo.';
+// 500 do servidor quando uma gravação na planilha falhou no meio (n8n/src/planilhaLote.js
+// ERRO_GRAVACAO; a falha fica na aba ERROS_APP). Parte da ação pode ter sido gravada.
+export const MSG_FALHA_GRAVACAO = 'Falha ao gravar na planilha. Avise o PCP antes de tentar de novo.';
 
 export type DesfechoErro =
   | { tipo: 'expirou' }
@@ -105,10 +108,12 @@ export type DesfechoErro =
 // O que a tela faz quando o servidor recusa uma ação. Todo 409 recarrega o board; só o de
 // versão vencida vira o texto padrão (que fala do pedido ou da caixa, conforme o alvo da
 // ação), os outros (item já em pedido, pedido finalizado, etapa com pedido aberto) mostram a
-// mensagem do servidor.
+// mensagem do servidor. A falha de gravação (500) mostra o aviso do servidor e também
+// recarrega: parte da ação pode ter sido gravada.
 export function desfechoDoErro(e: unknown, acao?: Acao): DesfechoErro {
   if (e instanceof ApiError) {
     if (e.status === 401) return { tipo: 'expirou' };
+    if (e.status === 500 && e.message.trim() === MSG_FALHA_GRAVACAO) return { tipo: 'conflito', texto: MSG_FALHA_GRAVACAO };
     if (e.status === 409) {
       const msg = e.message.trim();
       const versao = msg === '' || msg === 'Erro 409' || msg.startsWith(MSG_VERSAO_SERVIDOR);

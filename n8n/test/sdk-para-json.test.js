@@ -10,8 +10,27 @@ test('API: loop de escritas liga done ao Limpar Cache (e dele ao Responder Acao)
   const w = wf('pcp-api.sdk.js');
   assert.deepStrictEqual(destinos(w, 'Loop Escritas', 0), ['Limpar Cache']);
   assert.deepStrictEqual(destinos(w, 'Limpar Cache', 0), ['Responder Acao']);
-  assert.deepStrictEqual(destinos(w, 'Loop Escritas', 1), ['Gravar Lote']);
+  assert.deepStrictEqual(destinos(w, 'Loop Escritas', 1), ['Repetir?']);
+  assert.deepStrictEqual(destinos(w, 'Repetir?', 0), ['Gravar Lote']);
+  assert.deepStrictEqual(destinos(w, 'Repetir?', 1), ['Gravar Anexo']);
   assert.deepStrictEqual(destinos(w, 'Gravar Lote', 0), ['Loop Escritas']);
+  assert.deepStrictEqual(destinos(w, 'Gravar Anexo', 0), ['Loop Escritas']);
+  // saida de erro (index 1): Montar Erro -> Gravar Erro -> Responder Erro; nunca o Responder Acao
+  assert.deepStrictEqual(destinos(w, 'Gravar Lote', 1), ['Montar Erro']);
+  assert.deepStrictEqual(destinos(w, 'Gravar Anexo', 1), ['Montar Erro']);
+  assert.deepStrictEqual(destinos(w, 'Montar Erro', 0), ['Gravar Erro']);
+  assert.deepStrictEqual(destinos(w, 'Gravar Erro', 0), ['Responder Erro']);
+  const no = (n) => w.nodes.find((x) => x.name === n);
+  assert.strictEqual(no('Gravar Lote').onError, 'continueErrorOutput');
+  assert.strictEqual(no('Gravar Lote').retryOnFail, true);
+  assert.strictEqual(no('Gravar Anexo').onError, 'continueErrorOutput');
+  assert.strictEqual(no('Gravar Anexo').retryOnFail, undefined);
+  assert.strictEqual(no('Gravar Erro').retryOnFail, undefined);
+  assert.strictEqual(w.settings.saveDataErrorExecution, 'none');
+  // Responder Acao: so pelo fim do loop (via Limpar Cache), Tem Escritas? (nao) e Acao OK? (nao)
+  const paraResponder = Object.entries(w.connections)
+    .flatMap(([de, c]) => c.main.flatMap((saida, i) => saida.filter((x) => x.node === 'Responder Acao').map(() => de + ':' + i)));
+  assert.deepStrictEqual(paraResponder.sort(), ['Acao OK?:1', 'Limpar Cache:0', 'Tem Escritas?:1']);
   assert.deepStrictEqual(destinos(w, 'Precisa Ler?', 1), ['Responder Board']);
 });
 
