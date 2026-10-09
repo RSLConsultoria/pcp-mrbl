@@ -1,231 +1,129 @@
 # Workflows n8n do PCP MRBL
 
-## PCP MRBL - API (id: WpuXpcSa5oGiEkTm)
+## Checklist da release (branch `perf-lote` → `main`)
+
+Esta release leva junto: leitura/gravação em lote, registro compilado no Ploomes, fornecedor e responsável obrigatórios, etapas novas (baixa na penúltima, Concluído na última), Saídas divididas, Nova demanda pós-saída e o registro de falhas na ERROS_APP. **Esta lista é a única instrução de deploy válida**; as seções em "Histórico" mais abaixo só explicam como se chegou aqui e não devem ser seguidas.
+
+Siga na ordem. Cada item de planilha é "confira e, se faltar, faça".
+
+### A. Antes do deploy: credencial e planilha
+
+Nada daqui muda o que a API atual (antiga) faz.
+
+1. **Credencial `Google Sheets - MRBL`** (googleApi, service account, id `72hvCT9jkADwOOo1`): ligue **"Set up for use in HTTP Request node"**, com o escopo `https://www.googleapis.com/auth/spreadsheets`. Sem isso Ler Planilha, Ler Planilha Acao, Gravar Lote, Gravar Anexo e Gravar Erro falham com 401/403. O JSON gerado já traz a credencial em todos os nodes que a usam: não é preciso religar nada à mão.
+2. **Abas novas**, com o cabeçalho exato na linha 1 (aba só com cabeçalho funciona):
+   - **FORNECEDORES**: `id` | `nome` | `ativo`. `ativo` vazio ou `SIM` aparece na lista, `NAO` esconde; o pedido grava o `nome`.
+   - **RESPONSAVEIS**: `nome` | `ativo`, semeada com Gi, Fátima, Cesar, Luana, Lucca e Renata, todos com `ativo` = `SIM`.
+   - **ERROS_APP**: `quando` | `usuario` | `tipo` | `deal_id` | `passo` | `url` | `erro` (nessa ordem: a linha é gravada por posição, a partir da coluna A).
+
+   FORNECEDORES e RESPONSAVEIS entram no `values:batchGet` do board: aba ausente derruba o board inteiro (400). ERROS_APP não é lida; sem ela, só o registro da falha se perde.
+3. **Cabeçalhos novos**, na próxima coluna livre da linha 1:
+   - **PEDIDOS**: `concluido_em`. Confira também `pai`.
+   - **FALTANTES**: `origem`. Confira também `atualizado_em_app`.
+   - **PEDIDOS_ITENS**: confira `previsao` (logo depois de `fornecedor`).
+
+   Crie à mão antes do deploy: se duas ações criarem a mesma coluna ao mesmo tempo, as duas escolhem a mesma coluna livre e uma sobrescreve a outra (veja o comentário em `src/planilhaLote.js`).
+4. **ETAPAS_PEDIDO: não mexa ainda** (é o passo D). Com a API antiga, a maior `ordem` é a etapa que dá a baixa: uma linha `concluido` com ordem 5 agora faria a baixa só em Concluído.
+
+### B. Build e commit fixado
+
+1. `cd n8n && npm test && npm run build`. O build regenera `n8n/build/`, `workflows/*.sdk.js` e `workflows/json/`; depois dele `git status` não pode mostrar diferença nesses arquivos.
+2. No site: `cd web && npm test && npm run build && CI=1 npx playwright test`.
+3. Faça o push da branch `perf-lote` (sem merge na `main`: o merge publica o site) e anote o hash do commit. É esse commit que o utilitário de deploy vai baixar.
+
+### C. Homolog, só no card de teste
+
+1. Atualize o **"PCP MRBL - API (homolog)"** (webhooks `pcp-login-h`, `pcp-board-h`, `pcp-acao-h`; mesma planilha da produção) com `workflows/json/pcp-api-homolog.json` do commit fixado, pelo **"Utilitario - Deploy PCP (manual)"**.
+2. Teste com o site local apontando para os webhooks `-h`, **só na OS de teste** (deal 607479158): baixa (F2); gerar pedido (com fornecedor e responsável); mover; mover para **Enviado ao destino final** (dá a baixa, pede confirmação); arrastar para **Concluído**; dividir em Aguardando entrega; Nova demanda na caixa que saiu da OS de teste. Confira na planilha: PEDIDOS com `baixado_em`/`concluido_em`, FALTANTES com as linhas `POS_SAIDA` e a coluna `origem`, HISTORICO_APP com uma linha por ação, nada gravado fora das colunas da operação, ERROS_APP vazia.
+3. **Atenção, salvar etapas:** a ETAPAS_PEDIDO é global e a planilha é a mesma. "Salvar etapas" no homolog **edita a ETAPAS_PEDIDO da produção**, e a API de produção ainda é a antiga. Além do nome que você renomear, o salvar grava a linha `concluido` (ordem 5) que a aba antiga não tem, e a API antiga passa a dar a baixa em Concluído. Por isso **não teste salvar etapas no homolog**; teste depois do deploy (passo D). Se já testou: desfaça o nome renomeado e deixe `nome` e `ordem` da linha `concluido` vazios (não apague a linha).
+
+### D. Produção (n8n)
+
+1. Anote o `activeVersionId` atual do **"PCP MRBL - API"** (`WpuXpcSa5oGiEkTm`) e do **"PCP MRBL - Enviar ao Ploomes"** (`z9misKW25YTuDhJ6`), para o rollback.
+2. Rode o **"Utilitario - Deploy PCP (manual)"** com o commit fixado: ele baixa `workflows/json/pcp-api.json` (e `pcp-envio.json`) daquele commit e faz PUT no workflow. **PUT num workflow ativo publica na hora** (não fica rascunho). O utilitário mantém os `webhookId`, então as URLs `pcp-login`, `pcp-board` e `pcp-acao` continuam as mesmas. `DEALS_PERMITIDOS` do envio continua só com o card de teste (`['607479158']`) até o go-live.
+3. Logo em seguida, **ETAPAS_PEDIDO**:
+   - linha de id `entregue`: `nome` = **Enviado ao destino final** (não mexa em `id` nem em `ordem` = 4);
+   - linha nova: `id` = `concluido`, `nome` = **Concluído**, `ordem` = **5**;
+   - etapas personalizadas: `entregue` com a penúltima ordem e `concluido` com a maior.
+
+   Agora é seguro: a API nova, sem a linha `concluido`, acrescenta uma etapa Concluído virtual no fim (então `entregue` já é a etapa da baixa), e pedido que a API antiga levou à última etapa com `baixado_em` e sem `concluido_em` conta como concluído. Dá para fazer pelo próprio app (Salvar etapas, perfil ADM, renomeando `entregue`): o salvar grava a linha `concluido`. Pedidos que estavam em "Resolvido" (com `baixado_em`) aparecem em **Enviado ao destino final**, em aberto: o dono arrasta para Concluído quando o destino confirmar.
+
+### E. Site
+
+1. Merge da `perf-lote` na `main` e push, **depois** do passo D (o site novo manda `dividir_pedido` sem etapa, `confirmouBaixa` e `nova_demanda`, que a API antiga não entende).
+2. Assim que o site novo estiver no ar, **peça a todos para recarregar a página**. Uma aba aberta com o site antigo recebe 409 "Atualize a página: o site mudou." quando divide mandando outra etapa ou move para a etapa da baixa sem a confirmação nova (não dá baixa nem divide errado), mas continua com as telas antigas até recarregar.
+
+### F. Regras permanentes da planilha
+
+- **Nunca ordene nem apague linhas** nas abas PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, FALTANTES, CAIXAS_PCP, HISTORICO_APP e ERROS_APP. A gravação casa pelo número da linha lido na mesma ação e o append começa logo depois da última linha com dados. Etapa removida = `nome` e `ordem` vazios, nunca a linha apagada.
+- **Nunca rode** o "Utilitario - Limpar Planilha Faltantes (manual)": ele apaga a FALTANTES inteira, inclusive as demandas pós-saída, que não voltam pelo sync.
+- O **"Sync Faltantes - Google Sheets"** (`s4mbblVXykIvkA8M`) não mexe nas linhas `POS_SAIDA`: só fecha órfãs com o mesmo `deal_id` **e** o mesmo `ciclo` (`PEDIDO`/`CORTE`) e grava por `id`; as demandas têm `ciclo` = `POS_SAIDA`, `origem` = `POS_SAIDA` e id `<deal>|POS_SAIDA|<uuid>`. Esse workflow vive só no n8n: se for alterado, confira de novo.
+- O **"Faltantes Painel"** lê a FALTANTES e **mostra as linhas `POS_SAIDA`**. Avise quem usa o painel.
+- Falha de gravação: o site mostra "Falha ao gravar na planilha. Avise o PCP antes de tentar de novo." e a ERROS_APP ganha uma linha (parte da ação pode ter sido gravada). Confira a aba antes de repetir a ação.
+- O cache do board dura 55 s: mudança feita direto na planilha pode levar até isso para aparecer.
+
+### G. Rollback (os dois lados juntos)
+
+1. **Planilha primeiro:** na ETAPAS_PEDIDO, deixe `nome` e `ordem` da linha `concluido` vazios (não apague a linha) e volte o `nome` de `entregue` para "Resolvido". Pedidos com `etapa` = `concluido`: troque a célula `etapa` para `entregue` (a API antiga não conhece `concluido`). Sem isso a API antiga daria a baixa em Concluído.
+2. **n8n:** `restore_workflow_version` para os `activeVersionId` anotados no passo D.1 (API e envio) e publique.
+3. **Site:** reverta o merge na `main` e peça para todos recarregarem.
+
+Abas, colunas e linhas novas (FORNECEDORES, RESPONSAVEIS, ERROS_APP, `concluido_em`, `origem`, linhas `POS_SAIDA`) podem ficar: a API antiga não as lê ou as trata como itens comuns da caixa. Linhas já marcadas ENVIADO pelo envio compilado ficam como estão.
+
+## Referência
+
+### PCP MRBL - API (id: WpuXpcSa5oGiEkTm)
 
 | Webhook | URL de produção |
 |---|---|
 | Login (POST) | https://mrbl-automacoes.duckdns.org/webhook/pcp-login |
 | Board (GET) | https://mrbl-automacoes.duckdns.org/webhook/pcp-board |
+| Ação (POST) | https://mrbl-automacoes.duckdns.org/webhook/pcp-acao |
 
-O `triggerInfo` do MCP mostra as URLs com o webhookId no caminho (`/webhook/<id>/pcp-login`), mas essas não ficam registradas. As que funcionam são as curtas acima, conferidas com curl em 07/10/2026.
+O `triggerInfo` do MCP mostra as URLs com o webhookId no caminho (`/webhook/<id>/pcp-login`), mas essas não ficam registradas. As que funcionam são as curtas acima (conferidas com curl em 07/10/2026).
 
-Code nodes gerados a partir de `n8n/build/`:
+Fonte da verdade: `n8n/src/` e `n8n/adaptadores/`. `npm run build` gera os Code nodes em `n8n/build/`, os `workflows/*.sdk.js` (`scripts/gerar-workflow-sdk.js`) e os `workflows/json/*.json` (`scripts/sdk-para-json.js`, com ids e `webhookId` estáveis e as credenciais). Mudou a lógica: edite `src/`, rode `npm test && npm run build`, faça commit dos arquivos gerados e faça o deploy pelo checklist acima.
 
-| Node | Arquivo |
-|---|---|
-| Processar Login | build/processar-login.js |
-| Validar Pedido | build/validar-pedido.js |
-| Montar Board | build/montar-board.js |
+Nodes hoje:
+- **Login**: Login → Ler USUARIOS (Google Sheets) → Processar Login → Responder Login.
+- **Board**: Board → Validar Pedido → Precisa Ler? → (sim) Ler Planilha (`values:batchGet` de FALTANTES, CAIXAS GANHAS, CAIXAS_PCP, HISTORICO_APP, USUARIOS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, FORNECEDORES, RESPONSAVEIS) → Montar Board → Responder Board; (não, cache de 55 s) → Responder Board.
+- **Ação**: Acao → Pre Validar Acao → Pre OK? → Ler Planilha Acao → Processar Acao → Acao OK? → Montar Escritas → Tem Escritas? → Loop Escritas (1 requisição por vez) → Repetir? → Gravar Lote (batchUpdate, retry 3×) ou Gravar Anexo (append, sem retry: repetir um append que deu certo duplicaria linhas) → de volta ao Loop; ao terminar, Limpar Cache → Responder Acao. Saída de erro do Gravar Lote/Gravar Anexo → Montar Erro → Gravar Erro (append na ERROS_APP, sem retry) → Responder Erro (500).
+- Ordem das gravações (`src/planilhaLote.js`): cabeçalhos novos → appends (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP, FALTANTES; começam logo depois da última linha com dados lida, OVERWRITE) → um batchUpdate → append no HISTORICO_APP (INSERT_ROWS).
 
-**Para mudar a lógica:**
-1. Edite `n8n/src/`.
-2. Rode `npm test && npm run build`.
-3. Cole o novo `build/*.js` no Code node correspondente, pelo MCP `update_workflow`.
-4. O `pcp-api.sdk.js` é regenerado pelo `npm run build`.
+**Homolog:** "PCP MRBL - API (homolog)" (`workflows/json/pcp-api-homolog.json`) é o mesmo workflow com webhooks `pcp-login-h`, `pcp-board-h`, `pcp-acao-h`. Usa a **mesma planilha**: edição só no card de teste, e cuidado com o que é global (ETAPAS_PEDIDO).
 
-**Credencial.** Os três nodes Google Sheets usam a credencial `Google Sheets - MRBL` (googleApi, service account). O SDK não grava a credencial na criação, então ela foi ligada depois com `update_workflow` (`setNodeCredential`). Faça o mesmo se recriar o workflow a partir do `pcp-api.sdk.js`.
+**Envio ao Ploomes** (`z9misKW25YTuDhJ6`, `workflows/json/pcp-envio.json`): a cada 2 min lê o HISTORICO_APP, agrupa as linhas PENDENTE por deal (libera o grupo quando a linha mais nova tem 10 min; até 30 linhas por registro e 20 grupos por rodada) e cria um InteractionRecord compilado por grupo (`[PCP · OS x] Atualizações do app PCP`, uma linha `• HH:mm texto` por ação). 429 deixa o grupo PENDENTE. **`DEALS_PERMITIDOS`** (`adaptadores/selecionar-envio.js`) hoje é `['607479158']` (só o card de teste); no go-live esvazie de propósito (`[]` = todos os deals), rode `npm run build` e faça o deploy.
 
 **Requisito da VPS.** O container do n8n (`/opt/n8n/docker-compose.yml`) precisa de `NODE_FUNCTION_ALLOW_BUILTIN=crypto`, senão o login falha com "Module 'crypto' is disallowed".
 
-O static data guarda as sessões, as tentativas e o cache. Se ele for perdido (reinício, reimportação), o efeito é só que as pessoas precisam entrar de novo.
+O static data guarda as sessões, as tentativas e o cache. Se ele for perdido (reinício, reimportação), o efeito é só que as pessoas precisam entrar de novo. Execuções não são salvas (`saveData*: none`), porque o corpo do login traz a senha; por isso a falha de gravação vai para a ERROS_APP.
 
-Execuções não são salvas (`saveData*: none`), porque o corpo do login traz a senha.
+## Histórico (não siga: substituído pelo checklist acima)
 
-## F2: acao, envio ao Ploomes e allowlist
+As seções abaixo registram as mudanças anteriores. Nodes, passos de deploy e credenciais citados aqui podem não existir mais.
 
-- **Webhook `/webhook/pcp-acao`** (POST, workflow "PCP MRBL - API"): processa baixa/previsao/obs/coluna manual; grava em FALTANTES (por `id`) ou CAIXAS_PCP (por `deal_id`) e registra no HISTORICO_APP (um unico "Preparar Historico" alimentado por Gravar Item e Gravar Caixa, depois Gravar Historico e Responder Acao). Antes de ler a planilha, "Pre Validar Acao" confere sessao e corpo; falha (401/400) responde direto por "Responder Pre" (IF "Pre OK?"). O "Processar Acao" repete as checagens.
-- **Workflow "PCP MRBL - Enviar ao Ploomes"** (`pcp-envio.sdk.js`): a cada 2 min le o HISTORICO_APP e cria InteractionRecords no Ploomes. 429 deixa so aquela linha PENDENTE; Buscar Contato 429/5xx descarta o item ate a proxima rodada; outro nao-2xx (ex. 404) segue sem ContactId. Os dois HTTP (Buscar Contato, Criar Registro) tem timeout de 30 s e `onError: continueRegularOutput`: erro de rede/timeout vira item com `$json.error` e sem `statusCode`; no Buscar Contato o item e pulado, no Criar Registro conta como tentativa falha.
-- **`DEALS_PERMITIDOS`** em `adaptadores/selecionar-envio.js`: hoje `['607479158']` (so o card de teste). **No go-live, esvazie a lista de proposito** (`[]` = todos os deals), rode `npm run build` e atualize o node "Selecionar Envio"; enquanto ela tiver o card de teste, nenhum outro deal e enviado.
-- **Credenciais**: apos criar a partir do SDK, religue as credenciais (Google Sheets - MRBL e Header Auth do Ploomes) com `update_workflow`; o SDK nao as grava de forma confiavel.
+### F2: ação, envio ao Ploomes e allowlist (histórico)
 
-### Estado do deploy (rascunho: API com acao ainda não publicada)
+- Webhook `/webhook/pcp-acao` passou a processar baixa/previsão/obs/coluna manual, gravando em FALTANTES (por `id`) ou CAIXAS_PCP (por `deal_id`) e registrando no HISTORICO_APP. "Pre Validar Acao" confere sessão e corpo antes de ler a planilha.
+- Workflow "PCP MRBL - Enviar ao Ploomes" criado (um InteractionRecord por linha na época; hoje é compilado).
+- A allowlist `DEALS_PERMITIDOS` nasceu aqui (veja a Referência).
 
-- Workflow "PCP MRBL - Enviar ao Ploomes": id z9misKW25YTuDhJ6, inativo; DEALS_PERMITIDOS = ['607479158'] (igual no arquivo e no node).
-- Rascunho: API com acao ainda não publicada (a versão ativa do PCP MRBL - API continua a anterior ate o publish).
+### F3: escrita genérica no "PCP MRBL - API" (histórico)
 
-## F3: deploy da escrita genérica no "PCP MRBL - API" (histórico)
+Primeira versão das ações de pedido (gerar, mover, dividir, etapas): um Google Sheets por aba e operação, com Code `Filtrar`/IF `Tem` antes de cada um, pedidos gravando antes da baixa e o histórico por último. Substituída pela leitura/gravação em lote: esses nodes e o `scripts/destinos.js` não existem mais. Planilha da época: `previsao` em PEDIDOS_ITENS e `pai` em PEDIDOS (continuam valendo e estão no checklist).
 
-> Substituído pela leitura/gravação em lote (seção seguinte). Os nodes `Ler <ABA>`, `Filtrar`/`Tem`/`Gravar` e o `scripts/destinos.js` citados abaixo não existem mais; o passo 0 (planilha) continua valendo.
+### Desempenho: leitura e gravação em lote, registro compilado (08/10/2026, histórico)
 
-**Atenção: publique tudo junto.** Os Code nodes da F3 (`Processar Acao`, `Montar Board`, `Pre Validar Acao`, gerados a partir de `src/` com pedidos) e a fiação abaixo vão no mesmo publish. O `Processar Acao` novo devolve `operacoes[]`/`historicos[]`; o rabo antigo (Preparar Gravacao → E Item? → Gravar Item | Gravar Caixa → Preparar Historico → Gravar Historico) só entende `gravacao`/`historico` e mandaria qualquer ação F3 para CAIXAS_PCP. E o código novo com o rabo novo, mas sem as leituras novas, quebra (`$('Ler PEDIDOS Acao')` inexistente). `ACOES_F3_ATIVAS` (src/api.js, hoje `true`) só recusa os tipos F3; não protege um deploy parcial.
+Desenho: `docs/superpowers/specs/2026-10-08-desempenho-e-compilado-design.md`. Trocou as dezenas de nodes Google Sheets por um `batchGet` por ramo e gravações HTTP em lote (`src/planilhaLote.js`), e o envio passou a ser compilado (`src/envioPloomes.js`). Criou o homolog e a regra de que gravar um workflow ativo pela API pública publica na hora. Exigiu a credencial habilitada para HTTP Request (passo A.1). Os nodes atuais estão na Referência.
 
-Fonte da verdade: `workflows/pcp-api.sdk.js` (gerado por `npm run build`; posições já definidas no gerador, `scripts/gerar-workflow-sdk.js`). Os destinos de escrita ficam em `scripts/destinos.js`.
+### Fornecedor e responsável obrigatórios no pedido (08/10/2026, histórico)
 
-### 0. Planilha de produção (antes do publish)
+Gerar pedido passou a exigir **Fornecedor** (ou o cliente, quando "Solicitar a" = Cliente) e **Responsável**, escolhidos em listas lidas das abas FORNECEDORES e RESPONSAVEIS (passo A.2). O servidor só confere que os campos não vêm vazios (`gerar_pedido` 400 "Informe o fornecedor." / "Informe o cliente." / "Informe o responsável."; `editar_pedido` não deixa limpar). "Local de entrega" ganhou `OFICINA` e `CLIENTE`. O responsável da caixa (No Ploomes) continua vindo da aba USUARIOS.
 
-Faça na planilha, à mão, antes de publicar:
-
-- **ETAPAS_PEDIDO**: na linha de id `entregue`, troque `nome` para **Resolvido** (nome superado em 09/10/2026: veja a seção "Etapas novas" no fim, que renomeia para **Enviado ao destino final**). Não mexa em `id` nem em `ordem` (pedidos existentes apontam para `entregue`, e a maior ordem é a etapa que dá baixa). Se a aba estiver vazia, nada a fazer: o padrão do código já usa Resolvido.
-- **PEDIDOS_ITENS**: inclua o cabeçalho `previsao` logo depois de `fornecedor`.
-- **PEDIDOS**: confira que existe o cabeçalho `pai` (partes de pedido dividido).
-- **CAIXAS_PCP**: nada a conferir. (A coluna `tratativa` deixou de existir no código; as colunas antigas `tratativa`/`tratativa_em` podem ficar na planilha, ninguém lê.)
-
-### Caminho recomendado: aplicar o SDK inteiro
-
-Em vez de montar à mão os passos 1 a 3, aplique o arquivo `workflows/pcp-api.sdk.js` inteiro com `update_workflow` no workflow `WpuXpcSa5oGiEkTm` (vira rascunho; a versão ativa continua a anterior até o publish). Antes, anote o `activeVersionId` atual (para o rollback). Depois religue a credencial **Google Sheets - MRBL** (googleApi, id `72hvCT9jkADwOOo1`, `setNodeCredential`) em todos os 24 nodes Google Sheets:
-
-- Leituras: Ler USUARIOS, Ler FALTANTES, Ler CAIXAS GANHAS, Ler CAIXAS_PCP, Ler HISTORICO_APP, Ler USUARIOS Board, Ler PEDIDOS, Ler PEDIDOS_ITENS, Ler ETAPAS_PEDIDO, Ler FALTANTES Acao, Ler CAIXAS_PCP Acao, Ler CAIXAS GANHAS Acao, Ler PEDIDOS Acao, Ler PEDIDOS_ITENS Acao, Ler ETAPAS_PEDIDO Acao.
-- Escritas: Incluir PEDIDOS, Atualizar PEDIDOS, Incluir PEDIDOS_ITENS, Atualizar PEDIDOS_ITENS, Gravar ETAPAS_PEDIDO, Atualizar ETAPAS_PEDIDO, Atualizar FALTANTES, Gravar CAIXAS_PCP, Incluir HISTORICO_APP.
-
-Todo node Google Sheets da API sai do gerador com `retryOnFail: true`, `maxTries: 3`, `waitBetweenTries: 3000` (cota/instabilidade da planilha). Confira no rascunho que as opções vieram.
-
-### 1. Ramo Board: 3 leituras novas antes do Montar Board
-
-| Node (Google Sheets, read) | Aba | Opções |
-|---|---|---|
-| Ler PEDIDOS | PEDIDOS | executeOnce, alwaysOutputData |
-| Ler PEDIDOS_ITENS | PEDIDOS_ITENS | executeOnce, alwaysOutputData |
-| Ler ETAPAS_PEDIDO | ETAPAS_PEDIDO | executeOnce, alwaysOutputData |
-
-Conexões: `Ler USUARIOS Board → Ler PEDIDOS → Ler PEDIDOS_ITENS → Ler ETAPAS_PEDIDO → Montar Board` (remova `Ler USUARIOS Board → Montar Board`). Cole `build/montar-board.js` no Montar Board.
-
-### 2. Ramo Acao: 3 leituras novas antes do Processar Acao
-
-| Node (Google Sheets, read) | Aba |
-|---|---|
-| Ler PEDIDOS Acao | PEDIDOS |
-| Ler PEDIDOS_ITENS Acao | PEDIDOS_ITENS |
-| Ler ETAPAS_PEDIDO Acao | ETAPAS_PEDIDO |
-
-Todas com executeOnce e alwaysOutputData. Conexões: `Ler CAIXAS GANHAS Acao → Ler PEDIDOS Acao → Ler PEDIDOS_ITENS Acao → Ler ETAPAS_PEDIDO Acao → Processar Acao`. Cole `build/processar-acao.js` no Processar Acao e `build/pre-validar-acao.js` no Pre Validar Acao. Não há leitura do HISTORICO_APP no ramo acao (o Processar Acao não usa; se existir um `Ler HISTORICO_APP Acao` de um rascunho anterior, apague e ligue `Ler ETAPAS_PEDIDO Acao → Processar Acao`).
-
-### 3. Ramo Acao: troque o rabo de gravação
-
-Apague: `Preparar Gravacao`, `E Item?`, `Gravar Item`, `Gravar Caixa`, `Preparar Historico`, `Gravar Historico`.
-
-Crie 9 destinos, nesta ordem. Cada um tem 3 nodes: Code `Filtrar <ABA> <op>` (jsCode = `build/filtrar-<aba>-<op>.js`, modo runOnceForAllItems), IF `Tem <ABA> <op>?` (condição: `{{ $json._vazio === true }}` é **false**, boolean, singleValue) e o Google Sheets de escrita (alwaysOutputData; retryOnFail, maxTries 3, waitBetweenTries 3000; mapping autoMapInputData; `cellFormat: RAW`, `handlingExtraData: insertInNewColumn`).
-
-A ordem importa: pedidos (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO) gravam antes da baixa (FALTANTES, CAIXAS_PCP) e o histórico por último. Se uma escrita falhar no meio, sobra baixa a menos (corrigível com uma baixa manual), nunca baixa em dobro. O primeiro Filtrar (0) confere a lista inteira de operações antes de qualquer escrita.
-
-| # | Code | IF | Sheets | Operação | Aba | Coluna de casamento |
-|---|---|---|---|---|---|---|
-| 0 | Filtrar PEDIDOS append | Tem PEDIDOS append? | Incluir PEDIDOS | append | PEDIDOS | — |
-| 1 | Filtrar PEDIDOS update | Tem PEDIDOS update? | Atualizar PEDIDOS | update | PEDIDOS | id |
-| 2 | Filtrar PEDIDOS_ITENS append | Tem PEDIDOS_ITENS append? | Incluir PEDIDOS_ITENS | append | PEDIDOS_ITENS | — |
-| 3 | Filtrar PEDIDOS_ITENS update | Tem PEDIDOS_ITENS update? | Atualizar PEDIDOS_ITENS | update | PEDIDOS_ITENS | id |
-| 4 | Filtrar ETAPAS_PEDIDO appendOrUpdate | Tem ETAPAS_PEDIDO appendOrUpdate? | Gravar ETAPAS_PEDIDO | appendOrUpdate | ETAPAS_PEDIDO | id |
-| 5 | Filtrar ETAPAS_PEDIDO update | Tem ETAPAS_PEDIDO update? | Atualizar ETAPAS_PEDIDO | update | ETAPAS_PEDIDO | id |
-| 6 | Filtrar FALTANTES update | Tem FALTANTES update? | Atualizar FALTANTES | update | FALTANTES | id |
-| 7 | Filtrar CAIXAS_PCP appendOrUpdate | Tem CAIXAS_PCP appendOrUpdate? | Gravar CAIXAS_PCP | appendOrUpdate | CAIXAS_PCP | deal_id |
-| 8 | Filtrar HISTORICO_APP append | Tem HISTORICO_APP append? | Incluir HISTORICO_APP | append | HISTORICO_APP | — |
-
-Conexões (para cada `i`, com `próximo` = `Filtrar` do destino `i+1`, ou `Responder Acao` depois do 8):
-- `Acao OK?` (true) → `Filtrar PEDIDOS append`; `Acao OK?` (false) → `Responder Acao` (como antes).
-- `Filtrar i → Tem i?`
-- `Tem i?` (true) → `Sheets i` → `próximo`
-- `Tem i?` (false) → `próximo`
-
-### 4. Credenciais e publish
-
-- Religue a credencial **Google Sheets - MRBL** (googleApi, id `72hvCT9jkADwOOo1`) em todos os 24 nodes Google Sheets listados acima (`setNodeCredential` no `update_workflow`; o SDK não a grava de forma confiável).
-- As abas PEDIDOS, PEDIDOS_ITENS e ETAPAS_PEDIDO precisam existir com cabeçalho na linha 1 (o update/appendOrUpdate casa pela coluna `id`); veja o passo 0.
-- Teste no rascunho com uma ação F2 (baixa) e uma F3 (gerar pedido) no card de teste; confira que nenhuma linha vazia entrou e que o HISTORICO_APP ganhou uma linha por OS. Só então publique.
-- O cache do board dura 55 s (`VALIDADE_CACHE_MS`): uma mudança feita direto na planilha pode levar até isso para aparecer.
-
-### Rollback
-
-Volte os dois lados juntos: no n8n, restaure o `activeVersionId` anotado antes do `update_workflow` (`restore_workflow_version` e publish dessa versão); no GitHub, reverta o merge da F3 na `main` (o front publicado manda ações F3 que a API antiga não entende, e a API nova devolve campos que o front antigo ignora). As linhas que a F3 gravou nas abas PEDIDOS/PEDIDOS_ITENS/ETAPAS_PEDIDO podem ficar; a API antiga não as lê.
-
-## Desempenho: leitura e gravação em lote, registro compilado (08/10/2026)
-
-Desenho: `docs/superpowers/specs/2026-10-08-desempenho-e-compilado-design.md`. Lógica em `src/planilhaLote.js` (lote) e `src/envioPloomes.js` (compilado).
-
-### Pré-requisito: credencial
-
-A credencial **Google Sheets - MRBL** (googleApi, service account, id `72hvCT9jkADwOOo1`) precisa de **"Set up for use in HTTP Request node"** ligado, com o escopo `https://www.googleapis.com/auth/spreadsheets`. Sem isso os HTTP Request abaixo falham com 401/403. Depois de aplicar o SDK, religue a credencial (`setNodeCredential`) em: Ler USUARIOS (Google Sheets), Ler Planilha, Ler Planilha Acao e Gravar Lote (HTTP Request).
-
-### Nodes do "PCP MRBL - API"
-
-- **Login** (igual): Login → Ler USUARIOS (Google Sheets) → Processar Login → Responder Login.
-- **Board**: Board → Validar Pedido → Precisa Ler? → (sim) **Ler Planilha** → Montar Board → Responder Board; (não, cache de 55 s) → Responder Board.
-  - Ler Planilha: HTTP GET `values:batchGet` das 10 abas (FALTANTES, CAIXAS GANHAS, CAIXAS_PCP, HISTORICO_APP, USUARIOS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, FORNECEDORES, RESPONSAVEIS), `valueRenderOption=UNFORMATTED_VALUE`, `dateTimeRenderOption=FORMATTED_STRING` (os padrões do node Sheets). executeOnce, retry 3× / 3 s.
-- **Ação**: Acao → Pre Validar Acao → Pre OK? → (sim) **Ler Planilha Acao** → Processar Acao → Acao OK? → (sim) **Montar Escritas** → **Tem Escritas?** → (sim) **Loop Escritas** ⇄ **Gravar Lote**, e ao terminar → Responder Acao; Tem Escritas? (não) e Acao OK? (não) → Responder Acao; Pre OK? (não) → Responder Pre.
-  - Ler Planilha Acao: batchGet de FALTANTES, CAIXAS_PCP, CAIXAS GANHAS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO e só a linha 1 do HISTORICO_APP (cabeçalho para o append).
-  - Montar Escritas: um item por requisição, na ordem: cabeçalhos novos (se algum campo não tiver coluna) → `values:append` em PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP → **um** `values:batchUpdate` com todas as atualizações (só as colunas da operação, sem regravar a coluna de casamento) → `values:append` no HISTORICO_APP. Tudo RAW; os appends usam `insertDataOption=OVERWRITE` (escrevem nas linhas vazias logo depois da tabela, sem deslocar linhas, então os números de linha lidos continuam valendo para o batchUpdate da mesma ação). Update sem linha, destino desconhecido ou operação sem chave derrubam o node **antes** de qualquer escrita. Nada a gravar → `{ vazio: true }`.
-  - Loop Escritas (Split in Batches, 1 por vez) + Gravar Lote (HTTP POST, url/corpo do item, retry 3× / 3 s): o HTTP Request dispara todos os itens de uma vez e o retry dele repetiria os que já deram certo; no loop cada execução é uma requisição só, em ordem.
-  - Responder Acao: executeOnce, corpo/status de `$('Processar Acao')`.
-
-### Homologação
-
-`workflows/pcp-api-homolog.sdk.js` é o mesmo workflow, chamado **"PCP MRBL - API (homolog)"**, com webhooks `pcp-login-h`, `pcp-board-h`, `pcp-acao-h` (mesma planilha; edição continua só no card de teste). Gerado pelo `npm run build`.
-
-**Atenção:** gravar um workflow **ativo** pela API pública do n8n (PUT) publica na hora. Por isso: crie o homolog, teste nele (site local apontando para os `-h`) e só depois aplique o mesmo conteúdo no `PCP MRBL - API` (`WpuXpcSa5oGiEkTm`). Antes de aplicar, anote o `activeVersionId` atual.
-
-Teste no homolog, no card de teste: uma baixa (F2), um gerar pedido, um mover, um dividir; confira na planilha que nada foi gravado fora das colunas da operação, que o HISTORICO_APP ganhou as linhas e que a resposta veio só uma vez.
-
-### Envio ao Ploomes (compilado)
-
-A cada 2 min: Ler HISTORICO_APP → Selecionar Envio (agrupa PENDENTE por deal; só libera o grupo quando a linha mais nova tem 10 min ou mais; até 30 linhas por registro e 20 grupos por rodada; `DEALS_PERMITIDOS` continua no adaptador) → Buscar Contato (uma vez por grupo, `$json.grupo.deal_id`) → Montar Registro (um InteractionRecord: `[PCP · OS x] Atualizações do app PCP` + uma linha `• HH:mm texto` por ação, hora de São Paulo, Date = a mais nova) → Criar Registro → Resultado Envio (o mesmo resultado para todas as linhas do grupo, um item por linha) → Gravar Envio (igual). 429 deixa o grupo inteiro PENDENTE.
-
-### Rollback
-
-- API: `restore_workflow_version` para o `activeVersionId` anotado e publish. Nada muda na planilha (mesmas abas e colunas).
-- Envio: restaure a versão anterior do workflow `z9misKW25YTuDhJ6`. Linhas já marcadas ENVIADO pelo compilado ficam como estão.
-- O homolog pode ser desativado/apagado sem efeito na produção.
-
-## Fornecedor e responsável obrigatórios no pedido (08/10/2026)
-
-O Gerar pedido passa a exigir **Fornecedor** (ou o cliente, quando "Solicitar a" = Cliente) e **Responsável**, escolhidos em listas. O board devolve `fornecedores` e `responsaveis` (ativos, sem repetir, em ordem pt-BR), lidos de duas abas novas no `Ler Planilha` (LEITURAS_BOARD). O ramo ação não lê as abas: o servidor só confere que os campos não vêm vazios (`gerar_pedido` 400 "Informe o fornecedor." / "Informe o cliente." / "Informe o responsável."; `editar_pedido` não deixa limpar). "Local de entrega" ganhou `OFICINA` e `CLIENTE`.
-
-### Antes do deploy: criar as abas (senão o board quebra)
-
-Aba que não existe derruba o `values:batchGet` inteiro (400) e o board para de carregar. Crie as duas **antes** de aplicar o SDK, com o cabeçalho exato na linha 1 (aba só com cabeçalho também funciona: a lista vem vazia):
-
-- **FORNECEDORES**: colunas `id` | `nome` | `ativo`. Uma linha por fornecedor; `ativo` vazio ou `SIM` = aparece na lista (`NAO` esconde). `id` é livre (ex.: F001); o pedido grava o `nome`.
-- **RESPONSAVEIS**: colunas `nome` | `ativo`, com as linhas:
-
-  | nome | ativo |
-  |---|---|
-  | Gi | SIM |
-  | Fátima | SIM |
-  | Cesar | SIM |
-  | Luana | SIM |
-  | Lucca | SIM |
-  | Renata | SIM |
-
-O responsável da caixa (No Ploomes) continua vindo da aba USUARIOS.
-
-Deploy: `npm run build` e aplicar o SDK (homolog primeiro, como acima). Rollback: o mesmo da seção anterior; as abas novas podem ficar (a API antiga não as lê).
-
-## Etapas novas, Saídas divididas e demanda pós-saída (09/10/2026)
+### Etapas novas, Saídas divididas e demanda pós-saída (09/10/2026, histórico)
 
 Desenho: `docs/superpowers/specs/2026-10-09-f3-etapas-saidas-demanda-design.md`. Plano: `docs/superpowers/plans/2026-10-09-f3-etapas-saidas-demanda.md`.
 
-O que muda no servidor: a **penúltima** etapa (pela ordem) dá a baixa e a **última** finaliza o pedido (`concluido_em`); pedido com baixa só vai para a última; `editar_pedido` não muda etapa; `dividir_pedido` só da antepenúltima ("Aguardando entrega") e a parte vai para a penúltima com a baixa; `salvar_etapas` exige 3 etapas e mantém as duas últimas no fim; saem `enviar_oficina`/`oficina_recebeu`; entra `nova_demanda` (append na FALTANTES com ciclo e origem `POS_SAIDA`).
+No servidor: a **penúltima** etapa (pela ordem) dá a baixa e a **última** finaliza o pedido (`concluido_em`); pedido com baixa só vai para a última; `editar_pedido` não muda etapa; `dividir_pedido` só da antepenúltima ("Aguardando entrega") e a parte vai para a penúltima com a baixa; `salvar_etapas` exige 3 etapas e mantém as duas últimas no fim; saem `enviar_oficina`/`oficina_recebeu`; entra `nova_demanda` (append na FALTANTES com ciclo e origem `POS_SAIDA`, no máximo 30 itens).
 
-### 0. Planilha de produção: ANTES de aplicar o SDK (ordem obrigatória)
-
-**Atenção:** o código novo trata a penúltima etapa como a da baixa. Com a ETAPAS_PEDIDO antiga (4 linhas, `entregue` por último), a penúltima seria `aguardando` e mover para "Aguardando entrega" daria baixa. Faça os passos abaixo primeiro, nesta ordem, sem repetir o que a planilha já tem (cada item é "confira e, se faltar, faça"):
-
-1. **ETAPAS_PEDIDO**
-   - Linha de id `entregue`: troque `nome` para **Enviado ao destino final** (era "Resolvido"). Não mexa em `id` nem em `ordem` (4).
-   - Linha nova: `id` = `concluido`, `nome` = **Concluído**, `ordem` = **5**.
-   - Etapas personalizadas: `entregue` precisa ficar com a **penúltima** ordem e `concluido` com a **maior** (maior ordem existente + 1). Linhas removidas (nome e ordem vazios) continuam ignoradas.
-   - Aba vazia: nada a fazer (o padrão do código já tem as 5 etapas).
-2. **PEDIDOS**: cabeçalho `concluido_em` na próxima coluna livre da linha 1 (linhas antigas vazias = não concluídas). Confira também `pai`. Pedidos que estavam em "Resolvido" (com `baixado_em`) passam a aparecer em **Enviado ao destino final**, em aberto: o dono arrasta para Concluído quando o destino confirmar.
-3. **PEDIDOS_ITENS**: cabeçalho `previsao` (logo depois de `fornecedor`), se ainda não existir.
-4. **FALTANTES**: cabeçalho `origem` na próxima coluna livre da linha 1 (se faltar, a primeira demanda cria a coluna sozinha, mas é melhor deixar a posição combinada). Confira que existe `atualizado_em_app` (F2).
-5. **Abas novas FORNECEDORES e RESPONSAVEIS** (se ainda não criadas na mudança de 08/10/2026; aba ausente derruba o `batchGet` e o board para): **FORNECEDORES** com `id` | `nome` | `ativo`; **RESPONSAVEIS** com `nome` | `ativo`, semeada com Gi, Fátima, Cesar, Luana, Lucca e Renata, todos `ativo` = SIM. Detalhes na seção "Fornecedor e responsável obrigatórios".
-6. **CAIXAS_PCP**: nada. As colunas antigas `tratativa`/`tratativa_em` podem ficar; o código não lê mais.
-
-### 1. Sync Faltantes e utilitários
-
-- O "Sync Faltantes - Google Sheets" (`s4mbblVXykIvkA8M`) só fecha órfãs com o mesmo `deal_id` **e** o mesmo `ciclo` (`PEDIDO`/`CORTE`) e grava por `id`. As linhas da demanda têm `ciclo` = `POS_SAIDA`, `origem` = `POS_SAIDA` e id `<deal>|POS_SAIDA|<uuid>`: o sync não as apaga nem sobrescreve. Esse workflow vive só no n8n (não está neste repositório): se for alterado, confira de novo esses pontos. (Conferido pelo controlador em 09/10/2026.)
-- **Nunca rode** o "Utilitario - Limpar Planilha Faltantes (manual)": ele apaga a FALTANTES inteira, inclusive as demandas pós-saída, que não voltam pelo sync.
-- O "Faltantes Painel" dos usuários lê a aba FALTANTES: as linhas `POS_SAIDA` vão aparecer lá. A conferência de como o painel as mostra fica com o controlador, antes do deploy.
-
-### 2. n8n (homolog primeiro)
-
-1. `cd n8n && npm test && npm run build` (o build regenera `workflows/*.sdk.js` e `workflows/json`).
-2. Aplique `workflows/pcp-api-homolog.sdk.js` no "PCP MRBL - API (homolog)" (webhooks `pcp-*-h`) e religue a credencial **Google Sheets - MRBL** (`72hvCT9jkADwOOo1`) em Ler USUARIOS, Ler Planilha, Ler Planilha Acao e Gravar Lote. Teste com o site local apontando para os webhooks `-h`, **só na OS de teste** (607479158): mover para Enviado ao destino final (baixa), arrastar para Concluído, dividir em Aguardando entrega, salvar etapas (renomear uma), criar uma Nova demanda na caixa da OS de teste. Confira na planilha: PEDIDOS com `baixado_em`/`concluido_em`, FALTANTES com as linhas `POS_SAIDA` e `origem`, HISTORICO_APP com as linhas novas.
-3. Produção: anote o `activeVersionId` do "PCP MRBL - API" (`WpuXpcSa5oGiEkTm`), aplique `workflows/pcp-api.sdk.js` e religue a credencial nos mesmos nodes. **Atenção:** gravar um workflow ativo pela API pública (PUT) publica na hora; o "Utilitario - Deploy PCP (manual)" também aplica o que está em `workflows/json` de um commit fixado, então só rode depois do passo 0 e do teste no homolog. Fixe o commit que contém o build novo.
-
-### 3. Site
-
-Merge na `main` **depois** do passo 2 (o site novo manda `dividir_pedido` sem etapa e `nova_demanda`, que a API antiga não entende).
-
-### Rollback
-
-- n8n: `restore_workflow_version` para o `activeVersionId` anotado e publish.
-- Site: reverta o merge.
-- Planilha: volte o nome da linha `entregue` para "Resolvido" e apague a linha `concluido` da ETAPAS_PEDIDO (sem pedidos nela; se houver, mova-os antes para `entregue`). As colunas `concluido_em` e `origem` e as linhas `POS_SAIDA` podem ficar: a API antiga ignora `concluido_em`; as linhas pós-saída aparecem como itens comuns da caixa.
+A primeira versão deste runbook mandava mudar a ETAPAS_PEDIDO **antes** do deploy. Depois da etapa Concluído virtual (a API nova se adapta à aba antiga), a ordem certa é a do checklist: a aba muda **depois** do deploy (passo D.3), porque a API antiga daria a baixa em Concluído.
