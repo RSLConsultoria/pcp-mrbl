@@ -78,6 +78,47 @@ describe('historicoDoPedido', () => {
       'Lucca gerou PED-0044 · 1 item desta OS', 'Lucca moveu PED-0044 para Solicitado'
     ]);
   });
+
+  // O servidor grava uma linha por OS para a mesma ação (mesmo instante e usuário). No painel
+  // do pedido isso parecia repetição: vira uma entrada só, com a lista de OS.
+  const h = (texto: string, ploomes: 'ENVIADO' | 'PENDENTE' | 'ERRO' = 'ENVIADO', quando = '2026-10-08T11:00:00Z') => ({ quando, usuario: 'Lucca', texto, ploomes });
+  const c1 = (historico: ReturnType<typeof h>[]) => caixa({ os: '90001', historico });
+  const c4 = (historico: ReturnType<typeof h>[]) => caixa({ id: '600004', dealId: '600004', os: '90004', historico });
+
+  it('a mesma ação em 2 OS aparece uma vez, com as 2 OS', () => {
+    const t = 'Lucca moveu PED-0044 para Solicitado';
+    expect(historicoDoPedido([c1([h(t)]), c4([h(t, 'PENDENTE')])], 'PED-0044')).toEqual([
+      { quando: '2026-10-08T11:00:00Z', usuario: 'Lucca', texto: t, ploomes: 'PENDENTE', os: ['90001', '90004'] }
+    ]);
+  });
+
+  it('a edição com mudança de item só numa OS junta o que é do pedido e o que é do item', () => {
+    const base = 'Lucca alterou PED-0044: Local: São Paulo → Cliente, Responsável: Renata → Cesar';
+    const r = historicoDoPedido([c1([h(base)]), c4([h(`${base}, previsão de TECIDO: 15/10 → 30/10`)])], 'PED-0044');
+    expect(r.map((x) => [x.texto, x.os])).toEqual([[`${base}, previsão de TECIDO: 15/10 → 30/10`, ['90001', '90004']]]);
+  });
+
+  it('a baixa por OS junta as listas depois de "deu baixa:"', () => {
+    const r = historicoDoPedido([
+      c1([h('Lucca moveu PED-0044 para Resolvido e deu baixa: 20 MT de VIÉS (resta 0 MT)')]),
+      c4([h('Lucca moveu PED-0044 para Resolvido e deu baixa: 5 UN de ZÍPER (resta 0 UN)')])
+    ], 'PED-0044');
+    expect(r.map((x) => [x.texto, x.os])).toEqual([
+      ['Lucca moveu PED-0044 para Resolvido e deu baixa: 20 MT de VIÉS (resta 0 MT); 5 UN de ZÍPER (resta 0 UN)', ['90001', '90004']]
+    ]);
+  });
+
+  it('textos que não se juntam bem ficam separados, cada um com a sua OS; instantes diferentes também', () => {
+    const r = historicoDoPedido([
+      c1([h('Lucca gerou PED-0044 · 2 itens desta OS · Fornecedor BETA')]),
+      c4([h('Lucca gerou PED-0044 · 1 item desta OS · Fornecedor BETA'), h('Lucca moveu PED-0044 para Solicitado', 'ENVIADO', '2026-10-08T12:00:00Z')])
+    ], 'PED-0044');
+    expect(r.map((x) => [x.texto, x.os])).toEqual([
+      ['Lucca gerou PED-0044 · 2 itens desta OS · Fornecedor BETA', ['90001']],
+      ['Lucca gerou PED-0044 · 1 item desta OS · Fornecedor BETA', ['90004']],
+      ['Lucca moveu PED-0044 para Solicitado', ['90004']]
+    ]);
+  });
 });
 
 describe('motivoTravaEtapa', () => {

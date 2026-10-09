@@ -127,7 +127,7 @@ export const SELO_PLOOMES: Record<StatusPloomes, string> = {
 };
 
 // Do mais novo para o mais antigo (o board já manda assim; aqui é só garantia).
-export function ordenarHistorico(h: EntradaHistorico[]): EntradaHistorico[] {
+export function ordenarHistorico<T extends EntradaHistorico>(h: T[]): T[] {
   return [...h].sort((a, b) => (a.quando < b.quando ? 1 : a.quando > b.quando ? -1 : 0));
 }
 

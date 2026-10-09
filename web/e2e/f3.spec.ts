@@ -655,3 +655,21 @@ test('conflito ao mover um pedido fala do pedido, não da caixa', async ({ page 
   await expect(aviso(page, 'Alguém alterou este pedido agora há pouco. Recarreguei os dados.')).toBeVisible();
   await expect(page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' })).toBeVisible();
 });
+
+test('histórico do pedido: a mesma ação em 2 OS aparece uma vez, com as OS', async ({ page }) => {
+  const itens = [...PED_TAG, { itemId: 'b1', dealId: '700002', os: '90002', nome: 'ZÍPER METAL MÉDIO FIXO CA 18CM', un: 'UN', qtd: 52 }];
+  const h = { quando: '2026-10-07T11:00:00.000Z', usuario: 'Lucca', texto: 'Lucca moveu PED-0042 para Solicitado', ploomes: 'ENVIADO' };
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => {
+      b.pedidos = [pedido('PED-0042', 'solicitado', itens)] as never;
+      (b.caixas[0] as Corpo).historico = [h];
+      (b.caixas[1] as Corpo).historico = [h];
+    }
+  });
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
+  const linhas = painel.locator('.historico__item');
+  await expect(linhas).toHaveCount(1);
+  await expect(linhas.first()).toContainText('Lucca moveu PED-0042 para Solicitado');
+  await expect(linhas.first()).toContainText('OS 90001, 90002');
+});

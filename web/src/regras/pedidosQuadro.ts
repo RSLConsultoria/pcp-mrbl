@@ -1,4 +1,4 @@
-import type { Acao, Board, Caixa, DadosPedido, EntradaHistorico, EtapaPedido, Item, ItemPedido, Pedido } from '../api/tipos';
+import type { Acao, Board, Caixa, DadosPedido, EntradaHistorico, EtapaPedido, Item, ItemPedido, Pedido, StatusPloomes } from '../api/tipos';
 import { arredondar3, lerQuantidade } from './acoes';
 import { normalizar } from './busca';
 import { caixaEditavelNoApp } from './edicao';
@@ -114,10 +114,41 @@ export function acaoEditarPedido(p: Pick<Pedido, 'id' | 'versao'>, antes: Estado
   };
 }
 
-// Linhas do HISTORICO_APP que citam o pedido, sem repetir a mesma linha vinda de OS diferentes.
-export function historicoDoPedido(caixas: Caixa[], pedidoId: string): EntradaHistorico[] {
-  const vistos = new Set<string>();
-  const out: EntradaHistorico[] = [];
+export interface EntradaDoPedido extends EntradaHistorico {
+  os: string[]; // OS em que a ação foi registrada (o servidor grava uma linha por OS)
+}
+
+const PIOR_PLOOMES: StatusPloomes[] = ['ERRO', 'PENDENTE', 'ENVIADO'];
+
+// Junta os textos da mesma ação gravados em OS diferentes; null quando não dá para juntar
+// sem perder sentido. Iguais: um só. Um é começo dos outros (edição com mudança de item só
+// numa OS): o maior acréscimo de cada. Começo comum até ", " ou ": " (listas de baixa ou de
+// itens): o começo e as partes que variam, com o mesmo separador (", " ou "; ").
+function juntarTextos(textos: string[], pedidoId: string): string | null {
+  const unicos = [...new Set(textos)];
+  if (unicos.length === 1) return unicos[0];
+  const menor = [...unicos].sort((a, b) => a.length - b.length)[0];
+  if (unicos.every((t) => t.startsWith(menor))) {
+    return menor + unicos.filter((t) => t !== menor).map((t) => t.slice(menor.length)).join('');
+  }
+  let comum = unicos[0];
+  for (const t of unicos) {
+    let i = 0;
+    while (i < comum.length && i < t.length && comum[i] === t[i]) i++;
+    comum = comum.slice(0, i);
+  }
+  const corteVirgula = comum.lastIndexOf(', ');
+  const corteDoisPontos = comum.lastIndexOf(': ');
+  const corte = Math.max(corteVirgula, corteDoisPontos);
+  if (corte < 0) return null;
+  const prefixo = comum.slice(0, corte + 2);
+  if (!prefixo.includes(pedidoId)) return null;
+  return prefixo + unicos.map((t) => t.slice(prefixo.length)).join(corte === corteVirgula ? ', ' : '; ');
+}
+
+// Linhas do HISTORICO_APP (histórico das caixas) que citam o pedido. A mesma ação (mesmo instante e usuário)
+// gravada em várias OS vira uma entrada só, com a lista de OS.
+export function historicoDoPedido(caixas: Caixa[], pedidoId: string): EntradaDoPedido[] {
   const cita = (texto: string) => {
     let i = texto.indexOf(pedidoId);
     while (i >= 0) {
@@ -128,13 +159,23 @@ export function historicoDoPedido(caixas: Caixa[], pedidoId: string): EntradaHis
     }
     return false;
   };
+  const grupos = new Map<string, { h: EntradaHistorico; os: string }[]>();
   for (const c of caixas) {
     for (const h of c.historico ?? []) {
       if (!cita(h.texto)) continue;
-      const k = `${h.quando}|${h.usuario}|${h.texto}`;
-      if (vistos.has(k)) continue;
-      vistos.add(k);
-      out.push(h);
+      const k = `${h.quando}|${h.usuario}`;
+      grupos.set(k, [...(grupos.get(k) ?? []), { h, os: c.os }]);
+    }
+  }
+  const out: EntradaDoPedido[] = [];
+  for (const g of grupos.values()) {
+    const texto = juntarTextos(g.map((x) => x.h.texto), pedidoId);
+    const partes = texto === null
+      ? [...new Set(g.map((x) => x.h.texto))].map((t) => ({ texto: t, de: g.filter((x) => x.h.texto === t) }))
+      : [{ texto, de: g }];
+    for (const p of partes) {
+      const ploomes = PIOR_PLOOMES.find((st) => p.de.some((x) => x.h.ploomes === st)) ?? p.de[0].h.ploomes;
+      out.push({ quando: p.de[0].h.quando, usuario: p.de[0].h.usuario, texto: p.texto, ploomes, os: [...new Set(p.de.map((x) => x.os))] });
     }
   }
   return out;
