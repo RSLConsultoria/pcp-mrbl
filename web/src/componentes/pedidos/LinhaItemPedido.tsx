@@ -46,9 +46,11 @@ export function LinhaItemPedido({ os, nome, cor, un, detalhe, valor, erro, forne
         {comPrevisao && (
           <div className="campo campo--previsao">
             <label htmlFor={`${id}-prev`}>Previsão</label>
-            <input id={`${id}-prev`} type="date" value={valor.previsao} placeholder="Igual à do pedido"
-              title={valor.previsao ? undefined : 'Igual à do pedido'}
-              aria-label={`Previsão de ${nome}`} onChange={(e) => onMudar({ ...valor, previsao: e.target.value })} />
+            {/* o campo de data não mostra placeholder: a dica fica em texto, embaixo */}
+            <input id={`${id}-prev`} type="date" value={valor.previsao}
+              aria-label={`Previsão de ${nome}`} aria-describedby={valor.previsao ? undefined : `${id}-prev-dica`}
+              onChange={(e) => onMudar({ ...valor, previsao: e.target.value })} />
+            {!valor.previsao && <span id={`${id}-prev-dica`} className="campo__dica">Em branco: igual à do pedido</span>}
           </div>
         )}
       </div>

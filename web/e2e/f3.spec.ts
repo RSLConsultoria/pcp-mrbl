@@ -632,3 +632,16 @@ test('painel: cancelar a confirmação do Resolvido devolve o foco para Salvar',
   await page.keyboard.press('Escape');
   await expect(painel.getByRole('button', { name: 'Salvar alterações' })).toBeFocused();
 });
+
+test('previsão do item vazia mostra, em texto visível, que segue a do pedido', async ({ page }) => {
+  await preparar(page, '#pedidos');
+  await page.getByRole('complementary', { name: 'Faltas sem pedido' }).getByRole('checkbox', { name: /TAG CUIDADOS PADRÃO/ }).check();
+  await page.getByRole('button', { name: 'Gerar pedido' }).click();
+  const janela = page.getByRole('dialog', { name: 'Gerar pedido' });
+  const previsao = janela.getByLabel('Previsão de TAG CUIDADOS PADRÃO');
+  const dica = janela.getByText('Em branco: igual à do pedido');
+  await expect(dica).toBeVisible();
+  await expect(previsao).toHaveAccessibleDescription('Em branco: igual à do pedido');
+  await previsao.fill('2026-10-25');
+  await expect(dica).toHaveCount(0);
+});
