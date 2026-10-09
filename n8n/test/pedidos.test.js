@@ -159,7 +159,7 @@ test('preValidarAcao: 400 das acoes novas com a mesma mensagem do processarAcao'
     { tipo: 'mover_pedido', versao: 'P1', etapa: 'x' },
     { tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: {} },
     { tipo: 'salvar_etapas', etapas: [{ nome: 'Só uma' }] },
-    { tipo: 'enviar_oficina' }
+    { tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { etapa: 'b' } }
   ]) {
     const pre = limpo(ctx.preValidarAcao(s.e, s.cab, corpo, T0));
     const p = limpo(ctx.processarAcao(s.e, s.cab, corpo, linhas(), T0, gerarId));
@@ -208,15 +208,15 @@ test('mover/editar/baixar: 403 quando o pedido tem item de deal nao editavel', (
 test('editar_pedido: resumo com nomes amigaveis e itens por OS', () => {
   const r = acao({
     tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1',
-    campos: { etapa: 'aguardando', origem: 'CLIENTE', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: 'Gi' },
+    campos: { origem: 'CLIENTE', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: 'Gi' },
     itens: [{ itemId: 'a', qtd: 15, fornecedor: 'FITAS DELTA' }, { itemId: 'c', qtd: 30 }]
   }, LIN_P());
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
-    { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0043', etapa: 'aguardando', origem: 'CLIENTE', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: 'Gi', atualizado_em: ISO } },
+    { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0043', origem: 'CLIENTE', local: 'SAO_PAULO', previsao: '2026-10-18', responsavel: 'Gi', atualizado_em: ISO } },
     { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', linha: { id: 'PED-0043|a', qtd: 15, fornecedor: 'FITAS DELTA' } }
   ]);
-  const comum = 'Etapa: Solicitado → Aguardando entrega, Origem: Fornecedor → Cliente, Local: Bragança → São Paulo, Previsão: 15/10 → 18/10, Responsável: Renata → Gi';
+  const comum = 'Origem: Fornecedor → Cliente, Local: Bragança → São Paulo, Previsão: 15/10 → 18/10, Responsável: Renata → Gi';
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
     ['600001', 'Lucca alterou PED-0043: ' + comum + ', qtd de VIÉS: 20 → 15, fornecedor de VIÉS: — → FITAS DELTA'],
     ['600002', 'Lucca alterou PED-0043: ' + comum]
@@ -235,7 +235,7 @@ test('editar_pedido: so item de uma OS gera historico so nela; nada alterado; qt
   const fora = acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', itens: [{ itemId: 'b', qtd: 1 }] }, LIN_P());
   assert.equal(fora.status, 400);
   const etapa = acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { etapa: 'xx' } }, LIN_P());
-  assert.equal(etapa.body.erro, 'Etapa inválida.');
+  assert.equal(etapa.body.erro, 'Para mudar a etapa, arraste o card.');
   const versao = acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P0', campos: { quem: 'Z' } }, LIN_P());
   assert.equal(versao.status, 409);
 });
@@ -259,7 +259,7 @@ test('baixar_pedido: so na ultima etapa; soma limitada ao que resta; historico p
     ['600002', '90002', 'baixar_pedido', 'Lucca deu baixa do PED-0043: 5 UN de BOTÃO (resta 0 UN)']
   ]);
   const naoUltima = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, LIN_P());
-  assert.deepEqual(naoUltima, { status: 400, body: { erro: 'Dar baixa só na última etapa.' } });
+  assert.deepEqual(naoUltima, { status: 400, body: { erro: 'Dar baixa só na etapa Enviado ao destino final.' } });
   const ja = linhas({ pedidos: [ped({ etapa: 'entregue', baixado_em: 'X' })], pedidosItens: [pit({})] });
   assert.equal(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, ja).status, 409);
 });
@@ -267,16 +267,19 @@ test('baixar_pedido: so na ultima etapa; soma limitada ao que resta; historico p
 // ---------- etapas ----------
 test('salvar_etapas: regrava com ordem, cria ids, remove sem pedido aberto', () => {
   const ETAPAS = [{ id: 'a_pedir', nome: 'A pedir', ordem: 1 }, { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
-    { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 }, { id: 'entregue', nome: 'Entregue', ordem: 4 }];
+    { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 }, { id: 'entregue', nome: 'Enviado ao destino final', ordem: 4 },
+    { id: 'concluido', nome: 'Concluído', ordem: 5 }];
   const r = acao({ tipo: 'salvar_etapas', etapas: [
-    { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Pedido feito' }, { nome: 'Em trânsito' }, { id: 'entregue', nome: 'Entregue' }
+    { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Pedido feito' }, { nome: 'Em trânsito' },
+    { id: 'entregue', nome: 'Enviado ao destino final' }, { id: 'concluido', nome: 'Concluído' }
   ] }, linhas({ etapas: ETAPAS, pedidos: [ped({})], pedidosItens: [pit({})] }));
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
     { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'a_pedir', nome: 'A pedir', ordem: 1 } },
     { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'solicitado', nome: 'Pedido feito', ordem: 2 } },
     { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'em_transito', nome: 'Em trânsito', ordem: 3 } },
-    { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'entregue', nome: 'Entregue', ordem: 4 } },
+    { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'entregue', nome: 'Enviado ao destino final', ordem: 4 } },
+    { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id', linha: { id: 'concluido', nome: 'Concluído', ordem: 5 } },
     { aba: 'ETAPAS_PEDIDO', operacao: 'update', chave: 'id', linha: { id: 'aguardando', nome: '', ordem: '' } }
   ]);
   assert.deepEqual(r.historicos, []);
@@ -286,103 +289,24 @@ test('salvar_etapas: regrava com ordem, cria ids, remove sem pedido aberto', () 
 
 test('salvar_etapas: validacoes e bloqueio de etapa com pedido aberto', () => {
   const s = (etapas, lin) => acao({ tipo: 'salvar_etapas', etapas }, lin);
-  assert.equal(s([{ nome: 'Uma' }]).status, 400);
-  assert.equal(s([{ nome: 'Uma' }, { nome: '  ' }]).status, 400);
-  assert.equal(s([{ nome: 'Uma' }, { nome: 'UMA' }]).status, 400);
+  const FIM = [{ id: 'entregue', nome: 'Enviado ao destino final' }, { id: 'concluido', nome: 'Concluído' }];
+  assert.equal(s([{ nome: 'Uma' }, { nome: 'Duas' }]).body.erro, 'O quadro precisa de pelo menos 3 etapas.');
+  assert.equal(s([{ nome: 'Uma' }, { nome: '  ' }, { nome: 'Tres' }]).status, 400);
+  assert.equal(s([{ nome: 'Uma' }, { nome: 'UMA' }, { nome: 'Tres' }]).status, 400);
   assert.equal(s('x').status, 400);
-  assert.equal(s([{ id: 'nao_existe', nome: 'X' }, { nome: 'Y' }]).body.erro, 'Etapa inválida.');
+  assert.equal(s([{ id: 'nao_existe', nome: 'X' }].concat(FIM)).body.erro, 'Etapa inválida.');
   const lin = linhas({ pedidos: [ped({})], pedidosItens: [pit({})] });
-  assert.deepEqual(s([{ id: 'a_pedir', nome: 'A pedir' }, { id: 'entregue', nome: 'Entregue' }], lin),
+  assert.deepEqual(s([{ id: 'a_pedir', nome: 'A pedir' }].concat(FIM), lin),
     { status: 409, body: { erro: 'A etapa Solicitado tem pedidos abertos.' } });
-  // pedido finalizado nao bloqueia; aba vazia (padrao) nao gera update de remocao
-  const fin = linhas({ pedidos: [ped({ baixado_em: 'X' })], pedidosItens: [pit({})] });
-  const ok = s([{ id: 'a_pedir', nome: 'A pedir' }, { id: 'entregue', nome: 'Entregue' }], fin);
+  // pedido concluido nao bloqueia; aba vazia (padrao) nao gera update de remocao
+  const fin = linhas({ pedidos: [ped({ baixado_em: 'X', concluido_em: 'Y' })], pedidosItens: [pit({})] });
+  const ok = s([{ id: 'a_pedir', nome: 'A pedir' }].concat(FIM), fin);
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.operacoes.map((o) => o.operacao), ['appendOrUpdate', 'appendOrUpdate']);
+  assert.deepEqual(ok.operacoes.map((o) => o.operacao), ['appendOrUpdate', 'appendOrUpdate', 'appendOrUpdate']);
   // id gerado nao colide com existente
-  const col = s([{ id: 'a_pedir', nome: 'A pedir' }, { nome: 'A-pedir!' }, { id: 'entregue', nome: 'Entregue' }]);
+  const col = s([{ id: 'a_pedir', nome: 'A pedir' }, { nome: 'A-pedir!' }].concat(FIM));
   assert.equal(col.status, 200);
   assert.equal(col.operacoes[1].linha.id, 'a_pedir_2');
-});
-
-// ---------- oficina ----------
-// Material da caixa todo na ultima etapa: a e b no PED-0043 (Resolvido, ainda sem baixa: dado antigo).
-const NA_ULTIMA = { pedidos: [SEED_P, ped({ etapa: 'entregue' })], pedidosItens: [SEED_I, pit({}), pit({ id: 'PED-0043|b', item_id: 'b', nome: 'ZÍPER', un: 'UN', qtd: 6 })] };
-
-test('enviar_oficina: CAIXAS_PCP appendOrUpdate e herda responsavel ao criar', () => {
-  const lin = linhas(Object.assign({ faltantes: [falt({ id: 'a', responsavel: '' }), falt({ id: 'b', responsavel: 'Maria' })] }, NA_ULTIMA));
-  const r = acao({ tipo: 'enviar_oficina', dealId: '600001', versao: '' }, lin);
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.operacoes, [{ aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id', linha: {
-    deal_id: '600001', os: '90001', tratativa: 'ENVIADO', tratativa_em: ISO, atualizado_em: ISO, responsavel: 'Maria' } }]);
-  assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.os, h.acao, h.texto]), [['600001', '90001', 'enviar_oficina', 'Lucca enviou o material faltante à oficina']]);
-  assert.equal(r.gravacao, null);
-  assert.equal(r.historico, null);
-  const comCp = acao({ tipo: 'enviar_oficina', dealId: '600001', versao: 'C1' }, linhas(Object.assign({ caixasPcp: [{ deal_id: '600001', os: '90001', responsavel: '', atualizado_em: 'C1' }] }, NA_ULTIMA)));
-  assert.equal(comCp.status, 200);
-  assert.equal('responsavel' in comCp.operacoes[0].linha, false);
-  assert.equal(acao({ tipo: 'enviar_oficina', dealId: '600001', versao: 'X' }).status, 409);
-  assert.deepEqual(acao({ tipo: 'enviar_oficina', dealId: '777', versao: '' }), { status: 404, body: { erro: 'Caixa não encontrada.' } });
-});
-
-test('enviar_oficina: 409 enquanto o material nao esta todo na ultima etapa', () => {
-  const erro = { status: 409, body: { erro: 'O material desta caixa ainda não chegou (etapa Resolvido).' } };
-  const env = (lin) => acao({ tipo: 'enviar_oficina', dealId: '600001', versao: '' }, lin);
-  // a e b sem pedido
-  assert.deepEqual(env(linhas()), erro);
-  // b sem pedido
-  assert.deepEqual(env(linhas({ pedidos: [SEED_P, ped({ etapa: 'entregue' })], pedidosItens: [SEED_I, pit({})] })), erro);
-  // tudo com pedido, mas o pedido em etapa anterior
-  assert.deepEqual(env(linhas(Object.assign({}, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'aguardando' })] }))), erro);
-  // pedido dividido: a parte ainda em Solicitado segura a caixa
-  const partes = {
-    pedidos: [SEED_P, ped({ etapa: 'entregue' }), ped({ id: 'PED-0043.1', pai: 'PED-0043', etapa: 'solicitado' })],
-    pedidosItens: NA_ULTIMA.pedidosItens.concat([pit({ id: 'PED-0043.1|a', pedido_id: 'PED-0043.1', qtd: 5 })])
-  };
-  assert.deepEqual(env(linhas(partes)), erro);
-  // etapa que nao existe mais conta como a primeira
-  assert.deepEqual(env(linhas(Object.assign({}, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'sumiu' })] }))), erro);
-  // pedido baixado nao conta; item resolvido nao conta
-  const baixado = linhas(Object.assign({}, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'entregue' }), ped({ id: 'PED-0044', etapa: 'a_pedir', baixado_em: 'X' })],
-    pedidosItens: NA_ULTIMA.pedidosItens.concat([pit({ id: 'PED-0044|a', pedido_id: 'PED-0044' })]) }));
-  assert.equal(env(baixado).status, 200);
-  const resolvido = linhas({ faltantes: [falt({ id: 'a' }), falt({ id: 'b', qtd_falta: 10, qtd_baixada: 10 })], pedidos: NA_ULTIMA.pedidos, pedidosItens: [SEED_I, pit({})] });
-  assert.equal(env(resolvido).status, 200);
-  // etapas customizadas: o nome vem da ultima
-  const etapas = [{ id: 'x', nome: 'Pedir', ordem: 1 }, { id: 'y', nome: 'No almoxarifado', ordem: 2 }];
-  assert.deepEqual(env(linhas(Object.assign({ etapas }, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'x' })] }))),
-    { status: 409, body: { erro: 'O material desta caixa ainda não chegou (etapa No almoxarifado).' } });
-  assert.equal(env(linhas(Object.assign({ etapas }, NA_ULTIMA, { pedidos: [SEED_P, ped({ etapa: 'y' })] }))).status, 200);
-  // oficina_recebeu nao tem a regra
-  assert.equal(acao({ tipo: 'oficina_recebeu', dealId: '600001', versao: '' }, linhas()).status, 200);
-});
-
-test('oficina_recebeu: baixa total dos itens abertos e tratativa RECEBIDO', () => {
-  const lin = linhas({ faltantes: [
-    falt({ id: 'a' }), falt({ id: 'b', qtd_falta: 10, qtd_baixada: 4 }), falt({ id: 'r', qtd_falta: 3, qtd_baixada: 3 }),
-    falt({ id: 's', status: 'SUBSTITUIDO' }), falt({ id: 'v', status: 'RESOLVIDO' }), falt({ id: 'n', qtd_falta: '' }),
-    falt({ id: 'c', deal_id: '600002', os: '90002' })
-  ] });
-  const r = acao({ tipo: 'oficina_recebeu', dealId: '600001', versao: '' }, lin);
-  assert.equal(r.status, 200);
-  assert.deepEqual(r.operacoes, [
-    { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id', linha: { deal_id: '600001', os: '90001', tratativa: 'RECEBIDO', tratativa_em: ISO, atualizado_em: ISO, responsavel: '' } },
-    { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'a', qtd_baixada: 100, atualizado_em_app: ISO } },
-    { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'b', qtd_baixada: 10, atualizado_em_app: ISO } }
-  ]);
-  assert.deepEqual(r.historicos.map((h) => h.texto), ['Lucca registrou que a oficina recebeu o material']);
-});
-
-test('oficina: 403 fora de DEALS_EDITAVEIS', () => {
-  ctx.DEALS_EDITAVEIS = ['600002'];
-  try {
-    const s = sessao();
-    const corpo = { tipo: 'oficina_recebeu', dealId: '600001', versao: '' };
-    assert.equal(limpo(ctx.preValidarAcao(s.e, s.cab, corpo, T0)).status, 403);
-    assert.equal(acao(corpo).status, 403);
-  } finally {
-    ctx.DEALS_EDITAVEIS = [];
-  }
 });
 
 // ---------- F2 continua ----------
@@ -405,7 +329,7 @@ test('ACOES_F3_ATIVAS=false: 400 no pre e no processar para tipos F3; F2 intacta
   ctx.ACOES_F3_ATIVAS = false;
   try {
     const esperado = { status: 400, body: { erro: 'Esta ação ainda não está disponível.' } };
-    for (const corpo of [GERAR, { tipo: 'enviar_oficina', dealId: '600001', versao: '' }, { tipo: 'salvar_etapas', etapas: [] }]) {
+    for (const corpo of [GERAR, { tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'aguardando' }, { tipo: 'salvar_etapas', etapas: [] }]) {
       assert.deepEqual(limpo(ctx.preValidarAcao(s.e, s.cab, corpo, T0)), Object.assign({ ok: false }, esperado));
       assert.deepEqual(limpo(ctx.processarAcao(s.e, s.cab, corpo, linhas(), T0, gerarId)), esperado);
     }
@@ -449,12 +373,6 @@ test('gerar_pedido: item ja resolvido -> 409', () => {
   assert.deepEqual(acao(corpo('v'), lin), esperado);
   assert.deepEqual(acao(corpo('z'), lin), esperado);
   assert.equal(acao(corpo('a'), lin).status, 200);
-});
-
-test('oficina_recebeu: qtd_baixada ilegivel -> 400', () => {
-  const lin = linhas({ faltantes: [falt({ id: 'a', qtd_baixada: 'abc' })] });
-  assert.deepEqual(acao({ tipo: 'oficina_recebeu', dealId: '600001', versao: '' }, lin),
-    { status: 400, body: { erro: 'Baixa registrada ilegível na planilha.' } });
 });
 
 test('editar_pedido: previsao dd/mm usa o ano corrente', () => {

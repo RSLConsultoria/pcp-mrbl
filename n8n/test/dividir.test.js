@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const crypto = require('crypto');
 const { carregar, limpo } = require('./carregar');
 
-// F3: dividir_pedido (parte de um pedido chegou e vira PED-xxxx.n).
+// F3: dividir_pedido (parte de um pedido chegou e vira PED-xxxx.n na etapa da baixa, com a baixa).
 const ctx = carregar();
 const T0 = Date.UTC(2026, 9, 8, 15, 0, 0);
 const ISO = new Date(T0).toISOString();
@@ -70,23 +70,26 @@ test('ids: PED-0002.1 e valido, proximo id principal ignora filhos, ordem do boa
   assert.equal(ctx.raizDoPedido('PED-0002'), 'PED-0002');
 });
 
-test('dividir_pedido: operacoes, historico por OS envolvida e pedidoId do filho', () => {
+test('dividir_pedido: operacoes, baixa da parte, historico por OS envolvida e pedidoId do filho', () => {
   const r = div({ itens: [{ itemId: 'a', qtd: 20 }, { itemId: 'b', qtd: 10 }] });
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
     { aba: 'PEDIDOS', operacao: 'append', chave: 'id', linha: {
       id: 'PED-0002.1', etapa: 'recebidos', origem: 'FORNECEDOR', quem: 'METAIS GAMA', local: 'BRAGANCA', previsao: '2026-10-15',
-      responsavel: 'Renata', criado_em: ISO, criado_por: 'Lucca', baixado_em: '', atualizado_em: ISO, pai: 'PED-0002' } },
+      responsavel: 'Renata', criado_em: ISO, criado_por: 'Lucca', baixado_em: ISO, atualizado_em: ISO, pai: 'PED-0002' } },
     { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: {
       id: 'PED-0002.1|a', pedido_id: 'PED-0002.1', item_id: 'a', deal_id: '600001', os: '90001', nome: 'ZÍPER METAL', un: 'UN', qtd: 20, fornecedor: 'METAIS GAMA', previsao: '' } },
     { aba: 'PEDIDOS_ITENS', operacao: 'append', chave: 'id', linha: {
       id: 'PED-0002.1|b', pedido_id: 'PED-0002.1', item_id: 'b', deal_id: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 10, fornecedor: '', previsao: '' } },
     { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002|a', qtd: 32 } },
     { aba: 'PEDIDOS_ITENS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002|b', qtd: 0 } },
-    { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002', atualizado_em: ISO } }
+    { aba: 'PEDIDOS', operacao: 'update', chave: 'id', linha: { id: 'PED-0002', atualizado_em: ISO } },
+    { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'a', qtd_baixada: 20, atualizado_em_app: ISO } },
+    { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'b', qtd_baixada: 10, atualizado_em_app: ISO } }
   ]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.os, h.acao, h.texto]), [
-    ['600001', '90001', 'dividir_pedido', 'Lucca dividiu PED-0002: 20 UN de ZÍPER METAL; 10 MT de VIÉS foram para PED-0002.1 (Recebidos)']
+    ['600001', '90001', 'dividir_pedido', 'Lucca dividiu PED-0002: 20 UN de ZÍPER METAL; 10 MT de VIÉS foram para PED-0002.1 (Recebidos)' +
+      ' e deu baixa: 20 UN de ZÍPER METAL (resta 80 UN); 10 MT de VIÉS (resta 30 MT)']
   ]);
   assert.equal(r.body.pedidoId, 'PED-0002.1');
   assert.equal(r.body.versao, ISO);
@@ -95,26 +98,28 @@ test('dividir_pedido: operacoes, historico por OS envolvida e pedidoId do filho'
 
 test('dividir_pedido: numero do filho = maior filho + 1; dividir um filho cria outro filho da raiz', () => {
   const lin = linhas({
-    pedidos: [ped({}), ped({ id: 'PED-0002.1', pai: 'PED-0002', etapa: 'recebidos', atualizado_em: 'F1' }),
-      ped({ id: 'PED-0002.2', pai: 'PED-0002', baixado_em: 'X' })],
+    pedidos: [ped({}), ped({ id: 'PED-0002.1', pai: 'PED-0002', etapa: 'solicitado', atualizado_em: 'F1' }),
+      ped({ id: 'PED-0002.2', pai: 'PED-0002', etapa: 'recebidos', baixado_em: 'X' })],
     pedidosItens: ITENS_P.concat([pit({ id: 'PED-0002.1|a', pedido_id: 'PED-0002.1', qtd: 5 })])
   });
   const r = div({}, lin);
   assert.equal(r.body.pedidoId, 'PED-0002.3');
   assert.equal(r.operacoes[0].linha.pai, 'PED-0002');
-  const f = div({ pedidoId: 'PED-0002.1', versao: 'F1', etapa: 'entregue', itens: [{ itemId: 'a', qtd: 2 }] }, lin);
+  const f = div({ pedidoId: 'PED-0002.1', versao: 'F1', itens: [{ itemId: 'a', qtd: 2 }] }, lin);
   assert.equal(f.status, 200);
   assert.equal(f.body.pedidoId, 'PED-0002.3');
   assert.equal(f.operacoes[0].linha.pai, 'PED-0002');
   assert.deepEqual(f.operacoes[2].linha, { id: 'PED-0002.1|a', qtd: 3 });
-  assert.equal(f.historicos[0].texto, 'Lucca dividiu PED-0002.1: 2 UN de ZÍPER METAL foram para PED-0002.3 (Entregue) e deu baixa: 2 UN de ZÍPER METAL (resta 98 UN)');
+  assert.equal(f.historicos[0].texto, 'Lucca dividiu PED-0002.1: 2 UN de ZÍPER METAL foram para PED-0002.3 (Recebidos) e deu baixa: 2 UN de ZÍPER METAL (resta 98 UN)');
+  // fora da etapa anterior a da baixa nao divide
+  const fora = linhas({ pedidos: [ped({ etapa: 'a_pedir' })] });
+  assert.deepEqual(div({}, fora), { status: 400, body: { erro: 'Dividir só com o pedido em Solicitado.' } });
 });
 
 test('dividir_pedido: validacoes', () => {
   assert.deepEqual(div({ pedidoId: 'PED-0099' }), { status: 404, body: { erro: 'Pedido não encontrado.' } });
   assert.deepEqual(div({ versao: 'VELHA' }), { status: 409, body: { erro: 'Alguém alterou este pedido agora há pouco.' } });
-  assert.deepEqual(div({}, linhas({ pedidos: [ped({ baixado_em: 'X' })] })), { status: 409, body: { erro: 'Pedido finalizado não pode ser alterado.' } });
-  assert.deepEqual(div({ etapa: 'nao_existe' }), { status: 400, body: { erro: 'Etapa inválida.' } });
+  assert.deepEqual(div({}, linhas({ pedidos: [ped({ baixado_em: 'X' })] })), { status: 409, body: { erro: 'Pedido com baixa só pode ir para Entregue.' } });
   assert.deepEqual(div({ itens: [] }), { status: 400, body: { erro: 'Marque ao menos um item que chegou.' } });
   assert.deepEqual(div({ itens: [{ itemId: 'zz', qtd: 1 }] }), { status: 400, body: { erro: 'Item não está no pedido.' } });
   assert.deepEqual(div({ itens: [{ itemId: 'a', qtd: 0 }] }), { status: 400, body: { erro: 'Informe uma quantidade maior que zero' } });

@@ -174,8 +174,6 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     caixa.observacao = cp ? texto(cp.observacao) : '';
     caixa.versao = cp ? texto(cp.atualizado_em) : '';
     if (cp) caixa.responsavel = texto(cp.responsavel);
-    caixa.tratativa = cp ? semAcento(cp.tratativa) : '';
-    caixa.tratativaEm = cp ? texto(cp.tratativa_em) : '';
     caixa.itens.forEach(function (it) {
       it.pedidoIds = (abertosPorItem[it.id] || []).slice();
       it.pedidoId = it.pedidoIds[0] || '';

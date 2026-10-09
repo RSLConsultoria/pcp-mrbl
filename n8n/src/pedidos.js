@@ -1,25 +1,28 @@
 // ===== src/pedidos.js =====
-// F3: solicitacoes de faltas (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO) e a
-// tratativa das caixas que sairam com falta (enviar a oficina / oficina
-// recebeu). A ultima etapa (maior ordem) e sempre a "Resolvido": mover para
-// ela da a baixa do pedido nas caixas. Funcoes puras; sem import/export. Depende de util.js e acoes.js.
+// F3: solicitacoes de faltas (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO) e a demanda
+// pos-saida (itens novos na FALTANTES depois que a caixa saiu). As duas ultimas
+// etapas (pela ordem) sao fixas: a penultima ("Enviado ao destino final") da a baixa
+// do pedido nas caixas; a ultima ("Concluido": o destino confirmou que recebeu)
+// finaliza o pedido. Funcoes puras; sem import/export. Depende de util.js,
+// montarCaixas.js e acoes.js.
 // Cada acao devolve { operacoes: [{ aba, operacao, chave, linha }], historicos }.
 
 var TIPOS_PEDIDO = ['gerar_pedido', 'editar_pedido', 'mover_pedido', 'baixar_pedido',
-  'dividir_pedido', 'dividir_por_previsao', 'salvar_etapas', 'enviar_oficina', 'oficina_recebeu'];
+  'dividir_pedido', 'dividir_por_previsao', 'salvar_etapas'];
 var ETAPAS_PADRAO = [
   { id: 'a_pedir', nome: 'A pedir', ordem: 1 },
   { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
   { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 },
-  // id 'entregue' mantido para os dados existentes; o nome e "Resolvido".
-  { id: 'entregue', nome: 'Resolvido', ordem: 4 }
+  // id 'entregue' mantido para os dados existentes: e a etapa que da a baixa.
+  { id: 'entregue', nome: 'Enviado ao destino final', ordem: 4 },
+  { id: 'concluido', nome: 'Concluído', ordem: 5 }
 ];
 var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
 var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
-var ERRO_VERSAO = 'Alguém alterou esta caixa agora há pouco.';
 var ERRO_VERSAO_PEDIDO = 'Alguém alterou este pedido agora há pouco.';
-var CAMPOS_PEDIDO = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'];
-var NOMES_CAMPO = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
+var ERRO_ETAPA_PELO_CARD = 'Para mudar a etapa, arraste o card.';
+var CAMPOS_PEDIDO = ['origem', 'quem', 'local', 'previsao', 'responsavel'];
+var NOMES_CAMPO = { origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
 
 // ---------- leitura das abas ----------
 
@@ -150,6 +153,31 @@ function pedidoAberto(p) {
   return texto(p.linha.baixado_em) === '';
 }
 
+// Pedido com baixa dada (entrou na etapa da baixa). Nao prende mais o item.
+function pedidoBaixado(p) {
+  return texto(p.linha.baixado_em) !== '';
+}
+
+// Pedido concluido (o destino confirmou o recebimento): finalizado, nao muda mais.
+function pedidoConcluido(p) {
+  return texto(p.linha.concluido_em) !== '';
+}
+
+// Etapas ja ordenadas (lerEtapas). Penultima: entrar nela da a baixa.
+function etapaDaBaixa(etapas) {
+  return etapas.length >= 2 ? etapas[etapas.length - 2] : null;
+}
+
+// Ultima: o destino confirmou o recebimento.
+function etapaFinal(etapas) {
+  return etapas[etapas.length - 1];
+}
+
+// Antepenultima ("Aguardando entrega"): so dela se divide um pedido.
+function etapaDeDividir(etapas) {
+  return etapas.length >= 3 ? etapas[etapas.length - 3] : null;
+}
+
 // item_id -> ids dos pedidos abertos que o contem, em ordem de numero
 // (o pedido original e as partes dele podem ter o mesmo item).
 function pedidosAbertosPorItem(lista) {
@@ -200,6 +228,7 @@ function montarPedidos(extras, ano) {
     .map(function (p) {
       var l = p.linha;
       var baixadoEm = texto(l.baixado_em);
+      var concluidoEm = texto(l.concluido_em);
       var etapa = texto(l.etapa);
       var previsao = dataISO(l.previsao, ano);
       var itens = p.itens.map(function (it) {
@@ -230,8 +259,10 @@ function montarPedidos(extras, ano) {
         responsavel: texto(l.responsavel),
         criadoEm: texto(l.criado_em),
         baixadoEm: baixadoEm,
+        concluidoEm: concluidoEm,
         versao: texto(l.atualizado_em),
-        finalizado: baixadoEm !== '',
+        // finalizado = concluido (o destino confirmou); com so a baixa o pedido segue aberto
+        finalizado: concluidoEm !== '',
         itens: itens
       };
     });
@@ -264,10 +295,6 @@ function erroQuemVazio(origem) {
 
 // Normaliza um campo do pedido; { ok, valor } ou { ok: false, erro }.
 function campoPedido(nome, v) {
-  if (nome === 'etapa') {
-    var e = texto(v);
-    return e ? { ok: true, valor: e } : { ok: false, erro: 'Etapa inválida.' };
-  }
   if (nome === 'origem') {
     var o = semAcento(v);
     return ORIGENS[o] ? { ok: true, valor: o } : { ok: false, erro: 'Origem inválida.' };
@@ -291,10 +318,6 @@ function dealsDoCorpo(corpo) {
     return (Array.isArray(corpo.itens) ? corpo.itens : []).map(function (i) { return texto(i && i.dealId); })
       .filter(function (d) { return d !== ''; });
   }
-  if (corpo.tipo === 'enviar_oficina' || corpo.tipo === 'oficina_recebeu') {
-    var d = texto(corpo.dealId);
-    return d ? [d] : [];
-  }
   return [];
 }
 
@@ -305,13 +328,6 @@ function validarAcaoPedido(corpo) {
   var acao = { tipo: tipo };
   var r;
   var i;
-
-  if (tipo === 'enviar_oficina' || tipo === 'oficina_recebeu') {
-    acao.dealId = texto(corpo.dealId);
-    if (!acao.dealId) return erroAcao(400, 'Caixa não informada.');
-    acao.versao = texto(corpo.versao);
-    return { ok: true, acao: acao };
-  }
 
   if (tipo === 'salvar_etapas') {
     if (!Array.isArray(corpo.etapas)) return erroAcao(400, 'Etapas inválidas.');
@@ -333,7 +349,7 @@ function validarAcaoPedido(corpo) {
       }
       acao.etapas.push({ id: id, nome: nome });
     }
-    if (acao.etapas.length < 2) return erroAcao(400, 'O quadro precisa de pelo menos 2 etapas.');
+    if (acao.etapas.length < 3) return erroAcao(400, 'O quadro precisa de pelo menos 3 etapas.');
     return { ok: true, acao: acao };
   }
 
@@ -376,8 +392,7 @@ function validarAcaoPedido(corpo) {
     acao.etapa = texto(corpo.etapa);
     if (!acao.etapa) return erroAcao(400, 'Etapa inválida.');
   } else if (tipo === 'dividir_pedido') {
-    acao.etapa = texto(corpo.etapa);
-    if (!acao.etapa) return erroAcao(400, 'Etapa inválida.');
+    // A parte vai sempre para a etapa da baixa; "etapa" no corpo (cliente antigo) e ignorada.
     if (corpo.itens !== undefined && !Array.isArray(corpo.itens)) return erroAcao(400, 'Itens inválidos.');
     if (!corpo.itens || !corpo.itens.length) return erroAcao(400, 'Marque ao menos um item que chegou.');
     acao.itens = [];
@@ -394,6 +409,7 @@ function validarAcaoPedido(corpo) {
     }
   } else if (tipo === 'editar_pedido') {
     var campos = corpo.campos && typeof corpo.campos === 'object' ? corpo.campos : {};
+    if (Object.prototype.hasOwnProperty.call(campos, 'etapa')) return erroAcao(400, ERRO_ETAPA_PELO_CARD);
     acao.campos = {};
     for (i = 0; i < CAMPOS_PEDIDO.length; i++) {
       var n = CAMPOS_PEDIDO[i];
@@ -516,7 +532,6 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var abertos = pedidoAbertoPorItem(lista);
   var tipo = acao.tipo;
 
-  if (tipo === 'enviar_oficina' || tipo === 'oficina_recebeu') return aplicarTratativa(acao, linhas, ctx, lista, etapas);
   if (tipo === 'salvar_etapas') return aplicarEtapas(acao, linhas, ctx, lista);
 
   if (tipo === 'gerar_pedido') {
@@ -558,18 +573,23 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: pid };
   }
 
-  // editar / mover / baixar: pedido existente
+  // editar / mover / baixar / dividir: pedido existente
   var p = lista.filter(function (x) { return x.id === acao.pedidoId; })[0];
   if (!p) return erroAcao(404, 'Pedido não encontrado.');
   if (!p.itens.length) return erroAcao(409, 'Pedido sem itens válidos.');
   var dealsP = p.itens.map(function (x) { return texto(x.deal_id); });
   if (primeiroNaoEditavel(dealsP) !== null) return erroAcao(403, ERRO_NAO_EDITAVEL);
-  if (!pedidoAberto(p)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
+  if (pedidoConcluido(p)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
+  var baixa = etapaDaBaixa(etapas);
+  var final = etapaFinal(etapas);
+  // Com a baixa dada o pedido so anda para a etapa final (o destino confirmou).
+  if (pedidoBaixado(p) && !(tipo === 'mover_pedido' && acao.etapa === final.id)) {
+    return erroAcao(409, 'Pedido com baixa só pode ir para ' + final.nome + '.');
+  }
   if (acao.versao !== texto(p.linha.atualizado_em)) return erroAcao(409, ERRO_VERSAO_PEDIDO);
   var grupos = porOS(p.itens, function (x) { return texto(x.deal_id); }, function (x) { return texto(x.os); });
   function existeEtapa(id) { return etapas.some(function (e) { return e.id === id; }); }
 
-  var ultima = etapas[etapas.length - 1];
   if (tipo === 'dividir_pedido') return aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId);
   if (tipo === 'dividir_por_previsao') return aplicarDivisaoPorPrevisao(acao, linhas, ctx, p);
 
@@ -579,8 +599,12 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     var nomeEtapa = mostrarCampo('etapa', acao.etapa, etapas);
     var linhaMov = { id: p.id, etapa: acao.etapa, atualizado_em: agora };
     var bxM = { operacoes: [], partes: {} };
-    // Entrar na ultima etapa (Resolvido) da a baixa e finaliza o pedido.
-    if (acao.etapa === ultima.id) {
+    if (acao.etapa === final.id) {
+      // Etapa final: o destino confirmou. A baixa ja foi dada na etapa anterior.
+      if (!pedidoBaixado(p)) return erroAcao(400, 'Mova o pedido primeiro para ' + (baixa ? baixa.nome : final.nome) + '.');
+      linhaMov = { id: p.id, etapa: acao.etapa, concluido_em: agora, atualizado_em: agora };
+    } else if (baixa && acao.etapa === baixa.id) {
+      // Entrar na etapa da baixa (Enviado ao destino final) da a baixa nas caixas.
       bxM = baixaDosItens(p.itens, faltantesPorId, agora);
       if (!bxM.ok) return bxM;
       linhaMov = { id: p.id, etapa: acao.etapa, baixado_em: agora, atualizado_em: agora };
@@ -597,8 +621,8 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   }
 
   if (tipo === 'baixar_pedido') {
-    // Mantido por compatibilidade; o app da baixa movendo para a ultima etapa.
-    if (texto(p.linha.etapa) !== ultima.id) return erroAcao(400, 'Dar baixa só na última etapa.');
+    // Mantido por compatibilidade; o app da baixa movendo para a etapa da baixa.
+    if (!baixa || texto(p.linha.etapa) !== baixa.id) return erroAcao(400, 'Dar baixa só na etapa ' + (baixa ? baixa.nome : final.nome) + '.');
     var bx = baixaDosItens(p.itens, faltantesPorId, agora);
     if (!bx.ok) return bx;
     return {
@@ -631,10 +655,8 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     resumoPedido.push(NOMES_CAMPO[n] + ': ' + mostrarCampo(n, antes, etapas) + ' → ' + mostrarCampo(n, depois, etapas));
   });
   if (erroCampo) return erroAcao(400, erroCampo);
-  if (mudPedido.etapa !== undefined && !existeEtapa(mudPedido.etapa)) return erroAcao(400, 'Etapa inválida.');
   var ano = new Date(agora).getFullYear();
   var previsaoPedidoDepois = mudPedido.previsao !== undefined ? mudPedido.previsao : valorAtualCampo(p.linha, 'previsao', ano);
-  var qtdNova = {};
   var opsItens = [];
   var resumoItens = {};
   for (var j = 0; j < acao.itens.length; j++) {
@@ -652,7 +674,6 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
       if (re === null) return erroAcao(400, 'Item sem quantidade faltante registrada.');
       if (mi.qtd > re) return erroAcao(400, 'Falta só ' + formatarQtd(re) + ' ' + texto(lfe.unidade) + ' de ' + nomeItem);
       mud.qtd = mi.qtd;
-      qtdNova[mi.itemId] = mi.qtd;
       res.push('qtd de ' + nomeItem + ': ' + (qAntes === null || isNaN(qAntes) ? '—' : formatarQtd(qAntes)) + ' → ' + formatarQtd(mi.qtd));
     }
     var fAntes = texto(linhaPi.fornecedor);
@@ -675,25 +696,12 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     resumoItens[dd] = (resumoItens[dd] || []).concat(res);
   }
   if (!resumoPedido.length && !opsItens.length) return erroAcao(400, 'Nada alterado.');
-  var linhaPed = Object.assign({ id: p.id }, mudPedido, { atualizado_em: agora });
-  var bxE = { operacoes: [], partes: {} };
-  if (mudPedido.etapa === ultima.id) {
-    // Mudar a etapa para a ultima (Resolvido) da a baixa, com as quantidades ja editadas.
-    bxE = baixaDosItens(p.itens.map(function (x) {
-      var k = texto(x.item_id);
-      return qtdNova[k] === undefined ? x : Object.assign({}, x, { qtd: qtdNova[k] });
-    }), faltantesPorId, agora);
-    if (!bxE.ok) return bxE;
-    linhaPed = Object.assign({ id: p.id }, mudPedido, { baixado_em: agora, atualizado_em: agora });
-  }
   return {
     ok: true,
-    operacoes: [op('PEDIDOS', 'update', 'id', linhaPed)].concat(opsItens, bxE.operacoes),
+    operacoes: [op('PEDIDOS', 'update', 'id', Object.assign({ id: p.id }, mudPedido, { atualizado_em: agora }))].concat(opsItens),
     historicos: grupos.map(function (g) {
       var resumo = resumoPedido.concat(resumoItens[g.dealId] || []);
-      return resumo.length
-        ? linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' alterou ' + p.id + ': ' + resumo.join(', ') + textoBaixa(bxE.partes[g.dealId]))
-        : null;
+      return resumo.length ? linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' alterou ' + p.id + ': ' + resumo.join(', ')) : null;
     }).filter(function (h) { return h; }),
     versao: agora,
     pedidoId: p.id
@@ -754,15 +762,18 @@ function linhaItemParte(x, filho, qtd, ano) {
   });
 }
 
-// dividir_pedido: parte dos itens (ou parte da quantidade) vira um pedido
-// novo da mesma familia (PED-0002 -> PED-0002.k), na etapa escolhida. O
-// pedido dividido fica com o resto; linha com qtd 0 e ignorada na leitura.
-// Dividir uma parte (PED-0002.1) cria outra parte da raiz (PED-0002.k).
+// dividir_pedido: o que chegou (itens ou parte da quantidade) vira um pedido novo da
+// mesma familia (PED-0002 -> PED-0002.k), ja na etapa da baixa e com a baixa nas caixas.
+// So da etapa anterior a da baixa ("Aguardando entrega"). O pedido dividido fica com o
+// resto; linha com qtd 0 e ignorada na leitura. Dividir uma parte cria outra parte da raiz.
 function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
   var u = ctx.usuario;
   var agora = ctx.agora;
-  var etapa = etapas.filter(function (e) { return e.id === acao.etapa; })[0];
-  if (!etapa) return erroAcao(400, 'Etapa inválida.');
+  var de = etapaDeDividir(etapas);
+  var baixa = etapaDaBaixa(etapas);
+  if (!de || !baixa || texto(p.linha.etapa) !== de.id) {
+    return erroAcao(400, 'Dividir só com o pedido em ' + (de ? de.nome : 'Aguardando entrega') + '.');
+  }
   var porItem = {};
   p.itens.forEach(function (x) { if (!porItem[texto(x.item_id)]) porItem[texto(x.item_id)] = x; });
   var movidos = [];
@@ -781,17 +792,12 @@ function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
   });
   if (!sobra) return erroAcao(400, 'Para mover o pedido inteiro, arraste o card.');
 
-  // Parte que vai direto para a ultima etapa (Resolvido) ja nasce com a baixa.
-  var naUltima = etapa.id === etapas[etapas.length - 1].id;
-  var bx = { operacoes: [], partes: {} };
-  if (naUltima) {
-    bx = baixaDosItens(movidos.map(function (m) { return Object.assign({}, m.linha, { qtd: m.qtd }); }), faltantesPorId, agora);
-    if (!bx.ok) return bx;
-  }
+  var bx = baixaDosItens(movidos.map(function (m) { return Object.assign({}, m.linha, { qtd: m.qtd }); }), faltantesPorId, agora);
+  if (!bx.ok) return bx;
   var raiz = raizDoPedido(p.id);
   var filho = proximoIdFilho(linhas.pedidos, raiz);
   var ano = new Date(agora).getFullYear();
-  var operacoes = [linhaParte(p, filho, raiz, etapa.id, valorAtualCampo(p.linha, 'previsao', ano), agora, u, naUltima)];
+  var operacoes = [linhaParte(p, filho, raiz, baixa.id, valorAtualCampo(p.linha, 'previsao', ano), agora, u, true)];
   movidos.forEach(function (m) { operacoes.push(linhaItemParte(m.linha, filho, m.qtd, ano)); });
   movidos.forEach(function (m) {
     operacoes.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(m.linha.id) || p.id + '|' + texto(m.linha.item_id), qtd: m.resta }));
@@ -802,7 +808,7 @@ function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
     .map(function (g) {
       var partes = g.itens.map(function (m) { return formatarQtd(m.qtd) + ' ' + texto(m.linha.un) + ' de ' + texto(m.linha.nome); });
       return linhaHistorico(ctx, g.dealId, g.os, '', acao.tipo,
-        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + etapa.nome + ')' + textoBaixa(bx.partes[g.dealId]));
+        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + baixa.nome + ')' + textoBaixa(bx.partes[g.dealId]));
     });
   return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: filho };
 }
@@ -867,17 +873,21 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
   for (i = 0; i < acao.etapas.length; i++) {
     if (acao.etapas[i].id && !idsAtuais[acao.etapas[i].id]) return erroAcao(400, 'Etapa inválida.');
   }
-  // A ultima etapa (Resolvido: mover para ela da a baixa) fica sempre por ultimo.
-  var ultimaAtual = atuais[atuais.length - 1];
-  if (acao.etapas[acao.etapas.length - 1].id !== ultimaAtual.id) {
-    return erroAcao(400, 'A última etapa (' + ultimaAtual.nome + ') precisa continuar por último.');
+  // As duas ultimas (a da baixa e a final) ficam sempre no fim, nessa ordem.
+  var n = acao.etapas.length;
+  if (atuais.length >= 2) {
+    var baixaAtual = atuais[atuais.length - 2];
+    var finalAtual = atuais[atuais.length - 1];
+    if (acao.etapas[n - 2].id !== baixaAtual.id || acao.etapas[n - 1].id !== finalAtual.id) {
+      return erroAcao(400, 'As etapas ' + baixaAtual.nome + ' e ' + finalAtual.nome + ' precisam continuar no fim, nessa ordem.');
+    }
   }
   var mantidas = {};
   acao.etapas.forEach(function (e) { if (e.id) mantidas[e.id] = 1; });
   var removidas = atuais.filter(function (e) { return !mantidas[e.id]; });
   for (i = 0; i < removidas.length; i++) {
     var rid = removidas[i].id;
-    var comPedido = lista.some(function (p) { return pedidoAberto(p) && texto(p.linha.etapa) === rid; });
+    var comPedido = lista.some(function (p) { return !pedidoConcluido(p) && texto(p.linha.etapa) === rid; });
     if (comPedido) return erroAcao(409, 'A etapa ' + removidas[i].nome + ' tem pedidos abertos.');
   }
   var operacoes = acao.etapas.map(function (e, idx) {
@@ -898,71 +908,4 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
     });
   }
   return { ok: true, operacoes: operacoes, historicos: [], versao: ctx.agora };
-}
-
-// Enviar a oficina so com todo o material na ultima etapa: cada item aberto da
-// caixa tem pedido aberto e todos os pedidos abertos dele (original e partes)
-// estao na ultima etapa. Etapa que nao existe mais conta como a primeira.
-function materialNaUltimaEtapa(faltantes, lista, etapas) {
-  var ultima = etapas[etapas.length - 1];
-  var etapaDe = {};
-  lista.forEach(function (p) { etapaDe[p.id] = texto(p.linha.etapa); });
-  var porItem = pedidosAbertosPorItem(lista);
-  for (var i = 0; i < faltantes.length; i++) {
-    var l = faltantes[i];
-    if (!STATUS_ABERTOS[semAcento(l.status)]) continue;
-    var resta = restaDaLinha(l);
-    if (resta !== null && resta <= 0) continue;
-    var ids = porItem[texto(l.id)] || [];
-    if (!ids.length) return false;
-    for (var k = 0; k < ids.length; k++) if (etapaDe[ids[k]] !== ultima.id) return false;
-  }
-  return true;
-}
-
-function aplicarTratativa(acao, linhas, ctx, lista, etapas) {
-  if (!dealEditavel(acao.dealId)) return erroAcao(403, ERRO_NAO_EDITAVEL);
-  var faltantes = (linhas.faltantes || []).filter(function (l) { return l && texto(l.deal_id) === acao.dealId; });
-  var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === acao.dealId; })[0] || null;
-  var g = (linhas.ganhas || []).filter(function (x) { return x && texto(x.deal_id) === acao.dealId; })[0] || null;
-  if (!faltantes.length && !g) return erroAcao(404, 'Caixa não encontrada.');
-  if (acao.versao !== (cpRow ? texto(cpRow.atualizado_em) : '')) return erroAcao(409, ERRO_VERSAO);
-
-  var os = faltantes.length ? texto(faltantes[0].os) : '';
-  if (!os && cpRow) os = texto(cpRow.os);
-  if (!os && g) os = texto(g.os);
-  var agora = ctx.agora;
-  var recebeu = acao.tipo === 'oficina_recebeu';
-  if (!recebeu && !materialNaUltimaEtapa(faltantes, lista, etapas)) {
-    return erroAcao(409, 'O material desta caixa ainda não chegou (etapa ' + etapas[etapas.length - 1].nome + ').');
-  }
-
-  var linhaCp = { deal_id: acao.dealId, os: os, tratativa: recebeu ? 'RECEBIDO' : 'ENVIADO', tratativa_em: agora, atualizado_em: agora };
-  if (!cpRow) {
-    var resp = '';
-    faltantes.forEach(function (l) { if (!resp) resp = texto(l.responsavel); });
-    linhaCp.responsavel = resp;
-  }
-  var operacoes = [op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', linhaCp)];
-  if (recebeu) {
-    for (var i = 0; i < faltantes.length; i++) {
-      var l = faltantes[i];
-      if (!STATUS_ABERTOS[semAcento(l.status)]) continue;
-      var falta = numero(l.qtd_falta);
-      if (falta === null || isNaN(falta)) continue;
-      var bx = numero(l.qtd_baixada);
-      if (bx !== null && isNaN(bx)) return erroAcao(400, 'Baixa registrada ilegível na planilha.');
-      if (bx !== null && bx >= falta) continue;
-      operacoes.push(op('FALTANTES', 'update', 'id', { id: texto(l.id), qtd_baixada: arredondar(falta), atualizado_em_app: agora }));
-    }
-  }
-  var txt = recebeu
-    ? ctx.usuario + ' registrou que a oficina recebeu o material'
-    : ctx.usuario + ' enviou o material faltante à oficina';
-  return {
-    ok: true,
-    operacoes: operacoes,
-    historicos: [linhaHistorico(ctx, acao.dealId, os, '', acao.tipo, txt)],
-    versao: agora
-  };
 }

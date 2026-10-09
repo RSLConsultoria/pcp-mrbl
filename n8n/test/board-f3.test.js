@@ -16,7 +16,7 @@ const PEDIDOS = [
   { id: 'PED-0044', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-15',
     responsavel: 'Renata', criado_em: '2026-10-01T10:00:00.000Z', criado_por: 'Lucca', baixado_em: '', atualizado_em: 'P44' },
   { id: 'PED-0007', etapa: 'entregue', origem: 'cliente', quem: 'CLIENTE ALFA', local: 'SAO_PAULO', previsao: '',
-    responsavel: '', criado_em: '2026-09-01T10:00:00.000Z', criado_por: 'Lucca', baixado_em: '2026-09-10T10:00:00.000Z', atualizado_em: 'P7' },
+    responsavel: '', criado_em: '2026-09-01T10:00:00.000Z', criado_por: 'Lucca', baixado_em: '2026-09-10T10:00:00.000Z', concluido_em: '2026-09-11T10:00:00.000Z', atualizado_em: 'P7' },
   { id: 'PED-0010', etapa: 'entregue', origem: 'FORNECEDOR', quem: '', local: 'BRAGANCA', previsao: '',
     responsavel: '', criado_em: '', criado_por: '', baixado_em: '', atualizado_em: 'P10' },
   { id: 'lixo', etapa: 'a_pedir' }
@@ -32,7 +32,7 @@ test('board: pedidos (sem semente/malformados), ordenados, finalizado derivado',
   assert.deepEqual(r.body.pedidos.map((p) => [p.id, p.finalizado]), [['PED-0007', true], ['PED-0010', false], ['PED-0044', false]]);
   assert.deepEqual(r.body.pedidos[2], {
     id: 'PED-0044', pai: '', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-15',
-    previsaoMaisProxima: '2026-10-15', previsoesDiferentes: false, responsavel: 'Renata', criadoEm: '2026-10-01T10:00:00.000Z', baixadoEm: '', versao: 'P44', finalizado: false,
+    previsaoMaisProxima: '2026-10-15', previsoesDiferentes: false, responsavel: 'Renata', criadoEm: '2026-10-01T10:00:00.000Z', baixadoEm: '', concluidoEm: '', versao: 'P44', finalizado: false,
     itens: [{ itemId: 'a', dealId: '600001', os: '90001', nome: 'VIÉS', un: 'MT', qtd: 20, fornecedor: 'FITAS DELTA', previsao: '2026-10-15' }]
   });
   assert.equal(r.body.pedidos[0].origem, 'CLIENTE');
@@ -44,7 +44,8 @@ test('board: etapasPedido padrao com aba vazia; ordenadas pela coluna ordem', ()
   const vazio = limpo(ctx.montarRespostaBoard({}, [], [], T0, {}));
   assert.deepEqual(vazio.body.etapasPedido, [
     { id: 'a_pedir', nome: 'A pedir', ordem: 1 }, { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
-    { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 }, { id: 'entregue', nome: 'Resolvido', ordem: 4 }
+    { id: 'aguardando', nome: 'Aguardando entrega', ordem: 3 }, { id: 'entregue', nome: 'Enviado ao destino final', ordem: 4 },
+    { id: 'concluido', nome: 'Concluído', ordem: 5 }
   ]);
   assert.deepEqual(vazio.body.pedidos, []);
   const r = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [
@@ -55,25 +56,17 @@ test('board: etapasPedido padrao com aba vazia; ordenadas pela coluna ordem', ()
   const f = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [{ id: 'a', nome: 'Um', ordem: 1 }, { id: 'entregue', nome: 'Fim', ordem: 2 }],
     pedidos: PEDIDOS, pedidosItens: ITENS }));
   assert.equal(f.body.pedidos.find((p) => p.id === 'PED-0007').finalizado, true);
-  // finalizado = baixado_em preenchido, independente da etapa
+  // finalizado = concluido_em preenchido, independente da etapa
   const g = limpo(ctx.montarRespostaBoard({}, [], [], T0, { etapas: [{ id: 'entregue', nome: 'Fim', ordem: 1 }, { id: 'z', nome: 'Z', ordem: 2 }],
     pedidos: PEDIDOS, pedidosItens: ITENS }));
   assert.equal(g.body.pedidos.find((p) => p.id === 'PED-0007').finalizado, true);
   assert.equal(g.body.pedidos.find((p) => p.id === 'PED-0010').finalizado, false);
 });
 
-test('board: item.pedidoId so de pedido aberto; caixa.tratativa e tratativaEm', () => {
-  const r = limpo(ctx.montarRespostaBoard({}, [falt({ id: 'a' }), falt({ id: 'b' }), falt({ id: 'c' })], [], T0, {
-    pedidos: PEDIDOS, pedidosItens: ITENS,
-    caixasPcp: [{ deal_id: '600001', os: '90001', tratativa: 'enviado', tratativa_em: '2026-10-08T12:00:00.000Z', atualizado_em: 'C1' }]
-  }));
-  const cx = r.body.caixas[0];
-  assert.deepEqual(cx.itens.map((i) => [i.id, i.pedidoId]), [['a', 'PED-0044'], ['b', ''], ['c', '']]);
-  assert.equal(cx.tratativa, 'ENVIADO');
-  assert.equal(cx.tratativaEm, '2026-10-08T12:00:00.000Z');
+test('board: item.pedidoId so de pedido aberto', () => {
+  const r = limpo(ctx.montarRespostaBoard({}, [falt({ id: 'a' }), falt({ id: 'b' }), falt({ id: 'c' })], [], T0, { pedidos: PEDIDOS, pedidosItens: ITENS }));
+  assert.deepEqual(r.body.caixas[0].itens.map((i) => [i.id, i.pedidoId]), [['a', 'PED-0044'], ['b', ''], ['c', '']]);
   const sem = limpo(ctx.montarRespostaBoard({}, [falt({})], [], T0, {})).body.caixas[0];
-  assert.equal(sem.tratativa, '');
-  assert.equal(sem.tratativaEm, '');
   assert.equal(sem.itens[0].pedidoId, '');
 });
 
