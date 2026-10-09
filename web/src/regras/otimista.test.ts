@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Acao, Board, EtapaPedido, ItemPedido, Pedido } from '../api/tipos';
 import { aplicarOtimista, aplicarPendentes, pendentesVivos, versaoNoBoard, type Pendente } from './otimista';
 import { faltasSemPedido } from './pedidos';
-import { colunaSaida, textoPedidoDoItem } from './saidas';
+import { textoPedidoDoItem } from './saidas';
 import { caixa, item } from './teste-util';
 
 const ctx = { hoje: '2026-10-08', n: 7 };
@@ -163,21 +163,6 @@ describe('aplicarOtimista: pedidos', () => {
   });
 });
 
-describe('aplicarOtimista: oficina', () => {
-  const saiu = () => quadro({ caixas: [caixa({ saiu: true, saiuComFalta: true, itens: [item({ resta: 0, baixada: 52 })] })], pedidos: [] });
-  it('enviar à oficina leva a caixa para Enviado', () => {
-    const b = aplicar(saiu(), { tipo: 'enviar_oficina', dealId: '600001', versao: '' });
-    expect(b.caixas[0]).toMatchObject({ tratativa: 'ENVIADO', tratativaEm: '2026-10-08' });
-    expect(colunaSaida(b.caixas[0], [], etapas).coluna).toBe('enviado');
-  });
-  it('oficina recebeu: Concluído e baixa total dos itens abertos', () => {
-    const b0 = quadro({ caixas: [caixa({ saiu: true, saiuComFalta: true, tratativa: 'ENVIADO', itens: [item({ baixada: 2, resta: 50 })] })] });
-    const b = aplicar(b0, { tipo: 'oficina_recebeu', dealId: '600001', versao: '' });
-    expect(b.caixas[0].tratativa).toBe('RECEBIDO');
-    expect(itemDe(b, 'i1')).toMatchObject({ baixada: 52, resta: 0 });
-  });
-});
-
 const pend = (id: number, acao: Acao, o: Partial<Pendente> = {}): Pendente => ({ id, acao, estado: 'fila', confirmadaEm: 0, ...o });
 const obs = (valor: string, versao = 'v-i1'): Acao => ({ tipo: 'obs_item', dealId: '600001', itemId: 'i1', valor, versao });
 
@@ -203,7 +188,7 @@ describe('pendentesVivos', () => {
   it('versaoNoBoard acha item, pedido e caixa', () => {
     expect(versaoNoBoard(quadro(), obs('a'))).toBe('v-i1');
     expect(versaoNoBoard(quadro(), { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: '', etapa: 'a' })).toBe('v1');
-    expect(versaoNoBoard(quadro(), { tipo: 'enviar_oficina', dealId: '600001', versao: '' })).toBe('c1');
+    expect(versaoNoBoard(quadro(), { tipo: 'obs_caixa', dealId: '600001', valor: '', versao: '' })).toBe('c1');
     expect(versaoNoBoard(quadro(), { tipo: 'salvar_etapas', etapas: [] })).toBeUndefined();
   });
 });

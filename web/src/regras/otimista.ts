@@ -132,14 +132,6 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comCaixa(board, acao.dealId, (c) => ({ ...c, previsao: acao.valor }));
     case 'obs_caixa':
       return comCaixa(board, acao.dealId, (c) => ({ ...c, observacao: normalizarTexto(acao.valor) }));
-    case 'enviar_oficina':
-      return comCaixa(board, acao.dealId, (c) => ({ ...c, tratativa: 'ENVIADO', tratativaEm: ctx.hoje }));
-    case 'oficina_recebeu':
-      // a oficina recebeu: baixa total dos itens abertos
-      return comCaixa(board, acao.dealId, (c) => ({
-        ...c, tratativa: 'RECEBIDO', tratativaEm: ctx.hoje,
-        itens: c.itens.map((i) => (itemAberto(i) && i.falta !== null ? comBaixada(i, Math.max(i.baixada, i.falta)) : i))
-      }));
     case 'salvar_etapas':
       return {
         ...board,

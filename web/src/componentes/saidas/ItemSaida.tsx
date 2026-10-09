@@ -1,20 +1,18 @@
-import type { EtapaPedido, Item, Pedido } from '../../api/tipos';
 import { itemAberto } from '../../regras/colunas';
-import { pedidosDoItem } from '../../regras/pedidos';
 import { contaDoItem } from '../../regras/quantidade';
-import { textoPedidoDoItem } from '../../regras/saidas';
+import { textoPedidosDaParte, type ItemDaParte } from '../../regras/saidas';
 
-interface Props { item: Item; pedidos: Pedido[]; etapas: EtapaPedido[] }
-
-// Item no painel de Saídas: só leitura, com o pedido em que está.
-export function ItemSaida({ item, pedidos, etapas }: Props) {
+// Item no painel de Saídas: só leitura, com os pedidos dele nesta etapa.
+export function ItemSaida({ x }: { x: ItemDaParte }) {
+  const { item } = x;
   const aberto = itemAberto(item);
-  const tag = !aberto ? 'tag tag--ok' : pedidosDoItem(item).length > 0 ? 'tag tag--pedido' : 'tag tag--falta';
+  const comPedido = x.pedidoIds.length > 0;
+  const tag = comPedido ? 'tag tag--pedido' : aberto ? 'tag tag--falta' : 'tag tag--ok';
   return (
     <li className={aberto ? 'item' : 'item item--resolvido'}>
       <div className="item__topo">
         <span className="item__nome">{item.nome}{item.cor && <span className="item__cor"> {item.cor}</span>}</span>
-        <span className={tag}>{aberto ? textoPedidoDoItem(item, pedidos, etapas) : 'resolvido'}</span>
+        <span className={tag}>{comPedido || aberto ? textoPedidosDaParte(x) : 'resolvido'}</span>
       </div>
       <span className="item__conta">{contaDoItem(item)}</span>
       {item.obsAlmox && <p className="item__almox"><span>Almoxarifado:</span> {item.obsAlmox}</p>}

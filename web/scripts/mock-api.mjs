@@ -7,6 +7,7 @@
 // Etapas: A pedir · Solicitado · Aguardando entrega · Enviado ao destino final (mover para ela dá a baixa
 // nas caixas) · Concluído (o destino confirmou; finaliza). Pedido com baixa só vai para Concluído.
 // PED-0001 tem itens com previsões diferentes (Dividir por previsão). PED-0004 está concluído.
+// Saídas com falta: 90003 sem pedido; 90004 dividida (A pedir pelo PED-0005 em etapa que saiu do quadro, e Solicitado pelo PED-0001); 90005 dividida (Aguardando entrega e Enviado ao destino final, PED-0003.1 com a baixa); 90006 e 90007 em Enviado ao destino final; 90008 em Concluído (tudo resolvido sem pedido).
 import http from 'node:http';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
@@ -34,7 +35,7 @@ const item = (id, nome, un, falta, extra = {}) => ({
 const caixa = (os, ciclo, tipo, peca, cliente, responsavel, itens, extra = {}) => ({
   dealId: String(700000 + (os - 90000)), os: String(os), ciclo, tipo, referencia: `REF-0${os - 90000}`, peca, cliente,
   responsavel, registradoEm: diaIso(-20), saiu: false, saiuComFalta: false, saiuEm: '', previsao: '', observacao: '',
-  versao: '', tratativa: '', tratativaEm: '', historico: [], itens, ...extra
+  versao: '', historico: [], itens, ...extra
 });
 const hist = (dias, usuario, texto) => ({ quando: new Date(Date.now() - dias * 86_400_000).toISOString(), usuario, texto, criadoMs: 0 });
 
@@ -61,7 +62,7 @@ const estado = {
       historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Enviado ao destino final) e deu baixa: 120 MT de FITA GROSGRAIN 25MM (resta 180 MT)')] }),
     caixa(90006, 'PEDIDO', 'ACABAMENTO', 'PECA TESTE F', 'CLIENTE GAMA', 'Lucca', [
       item('f1', 'ELASTICO CHATO 30MM', 'MT', 80, { separada: 20, baixada: 80, status: 'RESOLVIDO', resolvidoEm: diaIso(-3) })
-    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4), tratativa: 'ENVIADO', tratativaEm: diaIso(-2) }),
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4) }),
     caixa(90007, 'CORTE', 'COSTURA', 'PECA TESTE G', 'CLIENTE ALFA', 'Renata', [
       item('g1', 'BOTAO PRESSAO 12MM', 'UN', 200, { baixada: 200, status: 'RESOLVIDO', resolvidoEm: diaIso(-1) }),
       item('g2', 'ENTRETELA FINA', 'MT', 15, { baixada: 15, status: 'RESOLVIDO', resolvidoEm: diaIso(-1) })
@@ -69,7 +70,7 @@ const estado = {
       historico: [hist(1, 'Renata', 'Renata moveu PED-0007 para Enviado ao destino final e deu baixa: 200 UN de BOTAO PRESSAO 12MM (resta 0 UN); 15 MT de ENTRETELA FINA (resta 0 MT)')] }),
     caixa(90008, 'PEDIDO', 'COSTURA', 'PECA TESTE H', 'CLIENTE BETA', 'Maria', [
       item('h1', 'LINHA 80 POLIESTER', 'cones', 6, { baixada: 6, status: 'RESOLVIDO', resolvidoEm: diaIso(-5) })
-    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-12), tratativa: 'RECEBIDO', tratativaEm: diaIso(-3) })
+    ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-12) })
   ],
   etapas: [
     { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' },
@@ -82,10 +83,10 @@ const estado = {
     { id: 'PED-0003', etapa: 'aguardando', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Gi', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 180, fornecedor: 'AVIAMENTOS DELTA' }] },
     { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Gi', criadoEm: diaIso(-1), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
     { id: 'PED-0004', etapa: 'concluido', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Gi', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), concluidoEm: diaIso(-2), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
-    // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
-    // material da 90006 (já enviada à oficina) e da 90007 (pronta para enviar): resolvido, com a baixa dada
+    // material da 90006 e da 90007: já em Enviado ao destino final, com a baixa dada
     { id: 'PED-0006', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-3), responsavel: 'Lucca', criadoEm: diaIso(-6), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'f1', dealId: '700006', qtd: 80, fornecedor: '' }] },
     { id: 'PED-0007', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'SAO_PAULO', previsao: diaIso(-1), responsavel: 'Renata', criadoEm: diaIso(-3), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'g1', dealId: '700007', qtd: 200, fornecedor: '' }, { itemId: 'g2', dealId: '700007', qtd: 15, fornecedor: '' }] },
+    // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
     { id: 'PED-0005', etapa: 'conferencia', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(4), responsavel: 'Renata', criadoEm: diaIso(-15), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd2', dealId: '700004', qtd: 120, fornecedor: '' }] }
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
@@ -517,32 +518,6 @@ function salvarEtapas(c) {
   return { ok: true, versao: agoraIso(), historico: null, historicos: [] };
 }
 
-function oficina(c, usuario, recebeu) {
-  const cx = caixaDe(c.dealId);
-  if (!cx) throw new Erro(404, 'Caixa não encontrada.');
-  exigirEditavel([cx.dealId]);
-  conferirVersao(cx.versao, c.versao);
-  if (!recebeu) {
-    // Sem item aberto (tudo baixado) ou todo item aberto com pedido e todos os pedidos dele na última etapa.
-    const naUltima = cx.itens.filter(aberto).every((it) => {
-      const ps = pedidosAbertosDoItem(cx.dealId, it.id);
-      return ps.length > 0 && ps.every((p) => p.etapa === etapaDaBaixa().id);
-    });
-    if (!naUltima) throw new Erro(409, `O material desta caixa ainda não chegou (etapa ${nomeEtapa(etapaDaBaixa().id)}).`);
-  }
-  cx.versao = agoraIso(); cx.tratativaEm = diaIso();
-  const historicos = [];
-  if (recebeu) {
-    cx.tratativa = 'RECEBIDO';
-    for (const it of cx.itens) if (aberto(it)) darBaixa(it, resta(it));
-    registrar(cx.dealId, usuario, `${usuario} registrou que a oficina recebeu o material`, historicos);
-  } else {
-    cx.tratativa = 'ENVIADO';
-    registrar(cx.dealId, usuario, `${usuario} enviou o material faltante à oficina`, historicos);
-  }
-  return resposta(cx.versao, historicos);
-}
-
 function processar(corpo, usuario) {
   switch (corpo?.tipo) {
     case 'baixa': case 'previsao_item': case 'obs_item':
@@ -556,8 +531,6 @@ function processar(corpo, usuario) {
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);
-    case 'enviar_oficina': return oficina(corpo, usuario, false);
-    case 'oficina_recebeu': return oficina(corpo, usuario, true);
     default: throw bad('Tipo de ação inválido.');
   }
 }

@@ -84,9 +84,7 @@
       "previsao": "",
       "observacao": "",
       "versao": "2026-10-06T09:00:00.000Z",
-      "historico": [],
-      "tratativa": "",
-      "tratativaEm": ""
+      "historico": []
     },
     {
       "id": "700002",
@@ -128,9 +126,7 @@
       "previsao": "",
       "observacao": "",
       "versao": "2026-10-06T09:00:00.000Z",
-      "historico": [],
-      "tratativa": "",
-      "tratativaEm": ""
+      "historico": []
     },
     {
       "id": "700003",
@@ -172,9 +168,7 @@
       "previsao": "",
       "observacao": "",
       "versao": "2026-10-06T09:00:00.000Z",
-      "historico": [],
-      "tratativa": "",
-      "tratativaEm": ""
+      "historico": []
     }
   ],
   "usuarios": [

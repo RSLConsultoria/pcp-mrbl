@@ -48,8 +48,6 @@ export interface Caixa {
   previsao: string; // 'aaaa-mm-dd' ou ''
   observacao: string;
   versao: string;
-  tratativa: '' | 'ENVIADO' | 'RECEBIDO';
-  tratativaEm: string;
   historico: EntradaHistorico[];
   itens: Item[];
 }
@@ -126,9 +124,7 @@ export type Acao =
   | { tipo: 'baixar_pedido'; pedidoId: string; versao: string }
   | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; itens: { itemId: string; qtd: number }[] } // a parte vai para a etapa da baixa
   | { tipo: 'dividir_por_previsao'; pedidoId: string; versao: string }
-  | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] }
-  | { tipo: 'enviar_oficina'; dealId: string; versao: string }
-  | { tipo: 'oficina_recebeu'; dealId: string; versao: string };
+  | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
 
 export interface DadosPedido {
   origem: OrigemPedido;

@@ -69,7 +69,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
       {erroDesde && <FaixaOffline desde={erroDesde} temDados={board !== null} />}
       <main className="app__principal">
         {!board ? <div className="carregando">{carregando ? 'Carregando o quadro…' : 'Não foi possível carregar o quadro.'}</div>
-          : tela === 'saidas' ? <Saidas board={board} q={q} hoje={hoje} executar={executar} onSelecionarParaPedido={selecionarParaPedido} />
+          : tela === 'saidas' ? <Saidas board={board} q={q} hoje={hoje} onSelecionarParaPedido={selecionarParaPedido} />
           : tela === 'pedidos' ? <Pedidos board={board} q={q} filtro={filtro} janela={janela} selecao={selecao} executar={executar}
               onJanela={setJanela} onSelecao={setSelecao} />
           : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} />}

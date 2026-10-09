@@ -91,8 +91,6 @@ describe('mensagemSucesso dos pedidos', () => {
     expect(mensagemSucesso(gerar, undefined, { pedidoId: 'PED-0044' })).toBe('PED-0044 gerado · 3 itens · registrado em 2 OS no Ploomes');
     expect(mensagemSucesso({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: '', etapa: 'b' }, undefined, { etapa: 'Solicitado' })).toBe('PED-0044 movido para Solicitado');
     expect(mensagemSucesso({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: '' })).toBe('Baixa do PED-0044 registrada');
-    expect(mensagemSucesso({ tipo: 'enviar_oficina', dealId: '1', versao: '' })).toBe('Caixa enviada à oficina');
-    expect(mensagemSucesso({ tipo: 'oficina_recebeu', dealId: '1', versao: '' })).toBe('Recebimento da oficina registrado');
     expect(mensagemSucesso({ tipo: 'salvar_etapas', etapas: [] })).toBe('Etapas do quadro salvas');
   });
 });

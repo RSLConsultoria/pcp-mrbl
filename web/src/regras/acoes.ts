@@ -83,10 +83,6 @@ export function mensagemSucesso(
     }
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
-    case 'enviar_oficina':
-      return 'Caixa enviada à oficina';
-    case 'oficina_recebeu':
-      return 'Recebimento da oficina registrado';
   }
 }
 

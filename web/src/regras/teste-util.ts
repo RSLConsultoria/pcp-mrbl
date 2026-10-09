@@ -13,7 +13,7 @@ export function caixa(o: Partial<Caixa> = {}): Caixa {
   return {
     id: '600001', dealId: '600001', os: '90001', ciclo: 'PEDIDO', tipo: 'COSTURA', referencia: 'REF1',
     peca: 'PECA TESTE A', cliente: 'CLIENTE ALFA', responsavel: 'Maria', registradoEm: '2026-10-01',
-    saiu: false, saiuComFalta: false, saiuEm: '', tratativa: '', tratativaEm: '',
+    saiu: false, saiuComFalta: false, saiuEm: '',
     previsao: '', observacao: '', versao: '', historico: [], itens: [item()], ...o
   };
 }

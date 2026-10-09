@@ -221,6 +221,60 @@ test('painel: mudar a previsão de um item manda só ela no editar_pedido', asyn
 const VIES = { itemId: 'c1', dealId: '700003', os: '90003', nome: 'VIES LINEAR 6 CM', un: 'MT', qtd: 450 };
 const nomesDasColunas = (page: Page) => page.locator('.coluna__nome').allInnerTexts();
 
+const COLUNAS_SAIDA = ['A pedir', 'Solicitado', 'Aguardando entrega', 'Enviado ao destino final', 'Concluído'];
+
+test('Saídas: colunas são Sem pedido e as etapas de Solicitações', async ({ page }) => {
+  await preparar(page, '#saidas');
+  await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
+  expect(await nomesDasColunas(page)).toEqual(['Sem pedido', ...COLUNAS_SAIDA]);
+});
+
+test('Saídas: a caixa se divide por etapa, cada parte só com os itens dela', async ({ page }) => {
+  await preparar(page, '#saidas', {
+    ajustar: (b) => {
+      const c = b.caixas[2];
+      c.itens.push({ ...c.itens[0], id: 'c2', nome: 'LINHA 120', un: 'cones', pedidoId: 'PED-0043' } as never);
+      b.pedidos = [pedido('PED-0043', 'solicitado', [{ ...VIES, itemId: 'c2', nome: 'LINHA 120', un: 'cones', qtd: 4 }])] as never;
+    }
+  });
+  expect(await nomesDasColunas(page)).toEqual(['Sem pedido', ...COLUNAS_SAIDA]);
+  const sem = page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003 · 1 de 2', exact: true });
+  await expect(sem).toContainText('VIES LINEAR 6 CM');
+  await expect(sem).not.toContainText('LINHA 120');
+  const sol = page.getByRole('region', { name: 'Solicitado' }).getByRole('button', { name: 'OS 90003 · 2 de 2', exact: true });
+  await expect(sol).toContainText('LINHA 120');
+  await expect(sol).toContainText('PED-0043');
+  await expect(sol).not.toContainText('VIES LINEAR 6 CM');
+  await sol.click();
+  const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
+  await expect(painel).toContainText('Solicitado · parte 2 de 2');
+  await expect(painel.getByRole('button', { name: 'Selecionar para pedido' })).toHaveCount(0);
+  await expect(painel.getByRole('button', { name: 'Enviar à oficina' })).toHaveCount(0);
+});
+
+test('Saídas: pedido com baixa leva a parte para Enviado ao destino final; concluído, para Concluído', async ({ page }) => {
+  await preparar(page, '#saidas', {
+    ajustar: (b) => {
+      const i = b.caixas[2].itens[0] as Corpo;
+      i.resta = 0; i.baixada = i.falta; i.status = 'RESOLVIDO'; i.resolvidoEm = '2026-10-06';
+      b.pedidos = [pedido('PED-0042', 'entregue', [VIES], { baixadoEm: '2026-10-06' })] as never;
+    }
+  });
+  expect(await nomesDasColunas(page)).toEqual(COLUNAS_SAIDA);
+  await expect(page.getByRole('region', { name: 'Enviado ao destino final' }).getByRole('button', { name: 'OS 90003' })).toContainText('PED-0042');
+});
+
+test('Saídas: material entregue no destino (pedido concluído) fica em Concluído', async ({ page }) => {
+  await preparar(page, '#saidas', {
+    ajustar: (b) => {
+      const i = b.caixas[2].itens[0] as Corpo;
+      i.resta = 0; i.baixada = i.falta; i.status = 'RESOLVIDO'; i.resolvidoEm = '2026-10-05';
+      b.pedidos = [pedido('PED-0042', 'concluido', [VIES], { baixadoEm: '2026-10-04', concluidoEm: '2026-10-05', finalizado: true })] as never;
+    }
+  });
+  await expect(page.getByRole('region', { name: 'Concluído' }).getByRole('button', { name: 'OS 90003' })).toContainText('material entregue no destino');
+});
+
 test('Etapas: renomear e adicionar (antes das duas últimas) enviam salvar_etapas com os ids existentes', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', {
     aoAgir: (b) => {
@@ -293,8 +347,6 @@ test('caixa fora de dealsEditaveis: Saídas sem botões e pedido que não arrast
   await page.getByRole('button', { name: 'OS 90003' }).click();
   const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
   await expect(painel.getByText('Edição liberada em breve para esta caixa.')).toBeVisible();
-  await expect(painel.getByRole('button', { name: 'Enviar à oficina' })).toHaveCount(0);
-  await expect(painel.getByRole('button', { name: 'Oficina recebeu' })).toHaveCount(0);
   await expect(painel.getByRole('button', { name: 'Selecionar para pedido' })).toHaveCount(0);
 
   await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Solicitações de faltas' }).click();

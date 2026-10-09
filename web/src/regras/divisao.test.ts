@@ -4,7 +4,7 @@ import { mensagemSucesso } from './acoes';
 import {
   historicoDoPedido, partesDoPedido, podeDividir, proximoIdParte, raizDoPedido, resumoDivisao, validarDivisao
 } from './pedidosQuadro';
-import { colunaSaida, textoPedidoDoItem } from './saidas';
+import { textoPedidoDoItem } from './saidas';
 import { faltasSemPedido } from './pedidos';
 import { caixa, item } from './teste-util';
 
@@ -68,18 +68,11 @@ describe('resumoDivisao e aviso', () => {
   });
 });
 
-describe('Saídas com pedidoIds', () => {
+describe('itens com pedidoIds', () => {
   const saiu = (itens = [item()]) => caixa({ saiu: true, saiuComFalta: true, itens });
   const lista = [ped({ etapa: 'ent' }), ped({ id: 'PED-0002.1', pai: 'PED-0002', etapa: 'rec' })];
-  it('a parte mais atrasada define a coluna; última etapa só com todas as partes nela', () => {
-    const c = saiu([item({ id: 'z', pedidoId: 'PED-0002', pedidoIds: ['PED-0002', 'PED-0002.1'] })]);
-    expect(colunaSaida(c, lista, etapas)).toEqual({ coluna: 'etapa:rec', etapasDiferentes: true });
-    // todas as partes na última etapa: a caixa está em Resolvido
-    expect(colunaSaida(c, [lista[0], { ...lista[1], etapa: 'ent' }], etapas)).toEqual({ coluna: 'resolvido' });
-  });
   it('com pedido quando pedidoIds não está vazio; texto com as partes', () => {
     const c = saiu([item({ id: 'z', pedidoId: 'PED-0002.1', pedidoIds: ['PED-0002.1'] }), item({ id: 'y' })]);
-    expect(colunaSaida(c, lista, etapas)).toEqual({ coluna: 'sem_pedido', parcial: { com: 1, total: 2 } });
     expect(textoPedidoDoItem(item({ pedidoId: 'PED-0002', pedidoIds: ['PED-0002', 'PED-0002.1'] }), lista, etapas))
       .toBe('PED-0002 · Entregue, PED-0002.1 · Recebidos');
     const board = { geradoEm: '', avisos: [], usuarios: [], caixas: [c] };

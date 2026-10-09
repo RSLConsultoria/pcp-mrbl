@@ -1,171 +1,149 @@
 import type { Board, Caixa, EtapaPedido, Item, Pedido } from '../api/tipos';
-import { itensAbertos } from './colunas';
+import { arredondar3 } from './acoes';
+import { itemAberto, itensAbertos } from './colunas';
 import { ddmm, diasEntre, textoDias } from './datas';
 import { pedidosDoItem, podeEntrarEmPedido, rotuloDoPedido } from './pedidos';
 
-// Colunas de Saídas: "Sem pedido" (só quando há caixa nela), as etapas do quadro de
-// Solicitações de faltas menos a última (na ordem dele), "Resolvido" (a última etapa:
-// material chegou, pronto para ir à oficina), "Enviado à oficina" e "Concluído" (a oficina
-// recebeu). A coluna de uma etapa tem o id `etapa:<id da etapa>`.
-export type ColunaSaidaId = 'sem_pedido' | 'resolvido' | 'enviado' | 'concluido' | `etapa:${string}`;
+// Saídas com falta: "Sem pedido" (só quando há caixa nela) e as etapas do quadro de
+// Solicitações de faltas, na ordem dele. A caixa se divide sozinha por etapa: uma parte por
+// coluna onde ela tem item, cada parte só com os itens daquela etapa. A coluna de uma etapa
+// tem o id `etapa:<id da etapa>`.
+export type ColunaSaidaId = 'sem_pedido' | `etapa:${string}`;
 
 export interface ColunaSaida { id: ColunaSaidaId; nome: string; cor: string; vazio: string }
 
-// Colunas fixas; as das etapas entram entre "Sem pedido" e "Resolvido".
-export const COLUNAS_SAIDA: ColunaSaida[] = [
-  { id: 'sem_pedido', nome: 'Sem pedido', cor: 'var(--erro-text)', vazio: 'Toda falta já tem pedido.' },
-  { id: 'resolvido', nome: 'Resolvido', cor: 'var(--signal)', vazio: 'Com todo o material resolvido, a caixa pode ir à oficina.' },
-  { id: 'enviado', nome: 'Enviado à oficina', cor: 'var(--navy)', vazio: 'Nenhuma caixa enviada à oficina.' },
-  { id: 'concluido', nome: 'Concluído', cor: 'var(--success)', vazio: 'Caixas concluídas ficam aqui por 30 dias.' }
-];
+// Item numa parte: os pedidos dele naquela coluna e a quantidade (a soma nesses pedidos; em
+// Sem pedido, o que resta; item fechado sem pedido, o que foi baixado).
+export interface ItemDaParte { item: Item; pedidoIds: string[]; qtd: number | null }
+
+export interface ParteSaida { coluna: ColunaSaidaId; indice: number; total: number; itens: ItemDaParte[] }
+
+export interface SaidaNaTela { caixa: Caixa; parte: ParteSaida }
 
 const DIAS_CONCLUIDO_VISIVEL = 30;
 export const DIAS_SELO_VERMELHO = 7;
 
 export const idColunaEtapa = (etapaId: string): ColunaSaidaId => `etapa:${etapaId}`;
 
-export interface ColunaDaSaida {
-  coluna: ColunaSaidaId;
-  parcial?: { com: number; total: number };
-  etapasDiferentes?: boolean; // pedidos dos itens abertos em etapas diferentes
-}
+const SEM_PEDIDO: ColunaSaida = { id: 'sem_pedido', nome: 'Sem pedido', cor: 'var(--erro-text)', vazio: 'Toda falta já tem pedido.' };
 
 function ordenadas(etapas: EtapaPedido[]): EtapaPedido[] {
   return [...etapas].sort((a, b) => a.ordem - b.ordem);
 }
 
-export function ultimaEtapaSaida(etapas: EtapaPedido[]): EtapaPedido | null {
-  const o = ordenadas(etapas);
-  return o.length ? o[o.length - 1] : null;
-}
-
-// Colunas na ordem da tela. "Sem pedido" só aparece quando alguma caixa está nela. A coluna
-// "Resolvido" leva o nome da última etapa do quadro (o padrão é Resolvido).
+// Colunas na ordem da tela. A penúltima (a da baixa) em navy e a última (concluído) em verde.
 export function colunasSaida(etapas: EtapaPedido[], comSemPedido: boolean): ColunaSaida[] {
-  const [sem, resolvido, enviado, concluido] = COLUNAS_SAIDA;
   const o = ordenadas(etapas);
-  const doQuadro = o.slice(0, -1).map((e): ColunaSaida => ({
-    id: idColunaEtapa(e.id), nome: e.nome, cor: 'var(--falta)', vazio: 'Nenhuma caixa com pedido nesta etapa.'
-  }));
-  const ultima = o[o.length - 1];
-  return [...(comSemPedido ? [sem] : []), ...doQuadro, { ...resolvido, nome: ultima?.nome ?? resolvido.nome }, enviado, concluido];
+  const doQuadro = o.map((e, i): ColunaSaida => {
+    const final = i === o.length - 1;
+    return {
+      id: idColunaEtapa(e.id), nome: e.nome,
+      cor: final ? 'var(--success)' : i === o.length - 2 ? 'var(--navy)' : 'var(--falta)',
+      vazio: final ? 'Caixas concluídas ficam aqui por 30 dias.' : 'Nenhuma caixa com pedido nesta etapa.'
+    };
+  });
+  return [...(comSemPedido ? [SEM_PEDIDO] : []), ...doQuadro];
 }
 
 export function nomeColunaSaida(id: ColunaSaidaId, etapas: EtapaPedido[]): string {
-  if (id.startsWith('etapa:')) return etapas.find((e) => idColunaEtapa(e.id) === id)?.nome ?? 'Outra etapa';
-  if (id === 'resolvido') return ultimaEtapaSaida(etapas)?.nome ?? 'Resolvido';
-  return COLUNAS_SAIDA.find((c) => c.id === id)?.nome ?? '';
+  if (id === 'sem_pedido') return SEM_PEDIDO.nome;
+  return etapas.find((e) => idColunaEtapa(e.id) === id)?.nome ?? 'Outra etapa';
 }
 
-// Ids dos pedidos abertos de todos os itens abertos da caixa (sem repetir).
-function pedidosAbertosDaCaixa(c: Caixa): string[] {
-  const ids: string[] = [];
-  for (const i of itensAbertos(c)) for (const id of pedidosDoItem(i)) if (!ids.includes(id)) ids.push(id);
-  return ids;
-}
-
-// Coluna da caixa: Concluído (oficina recebeu), Enviado à oficina, Resolvido (sem item
-// aberto, ou todos os pedidos abertos na última etapa), Sem pedido ou a etapa do pedido mais
-// atrasado. Pedido em etapa que não existe mais conta como a primeira etapa.
-export function colunaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]): ColunaDaSaida {
-  if (c.tratativa === 'RECEBIDO') return { coluna: 'concluido' };
-  if (c.tratativa === 'ENVIADO') return { coluna: 'enviado' };
-  const abertos = itensAbertos(c);
-  if (abertos.length === 0) return { coluna: 'resolvido' };
-  const com = abertos.filter((i) => pedidosDoItem(i).length > 0).length;
-  if (com < abertos.length) {
-    return com > 0
-      ? { coluna: 'sem_pedido', parcial: { com, total: abertos.length } }
-      : { coluna: 'sem_pedido' };
-  }
+// Coluna de um pedido: concluído na etapa final; com a baixa, na da baixa; senão a etapa dele
+// (etapa que saiu do quadro conta como a primeira). null sem etapas.
+export function colunaDoPedido(p: Pick<Pedido, 'etapa' | 'finalizado' | 'baixadoEm'>, etapas: EtapaPedido[]): ColunaSaidaId | null {
   const o = ordenadas(etapas);
-  if (o.length === 0) return { coluna: 'sem_pedido' };
-  const porId = new Map(pedidos.map((p) => [p.id, p]));
-  let atraso = o.length;
-  const vistas = new Set<string>();
-  for (const id of pedidosAbertosDaCaixa(c)) {
-    const etapa = porId.get(id)?.etapa ?? '';
-    const idx = o.findIndex((e) => e.id === etapa);
-    vistas.add(idx < 0 ? '' : etapa);
-    const ef = idx < 0 ? 0 : idx;
-    if (ef < atraso) atraso = ef;
+  if (o.length === 0) return null;
+  if (p.finalizado) return idColunaEtapa(o[o.length - 1].id);
+  if (p.baixadoEm && o.length >= 2) return idColunaEtapa(o[o.length - 2].id);
+  return idColunaEtapa((o.find((e) => e.id === p.etapa) ?? o[0]).id);
+}
+
+// Partes da caixa, na ordem das colunas. Um item entra em cada coluna onde tem pedido (original
+// e partes, com a quantidade daquele pedido); aberto sem pedido aberto vai para Sem pedido (com
+// o que resta); fechado sem pedido vai para a etapa final.
+export function partesDaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]): ParteSaida[] {
+  const o = ordenadas(etapas);
+  const ordem: ColunaSaidaId[] = ['sem_pedido', ...o.map((e) => idColunaEtapa(e.id))];
+  const porColuna = new Map<ColunaSaidaId, ItemDaParte[]>();
+  const adicionar = (col: ColunaSaidaId, x: ItemDaParte) => porColuna.set(col, [...(porColuna.get(col) ?? []), x]);
+  for (const i of c.itens) {
+    const linhas = pedidos.flatMap((p) => p.itens.filter((x) => x.itemId === i.id && x.dealId === c.dealId).map((x) => ({ p, qtd: x.qtd ?? 0 })));
+    const cols = new Map<ColunaSaidaId, ItemDaParte>();
+    for (const { p, qtd } of linhas) {
+      const col = colunaDoPedido(p, etapas);
+      if (!col) continue;
+      const g = cols.get(col) ?? { item: i, pedidoIds: [], qtd: 0 };
+      if (!g.pedidoIds.includes(p.id)) g.pedidoIds.push(p.id);
+      g.qtd = arredondar3((g.qtd ?? 0) + qtd);
+      cols.set(col, g);
+    }
+    // pedido aberto que o board ainda não trouxe: conta como a primeira etapa
+    const vistos = new Set(linhas.map((x) => x.p.id));
+    const soltos = pedidosDoItem(i).filter((id) => !vistos.has(id));
+    if (soltos.length > 0 && o.length > 0) {
+      const col = idColunaEtapa(o[0].id);
+      const g = cols.get(col) ?? { item: i, pedidoIds: [], qtd: null };
+      g.pedidoIds.push(...soltos);
+      cols.set(col, g);
+    }
+    for (const [col, g] of cols) adicionar(col, g);
+    if (itemAberto(i) && pedidosDoItem(i).length === 0) adicionar('sem_pedido', { item: i, pedidoIds: [], qtd: i.resta });
+    else if (!itemAberto(i) && cols.size === 0 && o.length > 0) adicionar(idColunaEtapa(o[o.length - 1].id), { item: i, pedidoIds: [], qtd: i.baixada });
   }
-  const idx = Math.min(atraso, o.length - 1);
-  const r: ColunaDaSaida = { coluna: idx === o.length - 1 ? 'resolvido' : idColunaEtapa(o[idx].id) };
-  if (vistas.size > 1) r.etapasDiferentes = true;
-  return r;
+  const presentes = ordem.filter((k) => porColuna.has(k));
+  return presentes.map((coluna, k) => ({ coluna, indice: k + 1, total: presentes.length, itens: porColuna.get(coluna)! }));
 }
 
-// Enviar à oficina (a mesma regra do servidor): sem item aberto (tudo baixado), ou todo item
-// aberto com pedido e todos os pedidos abertos deles na última etapa.
-export function podeEnviarOficina(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]): boolean {
-  const abertos = itensAbertos(c);
-  if (abertos.length === 0) return true;
-  const ultima = ultimaEtapaSaida(etapas);
-  if (!ultima) return false;
-  if (abertos.some((i) => pedidosDoItem(i).length === 0)) return false;
-  const porId = new Map(pedidos.map((p) => [p.id, p]));
-  return pedidosAbertosDaCaixa(c).every((id) => porId.get(id)?.etapa === ultima.id);
+// Caixa que aparece em Saídas: saiu com falta.
+export function saiuComFalta(c: Caixa): boolean {
+  return c.saiu && c.saiuComFalta;
 }
 
-export function textoEnviarSoNaUltima(etapas: EtapaPedido[]): string {
-  const u = ultimaEtapaSaida(etapas);
-  return `Para enviar à oficina, todo o material precisa estar na última etapa${u ? ` (${u.nome})` : ''}.`;
-}
-
-// Confirmação do "Oficina recebeu". O servidor marca a caixa como recebida (vai para
-// Concluído) e dá baixa total só nos itens ainda abertos com falta informada; sem nenhum,
-// não há baixa a anunciar.
-export function textoOficinaRecebeu(abertos: number): string {
-  const p = 'A oficina recebeu o material?';
-  if (abertos <= 0) return `${p} A caixa vai para Concluído.`;
-  return `${p} Isso dá baixa total ${abertos > 1 ? `nos ${abertos} itens abertos` : 'no item aberto'} desta caixa.`;
-}
-
-export const TEXTO_ETAPAS_DIFERENTES = 'pedidos em etapas diferentes';
-
-function ultimaAtividade(c: Caixa): string {
-  let u = c.tratativaEm > c.saiuEm ? c.tratativaEm : c.saiuEm;
-  for (const h of c.historico) if (h.quando > u) u = h.quando;
-  return u;
-}
-
-// Caixa sem item aberto e sem tratativa: a data mais recente entre a saída, o último
-// histórico e a última baixa de item.
-function ultimaAtividadeResolvida(c: Caixa): string {
+// A data mais recente entre a saída, o último histórico, a última baixa e a conclusão dos
+// pedidos da parte.
+function ultimaAtividade(c: Caixa, parte: ParteSaida, pedidos: Pedido[]): string {
   let u = c.saiuEm;
   for (const h of c.historico) if (h.quando > u) u = h.quando;
-  for (const i of c.itens) if (i.resolvidoEm > u) u = i.resolvidoEm;
+  for (const x of parte.itens) {
+    if (x.item.resolvidoEm > u) u = x.item.resolvidoEm;
+    for (const id of x.pedidoIds) {
+      const em = pedidos.find((p) => p.id === id)?.concluidoEm ?? '';
+      if (em > u) u = em;
+    }
+  }
   return u;
 }
 
-export interface SaidaComColuna { caixa: Caixa; coluna: ColunaDaSaida }
-
-// Caixas que saíram com falta, já com a coluna (calculada uma vez só); as concluídas
-// somem 30 dias depois da última ação, e as resolvidas sem item aberto (nem tratativa) 30 dias
-// depois da saída, do último histórico ou da última baixa.
-export function saidasComColuna(board: Board, hoje: Date): SaidaComColuna[] {
+// Partes das caixas que saíram com falta. A parte na etapa final some 30 dias depois da última
+// atividade; as que ficam são renumeradas ("1 de 2").
+export function saidasNaTela(board: Board, hoje: Date): SaidaNaTela[] {
   const pedidos = board.pedidos ?? [];
   const etapas = board.etapasPedido ?? [];
-  const out: SaidaComColuna[] = [];
+  const o = ordenadas(etapas);
+  const final = o.length > 0 ? idColunaEtapa(o[o.length - 1].id) : null;
+  const out: SaidaNaTela[] = [];
   for (const c of board.caixas) {
-    if (!c.saiu || !c.saiuComFalta) continue;
-    const coluna = colunaSaida(c, pedidos, etapas);
-    if (coluna.coluna === 'concluido') {
-      const d = diasEntre(ultimaAtividade(c), hoje);
-      if (d !== null && d > DIAS_CONCLUIDO_VISIVEL) continue;
-    }
-    if (coluna.coluna === 'resolvido' && !c.tratativa && itensAbertos(c).length === 0) {
-      const d = diasEntre(ultimaAtividadeResolvida(c), hoje);
-      if (d !== null && d > DIAS_CONCLUIDO_VISIVEL) continue;
-    }
-    out.push({ caixa: c, coluna });
+    if (!saiuComFalta(c)) continue;
+    const visiveis = partesDaSaida(c, pedidos, etapas).filter((p) => {
+      if (p.coluna !== final) return true;
+      const d = diasEntre(ultimaAtividade(c, p, pedidos), hoje);
+      return d === null || d <= DIAS_CONCLUIDO_VISIVEL;
+    });
+    visiveis.forEach((parte, k) => out.push({ caixa: c, parte: { ...parte, indice: k + 1, total: visiveis.length } }));
   }
   return out;
 }
 
-export function caixasDeSaida(board: Board, hoje: Date): Caixa[] {
-  return saidasComColuna(board, hoje).map((x) => x.caixa);
+export const chaveDaSaida = (x: SaidaNaTela): string => `${x.caixa.id}|${x.parte.coluna}`;
+
+// "90004 · 1 de 2" quando a caixa está em mais de uma coluna; senão só a OS.
+export const rotuloDaSaida = (x: SaidaNaTela): string =>
+  x.parte.total > 1 ? `${x.caixa.os} · ${x.parte.indice} de ${x.parte.total}` : x.caixa.os;
+
+export function textoPedidosDaParte(x: Pick<ItemDaParte, 'pedidoIds'>): string {
+  return x.pedidoIds.length > 0 ? x.pedidoIds.map(rotuloDoPedido).join(', ') : 'sem pedido';
 }
 
 export function diasDesdeSaida(c: Pick<Caixa, 'saiuEm'>, hoje: Date): number | null {
@@ -177,8 +155,7 @@ export function seloSaidaVermelho(dias: number | null): boolean {
 }
 
 // "PED-0044 · Solicitado" quando o item está num pedido aberto; senão "sem pedido". Com
-// o pedido dividido, um por parte: "PED-0044 · Solicitado, PED-0044.1 · Recebidos".
-// Pedido em etapa que não existe mais: "PED-0044 · Outra etapa".
+// o pedido dividido, um por parte. Pedido em etapa que não existe mais: "Outra etapa".
 export function textoPedidoDoItem(i: Pick<Item, 'pedidoId'> & { pedidoIds?: string[] }, pedidos: Pedido[], etapas: EtapaPedido[]): string {
   const ids = pedidosDoItem(i);
   if (ids.length === 0) return 'sem pedido';
@@ -193,17 +170,6 @@ export function textoPedidoDoItem(i: Pick<Item, 'pedidoId'> & { pedidoIds?: stri
 export function textoSaiu(c: Pick<Caixa, 'saiuEm'>, hoje: Date): string {
   if (!c.saiuEm) return 'saiu';
   return `saiu ${ddmm(c.saiuEm)} · ${textoDias(diasDesdeSaida(c, hoje))}`;
-}
-
-export function textoParcial(p: { com: number; total: number }): string {
-  return `parcial · ${p.com} de ${p.total} com pedido`;
-}
-
-export function textoTratativa(c: Pick<Caixa, 'tratativa' | 'tratativaEm'>): string {
-  const em = c.tratativaEm ? ` em ${ddmm(c.tratativaEm)}` : '';
-  if (c.tratativa === 'ENVIADO') return `Enviado à oficina${em}`;
-  if (c.tratativa === 'RECEBIDO') return `Oficina recebeu${em}`;
-  return 'Ainda não enviado à oficina';
 }
 
 // Itens da caixa que podem entrar num pedido novo: abertos, editáveis e sem pedido.
