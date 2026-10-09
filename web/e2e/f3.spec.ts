@@ -654,10 +654,16 @@ test('Nova demanda: cria itens pós-saída na caixa que saiu; aparecem em Faltas
   const janela = page.getByRole('dialog', { name: 'Nova demanda' });
   await janela.getByRole('textbox', { name: 'OS', exact: true }).fill('90001');
   await janela.getByLabel('Tipo de caixa').selectOption('ACABAMENTO');
-  await expect(janela.getByRole('alert')).toHaveText('A caixa da OS 90001 (Acabamento) ainda não saiu.');
+  // o erro da caixa aparece depois de sair do campo (aria-live polite), não como alerta a cada tecla
+  await expect(janela.getByText('A caixa da OS 90001 (Acabamento) ainda não saiu.')).toBeVisible();
+  await expect(janela.getByRole('alert')).toHaveCount(0);
+  await janela.getByRole('textbox', { name: 'OS', exact: true }).fill('9000');
+  await expect(janela.getByText(/Caixa da OS 9000 \(Acabamento\)/)).toHaveCount(0); // digitando: ainda não acusa
   await janela.getByRole('textbox', { name: 'OS', exact: true }).fill('90003');
   await janela.getByLabel('Tipo de caixa').selectOption('COSTURA');
-  await expect(janela.getByRole('alert')).toHaveCount(0);
+  await expect(janela.locator('.campo__erro')).toHaveCount(0);
+  await expect(janela).toContainText('o histórico da OS registra a demanda');
+  await expect(janela).not.toContainText('Ploomes');
   await janela.getByRole('textbox', { name: 'Item 1', exact: true }).fill('BOTÃO 12MM');
   await janela.getByLabel('Cor do item 1 (opcional)').fill('azul');
   await janela.getByLabel('Quantidade do item 1').fill('2');
@@ -671,6 +677,17 @@ test('Nova demanda: cria itens pós-saída na caixa que saiu; aparecem em Faltas
   await expect(faltas.locator('.selo-pos')).toHaveText('pós-saída');
   await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Saídas com falta' }).click();
   await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toContainText('BOTÃO 12MM');
+});
+
+test('Nova demanda: no máximo 30 itens; o botão de adicionar trava no 30º', async ({ page }) => {
+  await preparar(page, '#pedidos');
+  await page.getByRole('button', { name: 'Nova demanda' }).click();
+  const janela = page.getByRole('dialog', { name: 'Nova demanda' });
+  const adicionar = janela.getByRole('button', { name: '+ Adicionar item' });
+  for (let k = 1; k < 30; k++) await adicionar.click();
+  await expect(janela.getByRole('textbox', { name: 'Item 30', exact: true })).toBeVisible();
+  await expect(adicionar).toBeDisabled();
+  await expect(janela).toContainText('No máximo 30 itens por demanda.');
 });
 
 test('Nova demanda: sem item não envia e mostra o motivo', async ({ page }) => {

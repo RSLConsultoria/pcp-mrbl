@@ -31,10 +31,14 @@ export function caixaDaDemanda(board: Board, os: string, tipo: TipoCaixaDemanda)
   return { caixa: sairam[0] };
 }
 
-export interface ValidacaoDemanda { erros: Record<number, string>; itens: ItemDemanda[] }
+// Mesmo limite e mensagem do servidor (n8n/src/pedidos.js MAX_ITENS_DEMANDA).
+export const MAX_ITENS_DEMANDA = 30;
+export const MSG_MAX_ITENS_DEMANDA = 'No máximo 30 itens por demanda.';
+
+export interface ValidacaoDemanda { erros: Record<number, string>; itens: ItemDemanda[]; geral: string | null }
 
 // Cada linha: nome, quantidade maior que zero e unidade obrigatórios; cor opcional. Linha toda
-// vazia é ignorada. Mesmas mensagens do servidor.
+// vazia é ignorada. No máximo 30 itens. Mesmas mensagens do servidor.
 export function validarDemanda(linhas: LinhaDemanda[]): ValidacaoDemanda {
   const erros: Record<number, string> = {};
   const itens: ItemDemanda[] = [];
@@ -49,7 +53,8 @@ export function validarDemanda(linhas: LinhaDemanda[]): ValidacaoDemanda {
     else if (!un) erros[k] = 'Informe a unidade do item.';
     else itens.push({ nome, cor, qtd: arredondar3(q), un });
   });
-  return { erros, itens };
+  const preenchidas = linhas.filter((l) => l.nome.trim() || l.cor.trim() || l.un.trim() || l.qtd.trim()).length;
+  return { erros, itens, geral: preenchidas > MAX_ITENS_DEMANDA ? MSG_MAX_ITENS_DEMANDA : null };
 }
 
 export function acaoNovaDemanda(os: string, tipo: TipoCaixaDemanda, itens: ItemDemanda[]): Acao {

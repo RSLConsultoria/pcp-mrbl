@@ -1,5 +1,6 @@
 import type { Acao, Board, Caixa, Item, ItemPedido, Pedido, RespostaAcao } from '../api/tipos';
 import { arredondar3, chaveDaAcao } from './acoes';
+import { caixaDaDemanda } from './demanda';
 import { itemAberto } from './colunas';
 import { PREFIXO_NOVO, etapaDaBaixa, etapaFinal } from './pedidos';
 import { etapasOrdenadas, motivoMoverPedido, partesPorPrevisao, podeDividir, proximoIdParte, raizDoPedido } from './pedidosQuadro';
@@ -135,8 +136,10 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
     case 'nova_demanda': {
       // Itens novos na caixa que saiu, com id provisório: ficam fora de Faltas sem pedido
       // (editavel false) até a recarga trazer o id gravado.
-      const c = board.caixas.find((x) => x.saiu && x.os === acao.os && x.tipo === acao.caixa);
-      if (!c) return board;
+      // a caixa como o servidor acha (OS sem espaços, que saiu, editável, uma só); senão ele recusa
+      const achada = caixaDaDemanda(board, acao.os, acao.caixa);
+      if ('erro' in achada) return board;
+      const c = achada.caixa;
       const novos: Item[] = acao.itens.map((x, k) => ({
         id: `${PREFIXO_NOVO}${ctx.n}.${k}`, nome: x.nome, cor: x.cor, un: x.un, necessaria: null, separada: null,
         falta: x.qtd, faltaG: null, status: 'ABERTO', baixada: 0, resta: x.qtd, restaG: null, obsAlmox: '', obsPcp: '',

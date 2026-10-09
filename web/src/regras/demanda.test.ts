@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Board } from '../api/tipos';
 import { mensagemSucesso } from './acoes';
 import { colunaDaCaixa, semPosSaida } from './colunas';
-import { acaoNovaDemanda, caixaDaDemanda, validarDemanda } from './demanda';
+import { acaoNovaDemanda, caixaDaDemanda, linhaVazia, MAX_ITENS_DEMANDA, MSG_MAX_ITENS_DEMANDA, validarDemanda } from './demanda';
 import { aplicarOtimista } from './otimista';
 import { faltasSemPedido } from './pedidos';
 import { saiuComFalta } from './saidas';
@@ -36,6 +36,15 @@ describe('validarDemanda', () => {
     expect(r.itens).toEqual([{ nome: 'BOTÃO', cor: '', qtd: 2, un: 'UN' }]);
     expect(r.erros).toEqual({ 2: 'Informe uma quantidade maior que zero', 3: 'Informe a unidade do item.', 4: 'Informe o nome do item.' });
   });
+  it('no máximo 30 itens, com a mensagem do servidor', () => {
+    expect(MAX_ITENS_DEMANDA).toBe(30);
+    expect(MSG_MAX_ITENS_DEMANDA).toBe('No máximo 30 itens por demanda.');
+    const linha = { nome: 'X', cor: '', qtd: '1', un: 'UN' };
+    expect(validarDemanda(Array.from({ length: 30 }, () => linha)).geral).toBeNull();
+    expect(validarDemanda(Array.from({ length: 31 }, () => linha)).geral).toBe('No máximo 30 itens por demanda.');
+    // linhas vazias não contam
+    expect(validarDemanda([...Array.from({ length: 30 }, () => linha), linhaVazia()]).geral).toBeNull();
+  });
   it('corpo da ação e mensagem de sucesso', () => {
     const a = acaoNovaDemanda(' 90003 ', 'COSTURA', [{ nome: 'BOTÃO', cor: 'azul', qtd: 2, un: 'UN' }]);
     expect(a).toEqual({ tipo: 'nova_demanda', os: '90003', caixa: 'COSTURA', itens: [{ nome: 'BOTÃO', cor: 'azul', qtd: 2, un: 'UN' }] });
@@ -49,6 +58,15 @@ describe('demanda pós-saída nas telas', () => {
     expect(b.caixas[0].itens).toMatchObject([{ id: 'novo:4.0', nome: 'BOTÃO', cor: 'azul', un: 'UN', falta: 2, resta: 2, status: 'ABERTO', posSaida: true, editavel: false }]);
     const sem = quadro([{ ...saiu, saiu: false }]);
     expect(aplicarOtimista(sem, acaoNovaDemanda('90003', 'COSTURA', [{ nome: 'X', cor: '', qtd: 1, un: 'UN' }]), { hoje: '', n: 1 })).toBe(sem);
+  });
+  it('otimista acha a caixa como o servidor: OS com espaços, só caixa editável e uma só que saiu', () => {
+    const um = [{ nome: 'X', cor: '', qtd: 1, un: 'UN' }];
+    const acao = { tipo: 'nova_demanda' as const, os: ' 90003 ', caixa: 'COSTURA' as const, itens: um };
+    expect(aplicarOtimista(quadro([{ ...saiu, os: '90003 ' }]), acao, { hoje: '', n: 1 }).caixas[0].itens).toHaveLength(1);
+    const so = quadro([saiu], { dealsEditaveis: ['1'] });
+    expect(aplicarOtimista(so, acao, { hoje: '', n: 1 })).toBe(so);
+    const duas = quadro([saiu, { ...saiu, id: '700099', dealId: '700099' }]);
+    expect(aplicarOtimista(duas, acao, { hoje: '', n: 1 })).toBe(duas);
   });
   it('item pós-saída gravado aparece em Faltas sem pedido e põe a caixa em Saídas, mas não no No Ploomes', () => {
     const c = { ...saiu, itens: [item({ id: '700003|POS_SAIDA|u1', posSaida: true })] };
