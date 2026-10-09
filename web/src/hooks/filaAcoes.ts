@@ -1,6 +1,6 @@
 import type { Acao, Board, RespostaAcao } from '../api/tipos';
-import { chaveDaAcao, gravarRecente, versaoAtual } from '../regras/acoes';
-import { pendentesVivos, type Pendente } from '../regras/otimista';
+import { cadeiaDeVersoes, chaveDaAcao, gravarRecente } from '../regras/acoes';
+import { acaoNoBoard, pendentesVivos, type Pendente } from '../regras/otimista';
 
 // O que fazer depois de uma recusa: seguir com a fila ou parar (sessão expirada: o resto
 // da fila é descartado).
@@ -20,14 +20,14 @@ export interface Fila {
   assinar(ouvinte: () => void): () => void;
   // Número que sobe a cada confirmação: o board pedido depois dele já traz a ação.
   marco(): number;
-  // Tira as confirmadas que o board já mostra.
+  // Tira as confirmadas que o board já mostra (ou que passaram do limite) e conta as recargas.
   podar(board: Board, marco: number): void;
 }
 
 // Fila de ações, uma por vez e na ordem: a versão de cada uma depende da anterior.
 // A tela não espera a fila: cada ação já aparece no board (regras/otimista.ts) e fica
 // pendente até o servidor confirmar e a recarga trazer o board com ela.
-export function criarFila(): Fila {
+export function criarFila(relogio_ms: () => number = Date.now): Fila {
   let ganchos: GanchosFila | null = null;
   let lista: readonly Pendente[] = [];
   let proximo = 1;
@@ -35,6 +35,7 @@ export function criarFila(): Fila {
   let rodando = false;
   const ouvintes = new Set<() => void>();
   const finais = new Map<number, (r: RespostaAcao | null) => void>();
+  let ultimoBoard: Board | null = null; // o mesmo board de novo não conta como recarga
   // Versões trocadas por ações nossas (antiga → nova), por alvo: as ações enfileiradas
   // levam a versão que a tela viu e seguem a troca até a mais recente.
   const trocas = new Map<string, Map<string, string>>();
@@ -55,7 +56,8 @@ export function criarFila(): Fila {
     let parou = false;
     for (let p = lista.find((x) => x.estado === 'fila'); p && ganchos; p = lista.find((x) => x.estado === 'fila')) {
       const chave = chaveDaAcao(p.acao);
-      const acao: Acao = 'versao' in p.acao ? { ...p.acao, versao: versaoAtual(p.acao.versao, trocas.get(chave)) } : p.acao;
+      const antigas = 'versao' in p.acao ? cadeiaDeVersoes(p.acao.versao, trocas.get(chave)) : undefined;
+      const acao: Acao = 'versao' in p.acao && antigas ? { ...p.acao, versao: antigas[antigas.length - 1] } : p.acao;
       mudar(p.id, { estado: 'enviando' });
       try {
         const r = await ganchos.enviar(acao);
@@ -66,7 +68,14 @@ export function criarFila(): Fila {
           gravarRecente(trocas, chave, t);
         }
         relogio += 1;
-        mudar(p.id, { estado: 'confirmada', confirmadaEm: relogio, versaoNova: r.versao });
+        const resposta: Pendente['resposta'] = {};
+        if (r.pedidoId !== undefined) resposta.pedidoId = r.pedidoId;
+        if (r.partes !== undefined) resposta.partes = r.partes;
+        if (r.itemIds !== undefined) resposta.itemIds = r.itemIds;
+        mudar(p.id, {
+          estado: 'confirmada', confirmadaEm: relogio, versaoNova: r.versao, confirmadaAs: relogio_ms(), recargasDepois: 0, resposta,
+          ...(antigas ? { versoesAntigas: antigas } : {})
+        });
         concluir(p.id, r);
       } catch (e) {
         const id = p.id;
@@ -105,8 +114,15 @@ export function criarFila(): Fila {
     },
     marco: () => relogio,
     podar(board, marco) {
-      const vivos = pendentesVivos(lista, board, marco);
-      if (vivos.length !== lista.length) publicar(vivos);
+      let atual = lista;
+      if (board !== ultimoBoard) {
+        ultimoBoard = board;
+        // board pedido depois da confirmação que ainda não mostra a ação: conta para o limite
+        const conta = (p: Pendente) => p.estado === 'confirmada' && p.confirmadaEm <= marco && !acaoNoBoard(board, p);
+        if (atual.some(conta)) atual = atual.map((p) => (conta(p) ? { ...p, recargasDepois: (p.recargasDepois ?? 0) + 1 } : p));
+      }
+      const vivos = pendentesVivos(atual, board, marco, relogio_ms());
+      if (vivos.length !== lista.length || atual !== lista) publicar(vivos);
     }
   };
 }

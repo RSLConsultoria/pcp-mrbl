@@ -177,16 +177,59 @@ describe('pendentesVivos', () => {
     const ps = [pend(1, obs('a'), { estado: 'enviando' }), pend(2, obs('b'))];
     expect(pendentesVivos(ps, quadro(), 99)).toEqual(ps);
   });
-  it('confirmada sai quando o board foi pedido depois da confirmação', () => {
-    const p = pend(1, obs('a'), { estado: 'confirmada', confirmadaEm: 3, versaoNova: 'v2' });
+  it('confirmada continua enquanto o board (mesmo pedido depois da confirmação, vindo do cache velho) não mostra a ação', () => {
+    const p = pend(1, obs('a'), { estado: 'confirmada', confirmadaEm: 3, versaoNova: 'v2', versoesAntigas: ['v-i1'] });
     expect(pendentesVivos([p], quadro(), 2)).toEqual([p]);
-    expect(pendentesVivos([p], quadro(), 3)).toEqual([]);
+    expect(pendentesVivos([p], quadro(), 3)).toEqual([p]);
+    expect(pendentesVivos([p], quadro(), 9)).toEqual([p]);
+  });
+  it('confirmada sai quando o alvo tem a versão devolvida ou outra mais nova (nenhuma das de antes da ação)', () => {
+    const p = pend(1, obs('a'), { estado: 'confirmada', confirmadaEm: 3, versaoNova: 'v2', versoesAntigas: ['v0', 'v-i1'] });
+    const comV = (v: string) => { const q = quadro(); q.caixas[0].itens[0].versao = v; return q; };
+    expect(pendentesVivos([p], comV('v2'), 0)).toEqual([]);
+    expect(pendentesVivos([p], comV('v9'), 3)).toEqual([]);
+    expect(pendentesVivos([p], comV('v0'), 3)).toEqual([p]);
+    // alvo sumido do board: só o limite tira
+    expect(pendentesVivos([p], quadro({ caixas: [] }), 3)).toEqual([p]);
+  });
+  it('sem versão: gerar_pedido e dividir saem quando o pedido devolvido aparece no board', () => {
+    const gerar: Acao = { tipo: 'gerar_pedido', origem: 'FORNECEDOR', quem: 'X', local: 'BRAGANCA', previsao: '', responsavel: 'Gi',
+      itens: [{ itemId: 'i1', dealId: '600001', qtd: 1, fornecedor: '', previsao: '' }] };
+    const g = pend(1, gerar, { estado: 'confirmada', confirmadaEm: 1, versaoNova: 't', resposta: { pedidoId: 'PED-0009' } });
+    expect(pendentesVivos([g], quadro(), 5)).toEqual([g]);
+    expect(pendentesVivos([g], quadro({ pedidos: [ped({ id: 'PED-0009' })] }), 5)).toEqual([]);
+    const d = pend(2, { tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', itens: [{ itemId: 'i1', qtd: 1 }] },
+      { estado: 'confirmada', confirmadaEm: 1, versaoNova: 'v5', versoesAntigas: ['v1'], resposta: { pedidoId: 'PED-0002.1' } });
+    expect(pendentesVivos([d], quadro(), 5)).toEqual([d]);
+    expect(pendentesVivos([d], quadro({ pedidos: [ped(), ped({ id: 'PED-0002.1' })] }), 5)).toEqual([]);
+    const pp = pend(3, { tipo: 'dividir_por_previsao', pedidoId: 'PED-0002', versao: 'v1' },
+      { estado: 'confirmada', confirmadaEm: 1, versaoNova: 'v5', versoesAntigas: ['v1'], resposta: { pedidoId: 'PED-0002.1', partes: ['PED-0002.1', 'PED-0002.2'] } });
+    expect(pendentesVivos([pp], quadro({ pedidos: [ped(), ped({ id: 'PED-0002.1' })] }), 5)).toEqual([pp]);
+    expect(pendentesVivos([pp], quadro({ pedidos: [ped(), ped({ id: 'PED-0002.1' }), ped({ id: 'PED-0002.2' })] }), 5)).toEqual([]);
+  });
+  it('sem versão: nova_demanda sai quando os itens devolvidos aparecem; salvar_etapas quando as etapas batem', () => {
+    const nd = pend(1, { tipo: 'nova_demanda', os: '90001', caixa: 'COSTURA', itens: [{ nome: 'BOTÃO', cor: '', qtd: 2, un: 'UN' }] },
+      { estado: 'confirmada', confirmadaEm: 1, versaoNova: 't', resposta: { itemIds: ['600001|POS_SAIDA|u1'] } });
+    expect(pendentesVivos([nd], quadro(), 5)).toEqual([nd]);
+    expect(pendentesVivos([nd], quadro({ caixas: [caixa({ itens: [item({ id: '600001|POS_SAIDA|u1' })] })] }), 5)).toEqual([]);
+    const se = pend(2, { tipo: 'salvar_etapas', etapas: [{ id: 'a', nome: ' Compras' }, { nome: 'Nova' }, { id: 'ent', nome: 'Enviado' }, { id: 'fim', nome: 'Fim' }] },
+      { estado: 'confirmada', confirmadaEm: 1, versaoNova: 't' });
+    expect(pendentesVivos([se], quadro(), 5)).toEqual([se]);
+    const novas: EtapaPedido[] = [{ id: 'a', nome: 'Compras', ordem: 1 }, { id: 'nova', nome: 'Nova', ordem: 2 }, { id: 'ent', nome: 'Enviado', ordem: 3 }, { id: 'fim', nome: 'Fim', ordem: 4 }];
+    expect(pendentesVivos([se], quadro({ etapasPedido: novas }), 5)).toEqual([]);
+  });
+  it('limite: sai depois de 3 recargas sem a ação ou de 2 minutos da confirmação', () => {
+    const base = { estado: 'confirmada' as const, confirmadaEm: 1, versaoNova: 'v2', versoesAntigas: ['v-i1'], confirmadaAs: 1_000 };
+    const p = pend(1, obs('a'), { ...base, recargasDepois: 2 });
+    expect(pendentesVivos([p], quadro(), 5, 2_000)).toEqual([p]);
+    expect(pendentesVivos([pend(1, obs('a'), { ...base, recargasDepois: 3 })], quadro(), 5, 2_000)).toEqual([]);
+    expect(pendentesVivos([p], quadro(), 5, 1_000 + 120_000)).toEqual([]);
   });
   it('confirmada sai quando o alvo já tem a versão nova; as anteriores do mesmo alvo também', () => {
-    const a = pend(1, obs('a'), { estado: 'confirmada', confirmadaEm: 5, versaoNova: 'v2' });
-    const b = pend(2, obs('b', 'v2'), { estado: 'confirmada', confirmadaEm: 6, versaoNova: 'v3' });
+    const a = pend(1, obs('a'), { estado: 'confirmada', confirmadaEm: 5, versaoNova: 'v2', versoesAntigas: ['v1'] });
+    const b = pend(2, obs('b', 'v1'), { estado: 'confirmada', confirmadaEm: 6, versaoNova: 'v3', versoesAntigas: ['v1', 'v2'] });
     const c = pend(3, obs('c', 'v3'), { estado: 'enviando' });
-    const outro = pend(4, { tipo: 'obs_caixa', dealId: '600001', valor: 'x', versao: 'c1' }, { estado: 'confirmada', confirmadaEm: 4, versaoNova: 'c2' });
+    const outro = pend(4, { tipo: 'obs_caixa', dealId: '600001', valor: 'x', versao: 'c1' }, { estado: 'confirmada', confirmadaEm: 4, versaoNova: 'c2', versoesAntigas: ['c1'] });
     const comV = (v: string) => { const q = quadro(); q.caixas[0].itens[0].versao = v; return q; };
     expect(pendentesVivos([outro, a, b, c], comV('v2'), 0)).toEqual([outro, b, c]);
     expect(pendentesVivos([outro, a, b, c], comV('v3'), 0)).toEqual([outro, c]);

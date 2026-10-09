@@ -13,6 +13,7 @@ const NODES = {
   'pre-validar-acao': 'Pre Validar Acao',
   'processar-acao': 'Processar Acao',
   'montar-escritas': 'Montar Escritas',
+  'limpar-cache': 'Limpar Cache',
   'selecionar-envio': 'Selecionar Envio',
   'invalidas-envio': 'Marcar Invalidas',
   'montar-registro': 'Montar Registro',

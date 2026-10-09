@@ -46,6 +46,8 @@ test('nova_demanda: grava os itens na FALTANTES ligados ao deal da caixa, com ci
   ]);
   assert.equal(r.body.ok, true);
   assert.equal(r.body.versao, ISO);
+  // ids gravados: o site tira a demanda da fila quando o board mostra estes itens
+  assert.deepEqual(r.body.itemIds, ['700004|POS_SAIDA|h-1', '700004|POS_SAIDA|h-2']);
   assert.equal(r.gravacao, null);
   assert.equal(r.historico, null);
 });

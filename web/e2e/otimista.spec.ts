@@ -90,6 +90,28 @@ test('mover um pedido: o card vai para a coluna nova antes de o servidor respond
   await expect(card(page, 'Solicitado')).toBeVisible();
 });
 
+// O servidor pode devolver o board do cache montado antes de a gravação terminar: a recarga
+// depois da confirmação ainda sem a ação não pode desfazer a mudança na tela.
+test('recarga com o board velho (cache) depois da confirmação: o card não volta', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos', { ajustar: comPedido('a_pedir') });
+  await expect.poll(() => mock.boardGets()).toBe(1);
+  await page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' }).dragTo(page.getByRole('region', { name: 'Solicitado' }));
+  mock.soltar();
+  await expect(aviso(page, 'PED-0042 movido para Solicitado')).toBeVisible();
+  await expect.poll(() => mock.boardGets()).toBe(2); // a recarga do fim da fila trouxe o board velho
+  await page.waitForTimeout(300);
+  await expect(card(page, 'Solicitado')).toBeVisible();
+  await expect(card(page, 'A pedir')).toHaveCount(0);
+  // agora a planilha tem a ação (versão devolvida pelo servidor): o board mostra sozinho
+  mock.board.pedidos[0].etapa = 'solicitado';
+  mock.board.pedidos[0].versao = 'v2';
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => mock.boardGets()).toBe(3);
+  await page.waitForTimeout(300);
+  await expect(card(page, 'Solicitado')).toBeVisible();
+  await expect(card(page, 'A pedir')).toHaveCount(0);
+});
+
 test('dois movimentos seguidos: um por vez, o segundo com a versão nova, e o board relido uma vez', async ({ page }) => {
   await page.setViewportSize({ width: 1720, height: 900 });
   const mock = await preparar(page, '#pedidos', {

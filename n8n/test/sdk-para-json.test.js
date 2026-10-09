@@ -6,9 +6,10 @@ const { converter } = require('../scripts/sdk-para-json');
 const wf = (n) => converter(path.join(__dirname, '..', 'workflows', n));
 const destinos = (w, de, saida) => ((w.connections[de] || { main: [] }).main[saida] || []).map((c) => c.node);
 
-test('API: loop de escritas liga done ao Responder Acao e cada lote ao Gravar Lote', () => {
+test('API: loop de escritas liga done ao Limpar Cache (e dele ao Responder Acao) e cada lote ao Gravar Lote', () => {
   const w = wf('pcp-api.sdk.js');
-  assert.deepStrictEqual(destinos(w, 'Loop Escritas', 0), ['Responder Acao']);
+  assert.deepStrictEqual(destinos(w, 'Loop Escritas', 0), ['Limpar Cache']);
+  assert.deepStrictEqual(destinos(w, 'Limpar Cache', 0), ['Responder Acao']);
   assert.deepStrictEqual(destinos(w, 'Loop Escritas', 1), ['Gravar Lote']);
   assert.deepStrictEqual(destinos(w, 'Gravar Lote', 0), ['Loop Escritas']);
   assert.deepStrictEqual(destinos(w, 'Precisa Ler?', 1), ['Responder Board']);

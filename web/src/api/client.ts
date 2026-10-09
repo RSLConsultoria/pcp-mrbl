@@ -54,5 +54,6 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
   const resp: RespostaAcao = { versao: r.versao, historico: r.historico };
   if (typeof r.pedidoId === 'string') resp.pedidoId = r.pedidoId;
   if (Array.isArray(r.partes) && r.partes.every((x) => typeof x === 'string')) resp.partes = r.partes;
+  if (Array.isArray(r.itemIds) && r.itemIds.every((x) => typeof x === 'string')) resp.itemIds = r.itemIds;
   return resp;
 }

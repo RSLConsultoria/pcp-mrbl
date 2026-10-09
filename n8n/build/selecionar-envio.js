@@ -1546,7 +1546,8 @@ function aplicarNovaDemanda(acao, linhas, ctx) {
     ok: true,
     operacoes: operacoes,
     historicos: [linhaHistorico(ctx, dealId, os, '', acao.tipo, ctx.usuario + ' criou demanda pós-saída: ' + partes.join('; '))],
-    versao: agora
+    versao: agora,
+    itemIds: operacoes.map(function (o) { return o.linha.id; })
   };
 }
 
@@ -2217,6 +2218,12 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   return { ok: true };
 }
 
+// Cache do board fora: o proximo GET le a planilha. Chamado ao aceitar a acao
+// (Processar Acao) e de novo depois das gravacoes (Limpar Cache).
+function limparCacheBoard(estado) {
+  if (estado) delete estado.board;
+}
+
 function historicoDaResposta(h) {
   return { quando: h.quando, usuario: h.usuario, texto: h.texto, ploomes: 'PENDENTE' };
 }
@@ -2225,7 +2232,7 @@ function historicoDaResposta(h) {
 // gravacao/historico (primeira operacao / primeira linha) para os
 // adaptadores da F2 enquanto o workflow novo nao entra.
 function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
-  delete estado.board;
+  limparCacheBoard(estado);
   var body = { ok: true, versao: versao, historico: historicos.length ? historicoDaResposta(historicos[0]) : null };
   Object.keys(extrasBody || {}).forEach(function (k) { body[k] = extrasBody[k]; });
   var o = operacoes[0];
@@ -2255,6 +2262,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   };
   if (r.pedidoId) extras.pedidoId = r.pedidoId;
   if (r.partes) extras.partes = r.partes;
+  if (r.itemIds) extras.itemIds = r.itemIds;
   var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
   // O workflow publicado grava gravacao/historico na aba errada para estes
   // tipos; sem eles nada e escrito ate o workflow novo (operacoes[]) entrar.

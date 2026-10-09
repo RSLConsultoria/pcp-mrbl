@@ -1018,6 +1018,7 @@ function aplicarNovaDemanda(acao, linhas, ctx) {
     ok: true,
     operacoes: operacoes,
     historicos: [linhaHistorico(ctx, dealId, os, '', acao.tipo, ctx.usuario + ' criou demanda pós-saída: ' + partes.join('; '))],
-    versao: agora
+    versao: agora,
+    itemIds: operacoes.map(function (o) { return o.linha.id; })
   };
 }

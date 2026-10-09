@@ -140,6 +140,13 @@ test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets
   assert.equal(saida.json.body.caixas[0].itens.length, 2);
 });
 
+test('Limpar Cache: no fim das gravacoes apaga o cache do board (um board lido durante as gravacoes nao fica 55 s)', () => {
+  const estado = { board: { corpo: { caixas: [] }, guardadoEm: T0 }, sessoes: {} };
+  const saida = rodarNode('limpar-cache', { $getWorkflowStaticData: () => estado });
+  assert.equal(estado.board, undefined);
+  assert.deepEqual(saida, [{ json: { ok: true } }]);
+});
+
 // ---------- SDK gerado ----------
 
 function lerSdk(nome) {

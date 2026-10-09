@@ -145,6 +145,7 @@ export interface RespostaAcao {
   historicos?: { quando: string; usuario: string; texto: string; ploomes: StatusPloomes; dealId: string }[];
   pedidoId?: string;
   partes?: string[]; // dividir_por_previsao: ids das partes criadas
+  itemIds?: string[]; // nova_demanda: ids dos itens gravados na FALTANTES
 }
 
 export interface Sessao {

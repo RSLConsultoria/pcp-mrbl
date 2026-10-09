@@ -84,18 +84,56 @@ describe('criarFila', () => {
     expect(esvaziou).not.toHaveBeenCalled();
   });
 
-  it('marco sobe a cada confirmação e podar tira o que o board já mostra', async () => {
+  it('marco sobe a cada confirmação; podar só tira o que o board já mostra (cache velho não desfaz a tela)', async () => {
     const { fila, chamadas } = montar();
     void fila.adicionar(obs('a'));
     expect(fila.marco()).toBe(0);
     chamadas[0].ok(resposta('v2'));
     await tique();
     expect(fila.marco()).toBe(1);
-    const board = { geradoEm: '', avisos: [], usuarios: [], caixas: [caixa({ itens: [item({ versao: 'v1' })] })] };
-    fila.podar(board, 0); // board pedido antes da confirmação e sem a versão nova: fica
+    expect(fila.pendentes()[0]).toMatchObject({ estado: 'confirmada', versaoNova: 'v2', versoesAntigas: ['v1'] });
+    const comV = (v: string) => ({ geradoEm: '', avisos: [], usuarios: [], caixas: [caixa({ itens: [item({ versao: v })] })] });
+    fila.podar(comV('v1'), 0);
+    fila.podar(comV('v1'), 1); // pedido depois da confirmação, mas do cache velho: fica
     expect(fila.pendentes()).toHaveLength(1);
-    fila.podar(board, 1);
+    fila.podar(comV('v2'), 1);
     expect(fila.pendentes()).toEqual([]);
+  });
+
+  it('podar: a confirmada que nenhum board mostra sai na terceira recarga pedida depois da confirmação', async () => {
+    const { fila, chamadas } = montar();
+    void fila.adicionar(obs('a'));
+    chamadas[0].ok(resposta('v2'));
+    await tique();
+    const velho = () => ({ geradoEm: '', avisos: [], usuarios: [], caixas: [caixa({ itens: [item({ versao: 'v1' })] })] });
+    fila.podar(velho(), 0); // pedido antes da confirmação: não conta
+    fila.podar(velho(), 1);
+    fila.podar(velho(), 1);
+    expect(fila.pendentes()).toHaveLength(1);
+    fila.podar(velho(), 1);
+    expect(fila.pendentes()).toEqual([]);
+  });
+
+  it('podar: o mesmo board de novo não conta como outra recarga', async () => {
+    const { fila, chamadas } = montar();
+    void fila.adicionar(obs('a'));
+    chamadas[0].ok(resposta('v2'));
+    await tique();
+    const b = { geradoEm: '', avisos: [], usuarios: [], caixas: [caixa({ itens: [item({ versao: 'v1' })] })] };
+    for (let k = 0; k < 5; k++) fila.podar(b, 1);
+    expect(fila.pendentes()).toHaveLength(1);
+    expect(fila.pendentes()[0].recargasDepois).toBe(1);
+  });
+
+  it('guarda o que a resposta traz para achar a ação no board (pedidoId, partes, itemIds) e as versões de antes', async () => {
+    const { fila, chamadas } = montar();
+    void fila.adicionar(obs('a', 'v1'));
+    void fila.adicionar(obs('b', 'v1'));
+    chamadas[0].ok(resposta('v2'));
+    await tique();
+    chamadas[1].ok({ versao: 'v3', historico: null, pedidoId: 'P', itemIds: ['x'] });
+    await tique();
+    expect(fila.pendentes()[1]).toMatchObject({ versoesAntigas: ['v1', 'v2'], versaoNova: 'v3', resposta: { pedidoId: 'P', itemIds: ['x'] } });
   });
 
   it('avisa os ouvintes a cada mudança', async () => {

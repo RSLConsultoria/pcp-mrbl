@@ -149,6 +149,16 @@ export function versaoAtual(versao: string, trocas: Map<string, string> | undefi
   return v;
 }
 
+// A versão que a tela viu e as trocas seguidas a partir dela, até a mais recente.
+export function cadeiaDeVersoes(versao: string, trocas: Map<string, string> | undefined): string[] {
+  const out = [versao];
+  for (let v = versao, i = 0; trocas && trocas.has(v) && i < 100; i++) {
+    v = trocas.get(v)!;
+    out.push(v);
+  }
+  return out;
+}
+
 // Grava no Map como a entrada mais recente e descarta as mais antigas acima de max.
 export function gravarRecente<K, V>(m: Map<K, V>, chave: K, valor: V, max = 50): void {
   m.delete(chave);

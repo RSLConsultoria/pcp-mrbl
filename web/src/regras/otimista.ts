@@ -1,4 +1,4 @@
-import type { Acao, Board, Caixa, Item, ItemPedido, Pedido } from '../api/tipos';
+import type { Acao, Board, Caixa, Item, ItemPedido, Pedido, RespostaAcao } from '../api/tipos';
 import { arredondar3, chaveDaAcao } from './acoes';
 import { itemAberto } from './colunas';
 import { PREFIXO_NOVO, etapaDaBaixa, etapaFinal } from './pedidos';
@@ -234,7 +234,16 @@ export interface Pendente {
   estado: EstadoPendente;
   confirmadaEm: number; // marco da confirmação (0 enquanto não confirmou)
   versaoNova?: string; // versão que o servidor devolveu
+  versoesAntigas?: string[]; // versões do alvo antes da ação: a que a tela viu e as trocas seguidas até a enviada
+  resposta?: Pick<RespostaAcao, 'pedidoId' | 'partes' | 'itemIds'>; // o que a resposta traz para achar a ação no board
+  confirmadaAs?: number; // relógio (ms) da confirmação
+  recargasDepois?: number; // boards pedidos depois da confirmação que ainda não mostravam a ação
 }
+
+// Limite para uma confirmada que nenhum board mostra (o alvo sumiu, outra pessoa mexeu de um
+// jeito que não dá para reconhecer): sai depois de tantas recargas ou de tanto tempo.
+export const LIMITE_RECARGAS = 3;
+export const LIMITE_CONFIRMADA_MS = 120_000;
 
 // Versão do alvo da ação no board; undefined quando a ação não tem alvo com versão.
 export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
@@ -244,19 +253,57 @@ export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
   return undefined;
 }
 
-// Pendências que o board ainda não mostra. Uma ação confirmada já está no board quando ele
-// foi pedido depois da confirmação (marco) ou quando o alvo já tem a versão que o servidor
-// devolveu; aí as confirmadas anteriores do mesmo alvo também já estão. As que ainda não
+const temPedido = (board: Board, id: string | undefined): boolean => !!id && pedidosDe(board).some((p) => p.id === id);
+
+// A ação confirmada já aparece no board? Não basta o board ter sido pedido depois da
+// confirmação: o servidor pode devolver o cache montado antes da gravação terminar, e tirar a
+// pendência aí desfaria a mudança na tela. Com versão: o alvo tem a versão que o servidor
+// devolveu ou outra que não é nenhuma das de antes da ação (alguém mexeu depois). Sem versão:
+// o resultado aparece (o pedido novo, as partes, os itens da demanda, as etapas salvas).
+export function acaoNoBoard(board: Board, p: Pendente): boolean {
+  const a = p.acao;
+  const r = p.resposta ?? {};
+  switch (a.tipo) {
+    case 'gerar_pedido':
+      return temPedido(board, r.pedidoId);
+    case 'dividir_pedido':
+      return temPedido(board, r.pedidoId);
+    case 'dividir_por_previsao': {
+      const ids = r.partes?.length ? r.partes : r.pedidoId ? [r.pedidoId] : [];
+      return ids.length > 0 && ids.every((id) => temPedido(board, id));
+    }
+    case 'nova_demanda': {
+      const ids = new Set(board.caixas.flatMap((c) => c.itens.map((i) => i.id)));
+      return !!r.itemIds?.length && r.itemIds.every((id) => ids.has(id));
+    }
+    case 'salvar_etapas': {
+      const atuais = etapasOrdenadas(board.etapasPedido ?? []).map((e) => e.nome.trim());
+      const salvas = a.etapas.map((e) => e.nome.trim());
+      return atuais.length === salvas.length && atuais.every((n, k) => n === salvas[k]);
+    }
+  }
+  const v = versaoNoBoard(board, a);
+  if (v === undefined) return false;
+  if (p.versaoNova !== undefined && v === p.versaoNova) return true;
+  const antes = p.versoesAntigas ?? ('versao' in a ? [a.versao] : []);
+  return !antes.includes(v);
+}
+
+// Pendências que o board ainda não mostra. Uma ação confirmada sai quando o board mostra
+// ela (acaoNoBoard); aí as confirmadas anteriores do mesmo alvo também já estão. Para nada
+// ficar pendente para sempre, a confirmada sai também depois de LIMITE_RECARGAS boards
+// pedidos depois da confirmação (a fila conta) ou de LIMITE_CONFIRMADA_MS. As que ainda não
 // foram confirmadas continuam todas.
-export function pendentesVivos(pendentes: readonly Pendente[], board: Board, marco: number): Pendente[] {
+export function pendentesVivos(pendentes: readonly Pendente[], board: Board, _marco: number, agora: number = Date.now()): Pendente[] {
   const refletidos = new Set<string>();
   const vivos: Pendente[] = [];
   for (let k = pendentes.length - 1; k >= 0; k--) {
     const p = pendentes[k];
     if (p.estado === 'confirmada') {
       const chave = chaveDaAcao(p.acao);
-      if (refletidos.has(chave) || p.confirmadaEm <= marco ||
-        (p.versaoNova !== undefined && versaoNoBoard(board, p.acao) === p.versaoNova)) {
+      const venceu = (p.recargasDepois ?? 0) >= LIMITE_RECARGAS ||
+        (p.confirmadaAs !== undefined && agora - p.confirmadaAs >= LIMITE_CONFIRMADA_MS);
+      if (refletidos.has(chave) || venceu || acaoNoBoard(board, p)) {
         refletidos.add(chave);
         continue;
       }

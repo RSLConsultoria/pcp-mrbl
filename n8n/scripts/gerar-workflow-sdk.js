@@ -29,7 +29,7 @@ const posicao = (nome) => {
 linha(0, 0, ['Login', 'Ler USUARIOS', 'Processar Login', 'Responder Login']);
 linha(300, 0, ['Board', 'Validar Pedido', 'Precisa Ler?', 'Ler Planilha', 'Montar Board', 'Responder Board']);
 linha(600, 0, ['Acao', 'Pre Validar Acao', 'Pre OK?', 'Ler Planilha Acao', 'Processar Acao', 'Acao OK?',
-  'Montar Escritas', 'Tem Escritas?', 'Loop Escritas', null, 'Responder Acao']);
+  'Montar Escritas', 'Tem Escritas?', 'Loop Escritas', 'Limpar Cache', 'Responder Acao']);
 POS['Responder Pre'] = [3 * DX, 780];
 // Loop: Gravar Lote fica acima do Loop Escritas (volta para ele a cada requisicao).
 POS['Gravar Lote'] = [9 * DX, 420];
@@ -253,6 +253,7 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   temEscritas,
   loopEscritas,
   httpGoogle('gravarLote', 'Gravar Lote', 'POST', "expr('{{ $json.url }}')", true),
+  code('limparCache', 'Limpar Cache', 'limpar-cache'),
   responder('responderAcao', 'Responder Acao', "{{ $('Processar Acao').first().json.body }}", "{{ $('Processar Acao').first().json.status }}", unico)
 ].join('\n\n') + `
 
@@ -276,7 +277,7 @@ export default workflow('${id}', '${nomeWf}', {
     .onTrue(lerPlanilhaAcao.to(processarAcao).to(acaoOk
       .onTrue(montarEscritas.to(temEscritas
         .onTrue(loopEscritas
-          .onDone(responderAcao)
+          .onDone(limparCache.to(responderAcao))
           .onEachBatch(gravarLote.to(nextBatch(loopEscritas))))
         .onFalse(responderAcao)))
       .onFalse(responderAcao)))

@@ -4,6 +4,9 @@
 // mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
 // ?atraso=4000 na URL da ação.
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
+// Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
+// 90005 em Aguardando entrega (partes em etapas diferentes); 90007 com tudo na última etapa (pode ir à oficina);
+// 90006 já enviada (material todo na última etapa). Enviar à oficina fora da última etapa: 409, como no servidor.
 // Etapas: A pedir · Solicitado · Aguardando entrega · Enviado ao destino final (mover para ela dá a baixa
 // nas caixas) · Concluído (o destino confirmou; finaliza). Pedido com baixa só vai para Concluído.
 // PED-0001 tem itens com previsões diferentes (Dividir por previsão). PED-0004 está concluído.
@@ -542,6 +545,7 @@ function novaDemanda(c, usuario) {
   if (!os) throw bad('Informe a OS.');
   if (c.caixa !== 'COSTURA' && c.caixa !== 'ACABAMENTO') throw bad('Escolha o tipo de caixa.');
   if (!Array.isArray(c.itens) || c.itens.length === 0) throw bad('Informe ao menos um item.');
+  if (c.itens.length > 30) throw bad('No máximo 30 itens por demanda.');
   const rotulo = `OS ${os} (${c.caixa === 'COSTURA' ? 'Costura' : 'Acabamento'})`;
   const doTipo = estado.caixas.filter((x) => x.os === os && x.tipo === c.caixa);
   if (!doTipo.length) throw new Erro(404, `Caixa da ${rotulo} não encontrada.`);
@@ -557,10 +561,14 @@ function novaDemanda(c, usuario) {
     if (!un) throw bad('Informe a unidade do item.');
     return { nome, un, cor, qtd: i.qtd };
   });
-  for (const n of novos) cx.itens.push(item(`${cx.dealId}|POS_SAIDA|${++seqDemanda}`, n.nome, n.un, n.qtd, { cor: n.cor, posSaida: true }));
+  const itemIds = novos.map((n) => {
+    const id = `${cx.dealId}|POS_SAIDA|${++seqDemanda}`;
+    cx.itens.push(item(id, n.nome, n.un, n.qtd, { cor: n.cor, posSaida: true }));
+    return id;
+  });
   const historicos = [];
   registrar(cx.dealId, usuario, `${usuario} criou demanda pós-saída: ${novos.map((n) => `${fmtNum(n.qtd)} ${n.un} de ${n.nome}${n.cor ? ` ${n.cor}` : ''}`).join('; ')}`, historicos);
-  return resposta(agoraIso(), historicos);
+  return resposta(agoraIso(), historicos, { itemIds });
 }
 
 function processar(corpo, usuario) {
