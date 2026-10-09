@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { Caixa } from '../../api/tipos';
 import { formatarQtd } from '../../regras/quantidade';
-import { diasDesdeSaida, rotuloDaSaida, seloSaidaVermelho, textoPedidosDaParte, textoSaiu, type ParteSaida } from '../../regras/saidas';
+import { diasDesdeSaida, parteEntregue, rotuloDaSaida, seloSaidaVermelho, textoPedidosDaParte, textoSaiu, type ParteSaida } from '../../regras/saidas';
 import { corDoTipo, nomeDoTipo } from '../../regras/texto';
 
 const ITENS_NO_CARD = 3;
@@ -44,7 +44,7 @@ export function CardSaida({ caixa, parte, final, hoje, selecionada, onAbrir }: P
         ))}
         {ocultos > 0 && <li className="card__mais">+ {ocultos} {ocultos > 1 ? 'itens' : 'item'}</li>}
       </ul>
-      {final && <div className="card__rodape"><span className="card__estado card__estado--ok">material entregue no destino</span></div>}
+      {final && parteEntregue(parte) && <div className="card__rodape"><span className="card__estado card__estado--ok">material entregue no destino</span></div>}
     </div>
   );
 }

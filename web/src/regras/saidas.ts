@@ -96,6 +96,12 @@ export function partesDaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]
   return presentes.map((coluna, k) => ({ coluna, indice: k + 1, total: presentes.length, itens: porColuna.get(coluna)! }));
 }
 
+// "material entregue no destino": só a parte com pedido (concluído, na etapa final). Item
+// fechado sem pedido também cai na etapa final, mas nada foi entregue por pedido.
+export function parteEntregue(parte: Pick<ParteSaida, 'itens'>): boolean {
+  return parte.itens.some((x) => x.pedidoIds.length > 0);
+}
+
 // Caixa que aparece em Saídas: saiu com falta, ou saiu e ganhou demanda pós-saída.
 export function saiuComFalta(c: Caixa): boolean {
   return c.saiu && (c.saiuComFalta || c.itens.some((i) => i.posSaida));

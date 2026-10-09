@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Board, EtapaPedido, ItemPedido, Pedido } from '../api/tipos';
 import {
-  chaveDaSaida, colunaDoPedido, colunasSaida, diasDesdeSaida, itensParaPedido, nomeColunaSaida, partesDaSaida, rotuloDaSaida,
+  chaveDaSaida, colunaDoPedido, colunasSaida, diasDesdeSaida, itensParaPedido, nomeColunaSaida, parteEntregue, partesDaSaida, rotuloDaSaida,
   saidasNaTela, seloSaidaVermelho, textoPedidoDoItem, textoPedidosDaParte, textoSaiu
 } from './saidas';
 import { caixa, item } from './teste-util';
@@ -75,6 +75,19 @@ describe('partesDaSaida', () => {
     const c = saiu({ itens: [item({ id: 'b', resta: 5 })] });
     const pedidos = [ped('PED-0001', 'sol', [{ ...pi('b', 5), dealId: '999' }])];
     expect(partesDaSaida(c, pedidos, etapas).map((p) => p.coluna)).toEqual(['sem_pedido']);
+  });
+});
+
+describe('parteEntregue', () => {
+  it('"material entregue no destino" só quando a parte tem pedido (item fechado sem pedido não conta)', () => {
+    const fechado = saiu({ itens: [item({ id: 'c', status: 'RESOLVIDO', resta: 0, baixada: 5 })] });
+    const [semPedido] = partesDaSaida(fechado, [], etapas);
+    expect(semPedido.coluna).toBe('etapa:fim');
+    expect(parteEntregue(semPedido)).toBe(false);
+    const c = saiu({ itens: [item({ id: 'b', status: 'RESOLVIDO', resta: 0, baixada: 5 })] });
+    const [comPedido] = partesDaSaida(c, [ped('PED-0001', 'fim', [pi('b', 5)], { baixadoEm: 'x', concluidoEm: 'y', finalizado: true })], etapas);
+    expect(comPedido.coluna).toBe('etapa:fim');
+    expect(parteEntregue(comPedido)).toBe(true);
   });
 });
 
