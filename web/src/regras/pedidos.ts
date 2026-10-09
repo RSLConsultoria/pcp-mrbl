@@ -61,6 +61,12 @@ export function etapaDaBaixa(etapas: EtapaPedido[]): EtapaPedido | undefined {
   return o.length >= 2 ? o[o.length - 2] : undefined;
 }
 
+// Antepenúltima ("Aguardando entrega"): só dela se divide um pedido.
+export function etapaDeDividir(etapas: EtapaPedido[]): EtapaPedido | undefined {
+  const o = emOrdem(etapas);
+  return o.length >= 3 ? o[o.length - 3] : undefined;
+}
+
 export const VARIOS_FORNECEDORES = 'Vários fornecedores';
 
 export function quemDoPedido(p: Pick<Pedido, 'quem' | 'itens'>): string {

@@ -137,7 +137,6 @@ test('painel aberto e o card arrastado: o painel acompanha a etapa e salvar não
   // muda outra coisa e salva ainda com o arraste na fila
   await painel.getByLabel('Responsável').selectOption('Lucca');
   await expect(salvando(page)).toBeVisible();
-  await expect(painel).not.toContainText('Etapa:');
   await painel.getByRole('button', { name: 'Salvar alterações' }).click();
   await ficaNaColuna(page, api, 'PED-0001', 'Aguardando entrega', 'Solicitado');
   expect(api.acoes.map((a) => a.tipo)).toEqual(['mover_pedido', 'editar_pedido']);
@@ -163,6 +162,8 @@ test('digitando no painel quando a recarga chega: o que foi digitado continua l�
   await expect(painel.getByRole('button', { name: 'Salvar alterações' })).toBeEnabled();
 });
 
+// Como o servidor (n8n/src/montarCaixas.js): só item de caixa ganha (fora da FALTANTES) vem
+// com editavel false. Item resolvido e item de caixa somente leitura são da FALTANTES.
 test('mock: item resolvido e caixa somente leitura não dizem "lido da planilha de caixas ganhas"', async ({ page, api }) => {
   void api;
   await entrar(page, '');

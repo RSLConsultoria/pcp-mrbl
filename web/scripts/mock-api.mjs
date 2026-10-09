@@ -407,8 +407,10 @@ function dividirPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
-  const etapa = estado.etapas.find((e) => e.id === c.etapa);
-  if (!etapa) throw bad('Etapa inválida.');
+  // só de Aguardando entrega (a etapa antes da baixa); a parte já vai para a etapa da baixa
+  const de = estado.etapas[estado.etapas.length - 3];
+  if (!de || p.etapa !== de.id) throw bad(`Dividir só com o pedido em ${de ? de.nome : 'Aguardando entrega'}.`);
+  const etapa = etapaDaBaixa();
   if (!Array.isArray(c.itens) || c.itens.length === 0) throw bad('Marque ao menos um item que chegou.');
   const vistos = new Set();
   const movidos = [];
@@ -440,8 +442,8 @@ function dividirPedido(c, usuario) {
   for (const m of movidos) m.pi.qtd = Math.round((m.pi.qtd - m.qtd) * 1000) / 1000;
   p.versao = versao;
   // parte que vai direto para a etapa da baixa já nasce com a baixa
-  const baixas = etapa.id === etapaDaBaixa().id ? baixarItens(parte.itens) : new Map();
-  if (etapa.id === etapaDaBaixa().id) parte.baixadoEm = diaIso();
+  const baixas = baixarItens(parte.itens);
+  parte.baixadoEm = diaIso();
   const historicos = [];
   const porDeal = new Map();
   for (const m of movidos) porDeal.set(m.pi.dealId, [...(porDeal.get(m.pi.dealId) ?? []), `${fmtNum(m.qtd)} ${m.it.un} de ${m.it.nome}`]);

@@ -4,7 +4,7 @@ import { normalizar } from './busca';
 import { caixaEditavelNoApp } from './edicao';
 import type { EstadoEditavel, FiltroPedidos } from './pedidos';
 import { ddmm } from './datas';
-import { etapaDaBaixa, etapaFinal, faltasSemPedido, previsaoDoItemMudou } from './pedidos';
+import { etapaDaBaixa, etapaDeDividir, etapaFinal, faltasSemPedido, previsaoDoItemMudou } from './pedidos';
 import { qtdComUn } from './quantidade';
 
 export const chaveItem = (dealId: string, itemId: string): string => `${dealId}|${itemId}`;
@@ -259,13 +259,11 @@ export function proximoIdParte(pedidos: Pedido[], id: string): string {
   return `${raiz}.${max + 1}`;
 }
 
-// Etapas para onde a parte pode ir (todas menos a atual); a padrão é a seguinte à atual.
-export function etapasParaDividir(etapas: EtapaPedido[], atual: string): { opcoes: EtapaPedido[]; padrao: string } {
-  const ordenadas = etapasOrdenadas(etapas);
-  const opcoes = ordenadas.filter((e) => e.id !== atual);
-  const idx = ordenadas.findIndex((e) => e.id === atual);
-  const seguinte = idx >= 0 ? ordenadas[idx + 1] : undefined;
-  return { opcoes, padrao: seguinte?.id ?? opcoes[0]?.id ?? '' };
+// Dividir pedido: só com o pedido na etapa antes da baixa (Aguardando entrega) e sem a baixa.
+// O que chegou vira uma parte na etapa da baixa, já com a baixa. Mesma regra do servidor.
+export function podeDividir(p: Pick<Pedido, 'etapa' | 'baixadoEm'>, etapas: EtapaPedido[]): boolean {
+  const de = etapaDeDividir(etapas);
+  return !!de && !p.baixadoEm && p.etapa === de.id;
 }
 
 export interface LinhaDivisao { itemId: string; chegou: boolean; qtd: string }

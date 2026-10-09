@@ -2,7 +2,7 @@ import type { Acao, Board, Caixa, Item, ItemPedido, Pedido } from '../api/tipos'
 import { arredondar3, chaveDaAcao } from './acoes';
 import { itemAberto } from './colunas';
 import { PREFIXO_NOVO, etapaDaBaixa, etapaFinal } from './pedidos';
-import { etapasOrdenadas, motivoMoverPedido, partesPorPrevisao, proximoIdParte, raizDoPedido } from './pedidosQuadro';
+import { etapasOrdenadas, motivoMoverPedido, partesPorPrevisao, podeDividir, proximoIdParte, raizDoPedido } from './pedidosQuadro';
 
 // Quadro otimista: a tela mostra na hora o que cada ação vai causar, enquanto a fila envia
 // em segundo plano. As previsões seguem as regras do servidor (n8n/src/pedidos.js e
@@ -191,7 +191,7 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comPedido(board, p.id, (x) => comPrevisoesResumidas({ ...x, ...definidos, itens }));
     }
     case 'dividir_pedido': {
-      if (p.baixadoEm) return board;
+      if (!baixa || !podeDividir(p, etapas)) return board;
       const parteId = proximoIdParte(pedidosDe(board), p.id);
       const vao: ItemPedido[] = [];
       const ficam: ItemPedido[] = [];
@@ -202,9 +202,9 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
         if (resto !== 0) ficam.push({ ...i, qtd: resto }); // linha com qtd 0 some na leitura
       }
       let b = comPedido(board, p.id, (x) => comPrevisoesResumidas({ ...x, itens: ficam }));
-      b = comPedidosNovos(b, [novaParte(p, parteId, acao.etapa, p.previsao, vao, ctx.hoje)]);
-      // a parte que vai direto para a etapa da baixa já nasce com a baixa
-      if (acao.etapa === baixa) b = darBaixa(b, parteId, ctx.hoje);
+      b = comPedidosNovos(b, [novaParte(p, parteId, baixa, p.previsao, vao, ctx.hoje)]);
+      // a parte já nasce na etapa da baixa, com a baixa
+      b = darBaixa(b, parteId, ctx.hoje);
       return atualizarPedidosDosItens(b, p.itens);
     }
     case 'dividir_por_previsao': {

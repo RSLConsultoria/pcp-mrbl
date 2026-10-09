@@ -2,9 +2,10 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { Acao, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
+import { etapaDaBaixa } from '../../regras/pedidos';
 import {
-  entraNaEtapaDaBaixa, etapasParaDividir, partesPorPrevisao, previsoesDiferentes, proximoIdParte, resumoDivisao,
-  resumoDivisaoPorPrevisao, textoConfirmarBaixa, validarDivisao, type LinhaDivisao
+  partesPorPrevisao, podeDividir, previsoesDiferentes, proximoIdParte, resumoDivisao, resumoDivisaoPorPrevisao, textoConfirmarBaixa,
+  validarDivisao, type LinhaDivisao
 } from '../../regras/pedidosQuadro';
 import { qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { ConfirmarResolvido } from './ConfirmarResolvido';
@@ -18,14 +19,13 @@ interface Props {
 
 type Modo = 'fechado' | 'itens' | 'previsao';
 
-// Parte do pedido chegou: os itens marcados (com a quantidade que chegou) viram um pedido
-// novo PED-xxxx.n na etapa escolhida; o original fica com o resto. Atalho "Dividir por
-// previsão": uma parte por data de previsão dos itens (a mais próxima fica no pedido).
+// Parte do pedido chegou (só com o pedido em Aguardando entrega): os itens marcados, com a
+// quantidade que chegou, viram um pedido novo PED-xxxx.n já em Enviado ao destino final, com a
+// baixa nas caixas (pede a mesma confirmação); o original fica com o resto. Atalho "Dividir por
+// previsão": uma parte por data de previsão dos itens, na etapa atual (a mais próxima fica).
 export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
   const id = useId();
   const [modo, setModo] = useState<Modo>('fechado');
-  const { opcoes, padrao } = etapasParaDividir(etapas, pedido.etapa);
-  const [etapa, setEtapa] = useState(padrao);
   const iniciais = (): LinhaDivisao[] => pedido.itens.map((i) => ({ itemId: i.itemId, chegou: false, qtd: quantidadeParaCampo(i.qtd) }));
   const [linhas, setLinhas] = useState<LinhaDivisao[]>(iniciais);
   const [confirmando, setConfirmando] = useState(false);
@@ -34,6 +34,8 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
   const porPrevisaoRef = useRef<HTMLButtonElement>(null);
   const voltarFoco = useRef(false);
   const comPrevisoes = previsoesDiferentes(pedido);
+  const dividir = podeDividir(pedido, etapas);
+  const baixa = etapaDaBaixa(etapas);
 
   useEffect(() => {
     if (modo === 'itens') primeiroRef.current?.focus();
@@ -41,15 +43,15 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
     else if (voltarFoco.current) { voltarFoco.current = false; abrirRef.current?.focus(); }
   }, [modo]);
 
-  if (opcoes.length === 0 && !comPrevisoes) return null;
+  if (!dividir && !comPrevisoes) return null;
   const fechar = () => { voltarFoco.current = true; setConfirmando(false); setModo('fechado'); };
 
   if (modo === 'fechado') {
     return (
       <div className="acoes">
-        {opcoes.length > 0 && (
+        {dividir && (
           <button ref={abrirRef} type="button" className="botao botao--contorno"
-            onClick={() => { setLinhas(iniciais()); setEtapa(padrao); setConfirmando(false); setModo('itens'); }}>
+            onClick={() => { setLinhas(iniciais()); setConfirmando(false); setModo('itens'); }}>
             Dividir pedido
           </button>
         )}
@@ -88,22 +90,20 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
 
   const v = validarDivisao(pedido, linhas);
   const temErroItem = Object.keys(v.erros).length > 0;
-  const nomeEtapa = etapas.find((e) => e.id === etapa)?.nome ?? etapa;
+  const nomeBaixa = baixa?.nome ?? '';
   const parteId = proximoIdParte(pedidos, pedido.id);
-  const pronto = !temErroItem && v.geral === null && etapa !== '';
+  const pronto = !temErroItem && v.geral === null && !!baixa;
   const mudar = (itemId: string, m: Partial<LinhaDivisao>) => {
     setConfirmando(false);
     setLinhas((ls) => ls.map((l) => (l.itemId === itemId ? { ...l, ...m } : l)));
   };
   const algumMarcado = linhas.some((l) => l.chegou);
-  // a parte que vai para a última etapa (Resolvido) já nasce com a baixa: pede confirmação
-  const paraUltima = entraNaEtapaDaBaixa(pedido.etapa, etapa, etapas);
   const itensDaParte = pedido.itens.filter((i) => v.itens.some((x) => x.itemId === i.itemId));
 
   function confirmar() {
     if (!pronto) return;
-    const acao: Acao = { tipo: 'dividir_pedido', pedidoId: pedido.id, versao: pedido.versao, etapa, itens: v.itens };
-    void executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId, etapa: nomeEtapa }));
+    const acao: Acao = { tipo: 'dividir_pedido', pedidoId: pedido.id, versao: pedido.versao, itens: v.itens };
+    void executar(acao, (r) => mensagemSucesso(acao, undefined, { pedidoId: r.pedidoId, etapa: nomeBaixa }));
     setConfirmando(false);
     setModo('fechado');
   }
@@ -111,7 +111,7 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
   return (
     <section className="secao divisao" aria-label={`Dividir ${pedido.id}`}>
       <h3 className="secao__titulo">Dividir pedido</h3>
-      <p className="divisao__ajuda">Marque o que chegou. Esses itens viram um pedido novo; o {pedido.id} fica com o resto.</p>
+      <p className="divisao__ajuda">Marque o que chegou. Esses itens viram um pedido novo em {nomeBaixa}, com a baixa nas caixas; o {pedido.id} fica com o resto.</p>
       <ul className="divisao__itens">
         {pedido.itens.map((i, idx) => {
           const l = linhas.find((x) => x.itemId === i.itemId)!;
@@ -139,25 +139,18 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
           );
         })}
       </ul>
-      <div className="campo">
-        <label htmlFor={`${id}-etapa`}>Mover para</label>
-        <select id={`${id}-etapa`} value={etapa} onChange={(e) => { setConfirmando(false); setEtapa(e.target.value); }}>
-          {opcoes.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-        </select>
-      </div>
       {pronto ? (
-        <p className="divisao__resumo" aria-live="polite">{resumoDivisao(pedido, v.itens, parteId, nomeEtapa)}</p>
+        <p className="divisao__resumo" aria-live="polite">{resumoDivisao(pedido, v.itens, parteId, nomeBaixa)}</p>
       ) : (
         v.geral && algumMarcado && <p className="campo__erro" role="alert">{v.geral}</p>
       )}
       {confirmando ? (
-        <ConfirmarResolvido rotulo={`Confirmar ${nomeEtapa} da divisão do ${pedido.id}`}
-          texto={textoConfirmarBaixa(itensDaParte, nomeEtapa)} ocupado={false}
+        <ConfirmarResolvido rotulo={`Confirmar ${nomeBaixa} da divisão do ${pedido.id}`}
+          texto={textoConfirmarBaixa(itensDaParte, nomeBaixa)} ocupado={false}
           onConfirmar={confirmar} onCancelar={() => setConfirmando(false)} />
       ) : (
         <div className="acoes">
-          <button type="button" className="botao botao--signal" disabled={!pronto}
-            onClick={() => (paraUltima ? setConfirmando(true) : confirmar())}>
+          <button type="button" className="botao botao--signal" disabled={!pronto} onClick={() => setConfirmando(true)}>
             Confirmar divisão
           </button>
           <button type="button" className="botao botao--leve" onClick={fechar}>

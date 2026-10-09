@@ -76,7 +76,7 @@ export function mensagemSucesso(
     case 'baixar_pedido':
       return `Baixa do ${acao.pedidoId} registrada`;
     case 'dividir_pedido':
-      return `${acao.pedidoId} dividido · ${extra.pedidoId ?? 'nova parte'} em ${extra.etapa ?? acao.etapa}`;
+      return `${acao.pedidoId} dividido · ${extra.pedidoId ?? 'nova parte'} em ${extra.etapa ?? 'outra etapa'} · baixa registrada nas caixas`;
     case 'dividir_por_previsao': {
       const n = extra.partes ?? 0;
       return `${acao.pedidoId} dividido por previsão${n > 0 ? ` · ${n} ${n === 1 ? 'parte' : 'partes'}` : ''}`;

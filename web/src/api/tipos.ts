@@ -124,7 +124,7 @@ export type Acao =
     }
   | { tipo: 'mover_pedido'; pedidoId: string; versao: string; etapa: string }
   | { tipo: 'baixar_pedido'; pedidoId: string; versao: string }
-  | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; etapa: string; itens: { itemId: string; qtd: number }[] }
+  | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; itens: { itemId: string; qtd: number }[] } // a parte vai para a etapa da baixa
   | { tipo: 'dividir_por_previsao'; pedidoId: string; versao: string }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] }
   | { tipo: 'enviar_oficina'; dealId: string; versao: string }

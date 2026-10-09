@@ -82,6 +82,11 @@ describe('validarEtapas e motivoTravaEtapa', () => {
     expect(validarEtapas([{ id: 'a_pedir', nome: 'A pedir' }, ...FIM, { nome: 'Depois' }], [], ordenadas)).toBe(msg);
     expect(validarEtapas([{ id: 'a_pedir', nome: 'A pedir' }, { nome: 'Nova' }, { id: 'entregue', nome: 'Enviado' }, { id: 'concluido', nome: 'Recebido' }], [], ordenadas)).toBeNull();
   });
+  it('recusa nome vazio e nomes repetidos (sem acento e caixa)', () => {
+    expect(validarEtapas([{ id: 'a_pedir', nome: '  ' }, ...FIM], [], ordenadas)).toBe('Dê um nome a todas as etapas.');
+    expect(validarEtapas([{ id: 'a_pedir', nome: 'Concluido' }, { id: 'entregue', nome: 'Enviado' }, { id: 'concluido', nome: 'CONCLUÍDO' }], [], ordenadas)).toBe('Já existe uma etapa chamada CONCLUÍDO.');
+    expect(validarEtapas([{ id: 'a_pedir', nome: 'A pedir' }, { nome: 'a PEDIR' }, ...FIM], [], ordenadas)).toBe('Já existe uma etapa chamada a PEDIR.');
+  });
   it('etapa com pedido não concluído não sai', () => {
     const novas = [{ id: 'a_pedir', nome: 'A pedir' }, ...FIM];
     expect(validarEtapas(novas, [ped({ etapa: 'solicitado' })], ordenadas)).toBe('A etapa Solicitado tem pedidos abertos.');

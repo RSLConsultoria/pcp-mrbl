@@ -393,10 +393,11 @@ test('abaixo de 1366px, com o painel do pedido aberto, Faltas sem pedido vira tr
 const ZIPER = 'ZÍPER METAL MÉDIO FIXO CA 18CM';
 const PED_DOIS = [...PED_TAG, { itemId: 'b1', dealId: '700002', os: '90002', nome: ZIPER, un: 'UN', qtd: 52 }];
 
-test('dividir pedido com quantidade parcial cria a parte PED-xxxx.1 na etapa escolhida', async ({ page }) => {
+test('dividir pedido em Aguardando entrega: o que chegou vira PED-xxxx.1 em Enviado ao destino final, com a baixa', async ({ page }) => {
+  await page.setViewportSize({ width: 1720, height: 900 });
   const mock = await preparar(page, '#pedidos', {
     ajustar: (b) => {
-      b.pedidos = [pedido('PED-0042', 'solicitado', PED_DOIS)] as never;
+      b.pedidos = [pedido('PED-0042', 'aguardando', PED_DOIS)] as never;
       b.caixas[0].itens[1].pedidoId = 'PED-0042';
       b.caixas[1].itens[0].pedidoId = 'PED-0042';
     },
@@ -407,34 +408,44 @@ test('dividir pedido com quantidade parcial cria a parte PED-xxxx.1 na etapa esc
       const pai = b.pedidos[0] as unknown as { versao: string; itens: { itemId: string; qtd: number }[] };
       pai.versao = 'v2';
       pai.itens[1].qtd = 32;
-      b.pedidos.push(pedido('PED-0042.1', 'aguardando', [{ ...PED_DOIS[1], qtd: 20 }], { pai: 'PED-0042', versao: 'v2' }) as never);
+      b.pedidos.push(pedido('PED-0042.1', 'entregue', [{ ...PED_DOIS[1], qtd: 20 }], { pai: 'PED-0042', versao: 'v2', baixadoEm: '2026-10-07' }) as never);
     }
   });
-  await page.getByRole('region', { name: 'Solicitado' }).getByRole('button', { name: 'Pedido PED-0042' }).click();
+  await page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('button', { name: 'Pedido PED-0042' }).click();
   const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
   await painel.getByRole('button', { name: 'Dividir pedido' }).click();
   const divisao = painel.getByRole('region', { name: 'Dividir PED-0042' });
-  await expect(divisao.getByLabel('Mover para')).toHaveValue('aguardando');
+  await expect(divisao.getByLabel('Mover para')).toHaveCount(0);
   await expect(divisao.getByRole('button', { name: 'Confirmar divisão' })).toBeDisabled();
   await divisao.getByRole('checkbox', { name: `Chegou ${ZIPER}` }).check();
   await expect(divisao.getByLabel(`Quantidade que chegou de ${ZIPER}`)).toHaveValue('52');
   await divisao.getByLabel(`Quantidade que chegou de ${ZIPER}`).fill('20');
   await expect(divisao).toContainText(
-    `PED-0042.1 vai para Aguardando entrega com: 20 UN de ${ZIPER}; o PED-0042 fica com: 26 UN de TAG CUIDADOS PADRÃO; 32 UN de ${ZIPER}`);
+    `PED-0042.1 vai para Enviado ao destino final com: 20 UN de ${ZIPER}; o PED-0042 fica com: 26 UN de TAG CUIDADOS PADRÃO; 32 UN de ${ZIPER}`);
   await divisao.getByRole('button', { name: 'Confirmar divisão' }).click();
-  await expect(aviso(page, 'PED-0042 dividido · PED-0042.1 em Aguardando entrega')).toBeVisible();
-  expect(mock.bodies).toEqual([{ tipo: 'dividir_pedido', pedidoId: 'PED-0042', versao: V_PED, etapa: 'aguardando', itens: [{ itemId: 'b1', qtd: 20 }] }]);
-  const pai = page.getByRole('region', { name: 'Solicitado' }).getByRole('article', { name: 'Pedido PED-0042' });
+  const confirmacao = divisao.getByRole('group', { name: 'Confirmar Enviado ao destino final da divisão do PED-0042' });
+  await expect(confirmacao).toContainText('Mover para Enviado ao destino final dá baixa de 1 item em 1 OS. A baixa não pode ser desfeita.');
+  expect(mock.bodies).toHaveLength(0);
+  await confirmacao.getByRole('button', { name: 'Confirmar' }).click();
+  await expect(aviso(page, 'PED-0042 dividido · PED-0042.1 em Enviado ao destino final · baixa registrada nas caixas')).toBeVisible();
+  expect(mock.bodies).toEqual([{ tipo: 'dividir_pedido', pedidoId: 'PED-0042', versao: V_PED, itens: [{ itemId: 'b1', qtd: 20 }] }]);
+  const pai = page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('article', { name: 'Pedido PED-0042' });
   await expect(pai).toContainText('dividido em 1 parte');
   await expect(pai).toContainText('32 UN');
-  const parte = page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('article', { name: 'Pedido PED-0042.1' });
+  const parte = page.getByRole('region', { name: 'Enviado ao destino final' }).getByRole('article', { name: 'Pedido PED-0042.1' });
   await expect(parte).toContainText('parte de PED-0042');
   await expect(parte).toContainText('20 UN');
 });
 
+test('Dividir pedido só aparece em Aguardando entrega', async ({ page }) => {
+  await preparar(page, '#pedidos', { ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_DOIS)] as never; } });
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  await expect(page.getByRole('complementary', { name: 'Pedido PED-0042' }).getByRole('button', { name: 'Dividir pedido' })).toHaveCount(0);
+});
+
 test('dividir pedido: quantidade acima da do pedido mostra o erro no painel e não envia', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', {
-    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_DOIS)] as never; }
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'aguardando', PED_DOIS)] as never; }
   });
   await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
   const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });

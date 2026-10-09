@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EtapaPedido, Pedido } from '../api/tipos';
 import { mensagemSucesso } from './acoes';
 import {
-  etapasParaDividir, historicoDoPedido, partesDoPedido, proximoIdParte, raizDoPedido, resumoDivisao, validarDivisao
+  historicoDoPedido, partesDoPedido, podeDividir, proximoIdParte, raizDoPedido, resumoDivisao, validarDivisao
 } from './pedidosQuadro';
 import { colunaSaida, textoPedidoDoItem } from './saidas';
 import { faltasSemPedido } from './pedidos';
@@ -32,12 +32,12 @@ describe('ids das partes', () => {
   });
 });
 
-describe('etapasParaDividir', () => {
-  it('todas menos a atual; padrão = a seguinte', () => {
-    const r = etapasParaDividir(etapas, 'sol');
-    expect(r.opcoes.map((e) => e.id)).toEqual(['a', 'rec', 'ent']);
-    expect(r.padrao).toBe('rec');
-    expect(etapasParaDividir(etapas, 'ent').padrao).toBe('a');
+describe('podeDividir', () => {
+  it('só na etapa antes da baixa (a antepenúltima) e sem a baixa', () => {
+    expect(podeDividir(ped(), etapas)).toBe(true);
+    expect(podeDividir(ped({ etapa: 'rec' }), etapas)).toBe(false);
+    expect(podeDividir(ped({ baixadoEm: '2026-10-07' }), etapas)).toBe(false);
+    expect(podeDividir(ped(), etapas.slice(0, 2))).toBe(false);
   });
 });
 
@@ -62,9 +62,9 @@ describe('resumoDivisao e aviso', () => {
     expect(resumoDivisao(ped(), [{ itemId: 'z', qtd: 20 }], 'PED-0002.1', 'Recebidos'))
       .toBe('PED-0002.1 vai para Recebidos com: 20 UN de ZÍPER METAL; o PED-0002 fica com: 32 UN de ZÍPER METAL; 10 MT de VIÉS');
   });
-  it('mensagem de sucesso usa o id devolvido', () => {
-    expect(mensagemSucesso({ tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'rec', itens: [] }, undefined,
-      { pedidoId: 'PED-0002.1', etapa: 'Recebidos' })).toBe('PED-0002 dividido · PED-0002.1 em Recebidos');
+  it('mensagem de sucesso usa o id devolvido e fala da baixa', () => {
+    expect(mensagemSucesso({ tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', itens: [] }, undefined,
+      { pedidoId: 'PED-0002.1', etapa: 'Recebidos' })).toBe('PED-0002 dividido · PED-0002.1 em Recebidos · baixa registrada nas caixas');
   });
 });
 

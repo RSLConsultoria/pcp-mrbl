@@ -121,20 +121,19 @@ describe('aplicarOtimista: pedidos', () => {
     const b = aplicar(b0, { tipo: 'editar_pedido', pedidoId: 'PED-0002', versao: 'v1', campos: {}, itens: [{ itemId: 'i1', qtd: 52, fornecedor: '', previsao: '' }] });
     expect(pedidoDe(b, 'PED-0002')!.itens[0].previsao).toBe('2026-10-10');
   });
-  it('dividir_pedido: parte provisória com o id previsto e o resto no original', () => {
-    const b = aplicar(quadro(), { tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent', itens: [{ itemId: 'i1', qtd: 20 }, { itemId: 'i2', qtd: 10 }] });
+  it('dividir_pedido: parte provisória na etapa da baixa, com a baixa, e o resto no original', () => {
+    const b = aplicar(quadro(), { tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', itens: [{ itemId: 'i1', qtd: 20 }, { itemId: 'i2', qtd: 10 }] });
     expect(pedidoDe(b, 'PED-0002')!.itens.map((i) => [i.itemId, i.qtd])).toEqual([['i1', 32]]);
     const parte = pedidoDe(b, 'PED-0002.1')!;
     expect(parte).toMatchObject({ pai: 'PED-0002', etapa: 'ent', provisorio: true, finalizado: false, baixadoEm: '2026-10-08', criadoEm: '2026-10-08' });
     expect(parte.itens.map((i) => [i.itemId, i.qtd])).toEqual([['i1', 20], ['i2', 10]]);
-    // a parte em Enviado ao destino final já deu a baixa; o i2 foi todo e saiu do PED-0002
+    // a parte já deu a baixa; o i2 foi todo e saiu do PED-0002
     expect(itemDe(b, 'i1')).toMatchObject({ baixada: 20, resta: 32, pedidoIds: ['PED-0002'] });
     expect(itemDe(b, 'i2')).toMatchObject({ resta: 0, pedidoIds: [] });
   });
-  it('dividir_pedido para uma etapa do meio: o item fica nos dois pedidos', () => {
-    const b = aplicar(quadro(), { tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'a', itens: [{ itemId: 'i1', qtd: 20 }] });
-    expect(itemDe(b, 'i1').pedidoIds).toEqual(['PED-0002', 'PED-0002.1']);
-    expect(textoPedidoDoItem(itemDe(b, 'i1'), b.pedidos!, etapas)).toBe('PED-0002 · Solicitado, PED-0002.1 · A pedir');
+  it('dividir_pedido fora da etapa antes da baixa: board igual (o servidor recusa)', () => {
+    const b0 = quadro({ pedidos: [ped({ etapa: 'a' })] });
+    expect(aplicar(b0, { tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', itens: [{ itemId: 'i1', qtd: 20 }] })).toBe(b0);
   });
   it('dividir_por_previsao: uma parte por data, a mais próxima fica', () => {
     const b0 = quadro({ pedidos: [ped({ itens: [pi({ previsao: '2026-10-10' }), pi({ itemId: 'i2', previsao: '2026-10-20' })] })] });
