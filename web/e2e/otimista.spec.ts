@@ -179,3 +179,33 @@ test('gerar pedido: a janela fecha na hora e o pedido entra como "salvando…"',
   mock.soltar();
   await expect(aviso(page, /PED-0042 gerado · 1 item/)).toBeVisible();
 });
+
+// Recarregar ou fechar a aba com ações na fila perderia as que ainda não foram ao servidor:
+// enquanto houver gravação pendente, o navegador pergunta antes de sair.
+const pedeConfirmacaoAoSair = (page: Page) => page.evaluate(() => {
+  const e = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(e);
+  return e.defaultPrevented;
+});
+
+test('com ações pendentes, sair da página pede confirmação; com a fila vazia, não', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos', { ajustar: comPedido('a_pedir') });
+  await expect(card(page, 'A pedir')).toBeVisible();
+  expect(await pedeConfirmacaoAoSair(page)).toBe(false);
+  await page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' }).dragTo(page.getByRole('region', { name: 'Solicitado' }));
+  await expect(page.getByText('Salvando…')).toBeVisible();
+  expect(await pedeConfirmacaoAoSair(page)).toBe(true);
+
+  // o navegador mostra o aviso nativo ("Sair do site?") ao recarregar
+  const dialogo = page.waitForEvent('dialog');
+  void page.reload().catch(() => undefined);
+  const d = await dialogo;
+  expect(d.type()).toBe('beforeunload');
+  await d.dismiss(); // fica na página
+  await expect(card(page, 'Solicitado')).toBeVisible();
+
+  mock.soltar();
+  await expect(aviso(page, 'PED-0042 movido para Solicitado')).toBeVisible();
+  await expect(page.getByText('Salvando…')).toHaveCount(0);
+  expect(await pedeConfirmacaoAoSair(page)).toBe(false);
+});

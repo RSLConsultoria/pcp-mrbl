@@ -5,6 +5,7 @@ import type { Avisar } from '../componentes/Aviso';
 import { desfechoDoErro } from '../regras/acoes';
 import { diaIso } from '../regras/datas';
 import { aplicarPendentes, pendentesVivos } from '../regras/otimista';
+import { useAvisoAoSair } from './avisoAoSair';
 import type { Fila } from './filaAcoes';
 
 // Põe a ação na fila e devolve na hora: o board da tela já mostra o efeito dela. A promessa
@@ -67,5 +68,6 @@ export function useAcao({ fila, token, board, marco, recarregar, aoExpirar, avis
   }, [fila]);
 
   const salvando = pendentes.some((p) => p.estado !== 'confirmada');
+  useAvisoAoSair(salvando); // recarregar ou fechar a aba com gravação na fila pede confirmação
   return { board: tela, executar, salvando };
 }
