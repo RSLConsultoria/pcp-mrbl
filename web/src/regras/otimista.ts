@@ -174,12 +174,13 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
   switch (acao.tipo) {
     case 'mover_pedido': {
       if (motivoMoverPedido(p, acao.etapa, etapas)) return board; // o servidor recusaria
+      if (acao.etapa === baixa && !acao.confirmouBaixa) return board; // sem a confirmação o servidor recusa (409)
       const b = comPedido(board, p.id, (x) => ({ ...x, etapa: acao.etapa }));
       if (acao.etapa === final) return comPedido(b, p.id, (x) => ({ ...x, concluidoEm: ctx.hoje, finalizado: true }));
       return acao.etapa === baixa && !p.baixadoEm ? darBaixa(b, p.id, ctx.hoje) : b;
     }
     case 'baixar_pedido':
-      return p.etapa === baixa && !p.baixadoEm ? darBaixa(board, p.id, ctx.hoje) : board;
+      return p.etapa === baixa && !p.baixadoEm && acao.confirmouBaixa ? darBaixa(board, p.id, ctx.hoje) : board;
     case 'editar_pedido': {
       if (p.baixadoEm) return board;
       const c = acao.campos;

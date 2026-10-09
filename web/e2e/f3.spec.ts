@@ -126,7 +126,8 @@ test('soltar o card em Enviado ao destino final pede confirmação e envia mover
   await card.dragTo(enviado);
   await confirmacao.getByRole('button', { name: 'Confirmar' }).click();
   await expect(aviso(page, 'PED-0042 movido para Enviado ao destino final · baixa registrada nas caixas')).toBeVisible();
-  expect(mock.bodies).toEqual([{ tipo: 'mover_pedido', pedidoId: 'PED-0042', versao: V_PED, etapa: 'entregue' }]);
+  // só depois da confirmação o site manda confirmouBaixa (sem ele a API recusa: site antigo)
+  expect(mock.bodies).toEqual([{ tipo: 'mover_pedido', pedidoId: 'PED-0042', versao: V_PED, etapa: 'entregue', confirmouBaixa: true }]);
   // com a baixa o pedido continua em aberto, na coluna da baixa
   await expect(enviado.getByRole('article', { name: 'Pedido PED-0042' })).toContainText('Baixa registrada nas caixas em 07/10');
 });

@@ -60,7 +60,7 @@ test('etapas padrao: Enviado ao destino final (id entregue) e Concluido no fim',
 });
 
 test('mover para Enviado ao destino final da a baixa, mas nao finaliza', () => {
-  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' });
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue', confirmouBaixa: true });
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
     { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'a', qtd_baixada: 20, atualizado_em_app: ISO } },
@@ -97,9 +97,9 @@ test('pedido com baixa so vai para Concluido; concluido nao muda mais', () => {
   assert.deepEqual(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'aguardando' }, lin), erro);
   assert.deepEqual(acao({ tipo: 'editar_pedido', pedidoId: 'PED-0044', versao: 'P1', campos: { quem: 'X' } }, lin), erro);
   assert.deepEqual(acao({ tipo: 'dividir_pedido', pedidoId: 'PED-0044', versao: 'P1', itens: [{ itemId: 'a', qtd: 1 }] }, lin), erro);
-  assert.deepEqual(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1' }, lin), erro);
+  assert.deepEqual(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1', confirmouBaixa: true }, lin), erro);
   const fim = linhas({ pedidos: [ped(Object.assign({}, ENVIADO, { etapa: 'concluido', concluido_em: ISO }))] });
-  assert.deepEqual(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' }, fim),
+  assert.deepEqual(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, fim),
     { status: 409, body: { erro: 'Pedido finalizado não pode ser alterado.' } });
 });
 
@@ -120,9 +120,9 @@ test('editar_pedido nao muda etapa: so arrastando o card (pre e processar)', () 
 });
 
 test('baixar_pedido (compatibilidade): so na etapa da baixa', () => {
-  assert.deepEqual(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1' }),
+  assert.deepEqual(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1', confirmouBaixa: true }),
     { status: 400, body: { erro: 'Dar baixa só na etapa Enviado ao destino final.' } });
-  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1' }, linhas({ pedidos: [ped({ etapa: 'entregue' })] }));
+  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1', confirmouBaixa: true }, linhas({ pedidos: [ped({ etapa: 'entregue' })] }));
   assert.equal(r.status, 200);
   assert.equal(r.operacoes[r.operacoes.length - 1].linha.baixado_em, ISO);
 });
@@ -148,8 +148,8 @@ test('salvar_etapas: minimo de 3; pedido concluido nao segura etapa, pedido aber
 });
 
 test('dividir_pedido: so em Aguardando entrega; a parte vai para Enviado ao destino final com a baixa', () => {
-  // "etapa" no corpo (cliente antigo) e ignorada
-  const r = acao({ tipo: 'dividir_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'solicitado', itens: [{ itemId: 'a', qtd: 5 }] });
+  // sem "etapa" no corpo (o site antigo mandava; veja janela-migracao.test.js)
+  const r = acao({ tipo: 'dividir_pedido', pedidoId: 'PED-0044', versao: 'P1', itens: [{ itemId: 'a', qtd: 5 }] });
   assert.equal(r.status, 200);
   assert.deepEqual([r.operacoes[0].linha.id, r.operacoes[0].linha.etapa, r.operacoes[0].linha.baixado_em], ['PED-0044.1', 'entregue', ISO]);
   assert.deepEqual(r.operacoes.filter((o) => o.aba === 'FALTANTES'), [

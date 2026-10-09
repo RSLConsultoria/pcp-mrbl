@@ -121,9 +121,12 @@ export type Acao =
       campos: Partial<DadosPedido>; // a etapa muda só arrastando (mover_pedido)
       itens?: { itemId: string; qtd: number; fornecedor: string; previsao?: string }[];
     }
-  | { tipo: 'mover_pedido'; pedidoId: string; versao: string; etapa: string }
-  | { tipo: 'baixar_pedido'; pedidoId: string; versao: string }
-  | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; itens: { itemId: string; qtd: number }[] } // a parte vai para a etapa da baixa
+  // confirmouBaixa: true só depois da confirmação da baixa (entrar na etapa da baixa). Sem ele
+  // a API recusa com 409 "Atualize a página": é o site antigo, que não confirmava.
+  | { tipo: 'mover_pedido'; pedidoId: string; versao: string; etapa: string; confirmouBaixa?: true }
+  | { tipo: 'baixar_pedido'; pedidoId: string; versao: string; confirmouBaixa?: true }
+  // a parte vai para a etapa da baixa; sem "etapa" no corpo (a API recusa etapa diferente da baixa)
+  | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; itens: { itemId: string; qtd: number }[] }
   | { tipo: 'dividir_por_previsao'; pedidoId: string; versao: string }
   | { tipo: 'nova_demanda'; os: string; caixa: 'COSTURA' | 'ACABAMENTO'; itens: { nome: string; cor: string; qtd: number; un: string }[] }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };

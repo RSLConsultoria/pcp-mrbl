@@ -183,7 +183,7 @@ test('mover_pedido: update da etapa e historico por OS', () => {
 });
 
 test('mover_pedido: 409 versao, 404, etapa invalida, mesma etapa, finalizado', () => {
-  const m = (o, lin) => acao(Object.assign({ tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'entregue' }, o), lin || LIN_P());
+  const m = (o, lin) => acao(Object.assign({ tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, o), lin || LIN_P());
   assert.deepEqual(m({ versao: 'VELHA' }), { status: 409, body: { erro: 'Alguém alterou este pedido agora há pouco.' } });
   assert.deepEqual(m({ pedidoId: 'PED-0099' }), { status: 404, body: { erro: 'Pedido não encontrado.' } });
   assert.equal(m({ pedidoId: 'PED-0000' }).status, 404);
@@ -196,9 +196,9 @@ test('mover_pedido: 409 versao, 404, etapa invalida, mesma etapa, finalizado', (
 test('mover/editar/baixar: 403 quando o pedido tem item de deal nao editavel', () => {
   ctx.DEALS_EDITAVEIS = ['600001'];
   try {
-    const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'entregue' }, LIN_P());
+    const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, LIN_P());
     assert.deepEqual(r, { status: 403, body: { erro: 'Edição liberada em breve para esta caixa.' } });
-    assert.equal(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, LIN_P()).status, 403);
+    assert.equal(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1', confirmouBaixa: true }, LIN_P()).status, 403);
     assert.equal(acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { quem: 'X' } }, LIN_P()).status, 403);
   } finally {
     ctx.DEALS_EDITAVEIS = [];
@@ -247,7 +247,7 @@ test('baixar_pedido: so na ultima etapa; soma limitada ao que resta; historico p
     pedidos: [ped({ etapa: 'entregue' })],
     pedidosItens: [pit({}), pit({ id: 'PED-0043|c', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', un: 'UN', qtd: 30 })]
   });
-  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, lin);
+  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1', confirmouBaixa: true }, lin);
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
     { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'a', qtd_baixada: 20, atualizado_em_app: ISO } },
@@ -258,10 +258,10 @@ test('baixar_pedido: so na ultima etapa; soma limitada ao que resta; historico p
     ['600001', '90001', 'baixar_pedido', 'Lucca deu baixa do PED-0043: 20 MT de VIÉS (resta 80 MT)'],
     ['600002', '90002', 'baixar_pedido', 'Lucca deu baixa do PED-0043: 5 UN de BOTÃO (resta 0 UN)']
   ]);
-  const naoUltima = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, LIN_P());
+  const naoUltima = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1', confirmouBaixa: true }, LIN_P());
   assert.deepEqual(naoUltima, { status: 400, body: { erro: 'Dar baixa só na etapa Enviado ao destino final.' } });
   const ja = linhas({ pedidos: [ped({ etapa: 'entregue', baixado_em: 'X' })], pedidosItens: [pit({})] });
-  assert.equal(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, ja).status, 409);
+  assert.equal(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1', confirmouBaixa: true }, ja).status, 409);
 });
 
 // ---------- etapas ----------
@@ -345,7 +345,7 @@ test('pedido sem itens validos: editar/mover/baixar -> 409', () => {
   for (const corpo of [
     { tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'aguardando' },
     { tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', campos: { quem: 'X' } },
-    { tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }
+    { tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1', confirmouBaixa: true }
   ]) {
     assert.deepEqual(acao(corpo, lin), { status: 409, body: { erro: 'Pedido sem itens válidos.' } });
   }
@@ -358,7 +358,7 @@ test('baixar_pedido: pula SUBSTITUIDO e omite itens com dar 0 do historico', () 
     pedidosItens: [pit({}), pit({ id: 'PED-0043|d', item_id: 'd', nome: 'LINHA' }),
       pit({ id: 'PED-0043|c', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', qtd: 3 })]
   });
-  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1' }, lin);
+  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0043', versao: 'P1', confirmouBaixa: true }, lin);
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'a'], ['PEDIDOS', 'PED-0043']]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [

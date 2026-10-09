@@ -258,6 +258,14 @@ function pedidoPorId(id) {
   return p;
 }
 const dealsDe = (p) => [...new Set(itensValidos(p).map((i) => i.dealId))];
+// Como o servidor: site antigo aberto numa aba (baixa sem confirmouBaixa, divisão com etapa
+// diferente da etapa da baixa) recebe 409 pedindo para recarregar.
+const SITE_ANTIGO = 'Atualize a página: o site mudou.';
+function exigirSiteNovo(c) {
+  const naBaixa = (c.tipo === 'mover_pedido' && c.etapa === etapaDaBaixa().id) || c.tipo === 'baixar_pedido';
+  if (naBaixa && c.confirmouBaixa !== true) throw new Erro(409, SITE_ANTIGO);
+  if (c.tipo === 'dividir_pedido' && c.etapa !== undefined && c.etapa !== null && c.etapa !== etapaDaBaixa().id) throw new Erro(409, SITE_ANTIGO);
+}
 // Como o servidor: concluído não muda; com a baixa, só mover para a etapa final.
 function pedidoAlteravel(p, corpo) {
   exigirEditavel(dealsDe(p));
@@ -364,6 +372,7 @@ function editarPedido(c, usuario) {
 function moverPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoAlteravel(p, c);
+  exigirSiteNovo(c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   if (!etapas().some((e) => e.id === c.etapa)) throw bad('Etapa inválida.');
   if (p.etapa === c.etapa) throw bad('O pedido já está nessa etapa.');
@@ -402,6 +411,7 @@ const textoBaixa = (partes) => (partes?.length ? ` e deu baixa: ${partes.join(';
 function baixarPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoAlteravel(p, c);
+  exigirSiteNovo(c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   if (p.etapa !== etapaDaBaixa().id) throw bad(`Dar baixa só na etapa ${etapaDaBaixa().nome}.`);
   const partes = baixarItens(itensValidos(p));
@@ -414,6 +424,7 @@ function baixarPedido(c, usuario) {
 function dividirPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoAlteravel(p, c);
+  exigirSiteNovo(c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   // só de Aguardando entrega (a etapa antes da baixa); a parte já vai para a etapa da baixa
   const de = etapas()[etapas().length - 3];

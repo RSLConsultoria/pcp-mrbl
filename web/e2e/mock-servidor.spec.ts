@@ -61,7 +61,7 @@ async function entrar(page: Page, hash: string) {
 }
 
 const card = (page: Page, coluna: string, id: string) =>
-  page.getByRole('region', { name: coluna }).getByRole('article', { name: `Pedido ${id}` });
+  page.getByRole('region', { name: coluna }).getByRole('article', { name: `Pedido ${id}`, exact: true });
 const salvando = (page: Page) => page.getByText('Salvando…');
 
 // Confere que o card está só na coluna esperada agora, quando o servidor termina de gravar
@@ -96,6 +96,19 @@ test('arrastar o pedido para outra etapa: o card fica na coluna nova depois da r
   await card(page, 'Aguardando entrega', 'PED-0003').getByRole('button', { name: 'Pedido PED-0003' })
     .dragTo(page.getByRole('region', { name: 'A pedir' }));
   await ficaNaColuna(page, api, 'PED-0003', 'A pedir', 'Aguardando entrega');
+});
+
+// O mock recusa (409 "Atualize a página") a baixa sem confirmouBaixa, como a API: o site novo
+// só manda o campo depois da confirmação, e o card fica na coluna da baixa depois da recarga.
+test('arrastar para Enviado ao destino final e confirmar: o mock aceita a baixa (confirmouBaixa) e o card fica', async ({ page, api }) => {
+  await page.setViewportSize({ width: 1720, height: 900 });
+  await entrar(page, '#pedidos');
+  const enviado = page.getByRole('region', { name: 'Enviado ao destino final' });
+  await card(page, 'Aguardando entrega', 'PED-0003').getByRole('button', { name: 'Pedido PED-0003' }).dragTo(enviado);
+  await enviado.getByRole('group', { name: 'Confirmar Enviado ao destino final do PED-0003' }).getByRole('button', { name: 'Confirmar' }).click();
+  await ficaNaColuna(page, api, 'PED-0003', 'Enviado ao destino final', 'Aguardando entrega');
+  expect(api.acoes).toEqual([{ tipo: 'mover_pedido', pedidoId: 'PED-0003', versao: '2026-01-01T00:00:00.000Z', etapa: 'entregue', confirmouBaixa: true }]);
+  await expect(page.getByText('Atualize a página: o site mudou.')).toHaveCount(0);
 });
 
 test('editar a previsão do pedido: a data nova aparece na hora e continua depois da recarga', async ({ page, api }) => {

@@ -103,3 +103,37 @@ test('pedido levado a ultima etapa pela API antiga (baixa la, sem concluido_em) 
   assert.equal(semBaixa.finalizado, false);
 });
 
+
+// ---------- site antigo aberto numa aba com a API nova ----------
+
+const ATUALIZE = { status: 409, body: { erro: 'Atualize a página: o site mudou.' } };
+
+test('dividir_pedido: corpo com etapa diferente da etapa da baixa (site antigo) -> 409 Atualize a pagina', () => {
+  const lin = linhas({ etapas: ETAPAS5 });
+  const base = { tipo: 'dividir_pedido', pedidoId: 'PED-0044', versao: 'P1', itens: [{ itemId: 'a', qtd: 5 }] };
+  assert.deepEqual(acao(Object.assign({ etapa: 'solicitado' }, base), lin), ATUALIZE);
+  assert.deepEqual(acao(Object.assign({ etapa: '' }, base), lin), ATUALIZE);
+  assert.equal(acao(Object.assign({ etapa: 'entregue' }, base), lin).status, 200);
+  const r = acao(base, lin);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.operacoes[0].linha.etapa, 'entregue');
+});
+
+test('mover_pedido para a etapa da baixa exige confirmouBaixa: true (o site novo manda depois da confirmacao)', () => {
+  const lin = linhas({ etapas: ETAPAS5 });
+  const mover = { tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' };
+  assert.deepEqual(acao(mover, lin), ATUALIZE);
+  assert.deepEqual(acao(Object.assign({ confirmouBaixa: 'true' }, mover), lin), ATUALIZE);
+  const ok = acao(Object.assign({ confirmouBaixa: true }, mover), lin);
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  // as outras etapas nao pedem
+  assert.equal(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'solicitado' }, lin).status, 200);
+  const baixado = linhas({ etapas: ETAPAS5, pedidos: [ped({ etapa: 'entregue', baixado_em: 'X' })] });
+  assert.equal(acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'concluido' }, baixado).status, 200);
+});
+
+test('baixar_pedido (compatibilidade) tambem exige confirmouBaixa: true', () => {
+  const lin = linhas({ etapas: ETAPAS5, pedidos: [ped({ etapa: 'entregue' })] });
+  assert.deepEqual(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1' }, lin), ATUALIZE);
+  assert.equal(acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1', confirmouBaixa: true }, lin).status, 200);
+});

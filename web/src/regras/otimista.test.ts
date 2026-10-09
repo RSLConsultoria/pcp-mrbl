@@ -73,7 +73,7 @@ describe('aplicarOtimista: pedidos', () => {
     expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'a', finalizado: false, versao: 'v1' });
   });
   it('mover para a etapa da baixa dá a baixa e solta o item, mas o pedido continua aberto', () => {
-    const b = aplicar(quadro(), { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent' });
+    const b = aplicar(quadro(), { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent', confirmouBaixa: true });
     expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'ent', finalizado: false, baixadoEm: '2026-10-08' });
     expect(itemDe(b, 'i1')).toMatchObject({ baixada: 52, resta: 0, pedidoIds: [], pedidoId: '' });
     expect(itemDe(b, 'i2')).toMatchObject({ resta: 0 });
@@ -87,10 +87,16 @@ describe('aplicarOtimista: pedidos', () => {
     expect(aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'a' })).toBe(b0);
     expect(aplicar(b0, { tipo: 'editar_pedido', pedidoId: 'PED-0002', versao: 'v1', campos: { quem: 'X' } })).toBe(b0);
   });
+  it('entrar na etapa da baixa sem confirmouBaixa (site antigo): o servidor recusa, board igual', () => {
+    const b0 = quadro();
+    expect(aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent' })).toBe(b0);
+    const b1 = quadro({ pedidos: [ped({ etapa: 'ent' })] });
+    expect(aplicar(b1, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1' })).toBe(b1);
+  });
   it('baixa do pedido não passa do que falta', () => {
     const b0 = quadro();
     b0.pedidos![0].itens[0].qtd = 80;
-    const b = aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent' });
+    const b = aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent', confirmouBaixa: true });
     expect(itemDe(b, 'i1')).toMatchObject({ baixada: 52, resta: 0 });
   });
   it('pedido finalizado ou sumido: board igual', () => {
@@ -100,9 +106,9 @@ describe('aplicarOtimista: pedidos', () => {
   });
   it('baixar_pedido só na etapa da baixa; dá a baixa sem finalizar', () => {
     const b0 = quadro();
-    expect(aplicar(b0, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1' })).toBe(b0);
+    expect(aplicar(b0, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1', confirmouBaixa: true })).toBe(b0);
     const b1 = quadro({ pedidos: [ped({ etapa: 'ent' })] });
-    expect(pedidoDe(aplicar(b1, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1' }), 'PED-0002'))
+    expect(pedidoDe(aplicar(b1, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1', confirmouBaixa: true }), 'PED-0002'))
       .toMatchObject({ baixadoEm: '2026-10-08', finalizado: false });
   });
   it('editar_pedido: campos, itens e a previsão herdada acompanha a do pedido', () => {

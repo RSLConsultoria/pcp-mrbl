@@ -40,8 +40,10 @@ export function QuadroPedidos({ board, etapas, pedidos, filtro, temBusca, selId,
   function mover(id: string, etapaId: string) {
     const p = pedidos.find((x) => x.id === id);
     if (!p || etapaDe(p) === etapaId || !pedidoArrastavel(board, p)) return;
-    const acao: Acao = { tipo: 'mover_pedido', pedidoId: p.id, versao: p.versao, etapa: etapaId };
-    void executar(acao, mensagemSucesso(acao, undefined, { etapa: etapas.find((e) => e.id === etapaId)?.nome, baixa: etapaId === baixa?.id }));
+    // Entrar na etapa da baixa só passa por aqui depois da confirmação (confirmar()).
+    const naBaixa = etapaId === baixa?.id;
+    const acao: Acao = { tipo: 'mover_pedido', pedidoId: p.id, versao: p.versao, etapa: etapaId, ...(naBaixa ? { confirmouBaixa: true as const } : {}) };
+    void executar(acao, mensagemSucesso(acao, undefined, { etapa: etapas.find((e) => e.id === etapaId)?.nome, baixa: naBaixa }));
   }
 
   function soltar(id: string, etapaId: string) {

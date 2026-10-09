@@ -21,6 +21,9 @@ var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
 var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
 var ERRO_VERSAO_PEDIDO = 'Alguém alterou este pedido agora há pouco.';
 var ERRO_ETAPA_PELO_CARD = 'Para mudar a etapa, arraste o card.';
+// Site antigo aberto numa aba depois do deploy: manda corpo que a API nova entenderia
+// de outro jeito (baixa sem confirmacao, divisao para outra etapa). Recarregar resolve.
+var ERRO_SITE_ANTIGO = 'Atualize a página: o site mudou.';
 var NOMES_CAIXA = { COSTURA: 'Costura', ACABAMENTO: 'Acabamento' };
 var MAX_ITENS_DEMANDA = 30;
 var CAMPOS_PEDIDO = ['origem', 'quem', 'local', 'previsao', 'responsavel'];
@@ -436,12 +439,16 @@ function validarAcaoPedido(corpo) {
   acao.pedidoId = texto(corpo.pedidoId);
   if (!acao.pedidoId) return erroAcao(400, 'Pedido não informado.');
   acao.versao = texto(corpo.versao);
+  // O site novo so manda confirmouBaixa: true depois da confirmacao da baixa.
+  acao.confirmouBaixa = corpo.confirmouBaixa === true;
 
   if (tipo === 'mover_pedido') {
     acao.etapa = texto(corpo.etapa);
     if (!acao.etapa) return erroAcao(400, 'Etapa inválida.');
   } else if (tipo === 'dividir_pedido') {
-    // A parte vai sempre para a etapa da baixa; "etapa" no corpo (cliente antigo) e ignorada.
+    // A parte vai sempre para a etapa da baixa. O site novo nao manda "etapa"; o antigo
+    // mandava a etapa escolhida, recusada (409) se nao for a da baixa (aplicarDivisao).
+    if (corpo.etapa !== undefined && corpo.etapa !== null) acao.etapaDoCorpo = texto(corpo.etapa);
     if (corpo.itens !== undefined && !Array.isArray(corpo.itens)) return erroAcao(400, 'Itens inválidos.');
     if (!corpo.itens || !corpo.itens.length) return erroAcao(400, 'Marque ao menos um item que chegou.');
     acao.itens = [];
@@ -635,6 +642,12 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   // Com a baixa dada o pedido so anda para a etapa final (o destino confirmou).
   if (pedidoBaixado(p) && !(tipo === 'mover_pedido' && acao.etapa === final.id)) {
     return erroAcao(409, 'Pedido com baixa só pode ir para ' + final.nome + '.');
+  }
+  // Site antigo: baixa sem a confirmacao do site novo, ou divisao para outra etapa.
+  var entraNaBaixa = !!baixa && ((tipo === 'mover_pedido' && acao.etapa === baixa.id) || tipo === 'baixar_pedido');
+  if (entraNaBaixa && !acao.confirmouBaixa) return erroAcao(409, ERRO_SITE_ANTIGO);
+  if (tipo === 'dividir_pedido' && acao.etapaDoCorpo !== undefined && (!baixa || acao.etapaDoCorpo !== baixa.id)) {
+    return erroAcao(409, ERRO_SITE_ANTIGO);
   }
   if (acao.versao !== texto(p.linha.atualizado_em)) return erroAcao(409, ERRO_VERSAO_PEDIDO);
   var grupos = porOS(p.itens, function (x) { return texto(x.deal_id); }, function (x) { return texto(x.os); });

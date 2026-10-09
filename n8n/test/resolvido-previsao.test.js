@@ -57,7 +57,7 @@ function acao(corpo, lin) {
 
 // ---------- A) Resolvido e a ultima etapa ----------
 test('mover_pedido para a etapa da baixa da a baixa', () => {
-  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' });
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue', confirmouBaixa: true });
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes, [
     { aba: 'FALTANTES', operacao: 'update', chave: 'id', linha: { id: 'a', qtd_baixada: 20, atualizado_em_app: ISO } },
@@ -75,7 +75,7 @@ test('mover_pedido para a ultima etapa: SUBSTITUIDO e item ja resolvido ficam se
     faltantes: [falt({ id: 'a' }), falt({ id: 'd', status: 'SUBSTITUIDO' }), falt({ id: 'c', os: '90002', deal_id: '600002', qtd_falta: 5, qtd_baixada: 5 })],
     pedidosItens: [pit({}), pit({ id: 'PED-0044|d', item_id: 'd', nome: 'LINHA' }), pit({ id: 'PED-0044|c', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', qtd: 3 })]
   });
-  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' }, lin);
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, lin);
   assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'a'], ['PEDIDOS', 'PED-0044']]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
     ['600001', 'Lucca moveu PED-0044 para Enviado ao destino final e deu baixa: 20 MT de VIÉS (resta 80 MT)'],
@@ -86,7 +86,7 @@ test('mover_pedido para a ultima etapa: SUBSTITUIDO e item ja resolvido ficam se
 test('mover_pedido: etapas configuradas, a penultima pela ordem e a que da baixa', () => {
   const etapas = [{ id: 'x', nome: 'Pedir', ordem: 1 }, { id: 'concluido', nome: 'Recebido', ordem: 4 }, { id: 'y', nome: 'Chegou', ordem: 3 }, { id: 'z', nome: 'Meio', ordem: 2 }];
   const lin = linhas({ etapas, pedidos: [ped({ etapa: 'x' })] });
-  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'y' }, lin);
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'y', confirmouBaixa: true }, lin);
   assert.equal(r.operacoes[r.operacoes.length - 1].linha.baixado_em, ISO);
   assert.match(r.historicos[0].texto, /^Lucca moveu PED-0044 para Chegou e deu baixa: /);
   const meio = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'z' }, lin);
@@ -102,7 +102,7 @@ test('mover_pedido: sair da ultima etapa depois da baixa -> 409', () => {
 });
 
 test('baixar_pedido continua funcionando no servidor (compatibilidade)', () => {
-  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1' }, linhas({ pedidos: [ped({ etapa: 'entregue' })] }));
+  const r = acao({ tipo: 'baixar_pedido', pedidoId: 'PED-0044', versao: 'P1', confirmouBaixa: true }, linhas({ pedidos: [ped({ etapa: 'entregue' })] }));
   assert.equal(r.status, 200);
   assert.equal(r.historicos[0].texto, 'Lucca deu baixa do PED-0044: 20 MT de VIÉS (resta 80 MT)');
 });
@@ -162,7 +162,7 @@ test('editar_pedido: previsao do item com resumo "previsão de <item>: a → b"'
 
 test('dividir_pedido: a parte leva a previsao do item', () => {
   const lin = linhas({ pedidosItens: [pit({ previsao: '2026-10-22' }), ITENS[1]] });
-  const r = acao({ tipo: 'dividir_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'solicitado', itens: [{ itemId: 'a', qtd: 5 }] }, lin);
+  const r = acao({ tipo: 'dividir_pedido', pedidoId: 'PED-0044', versao: 'P1', itens: [{ itemId: 'a', qtd: 5 }] }, lin);
   assert.equal(r.operacoes[1].linha.previsao, '2026-10-22');
 });
 
@@ -232,7 +232,7 @@ test('salvar_etapas: so administradores', () => {
 
 test('baixa na ultima etapa so para linhas ABERTO/PARCIAL', () => {
   const lin = linhas({ faltantes: [falt({ id: 'a', status: 'RESOLVIDO' }), falt({ id: 'c', os: '90002', deal_id: '600002', qtd_falta: 50, status: 'PARCIAL' })] });
-  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue' }, lin);
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, lin);
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'c'], ['PEDIDOS', 'PED-0044']]);
 });
