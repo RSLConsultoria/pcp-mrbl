@@ -259,3 +259,19 @@ test('acao real: processarAcao (gerar_pedido) -> requisicoes', () => {
   assert.equal(r[1].body.values[0][7], 20);
   assert.equal(r[2].body.values.length, saida.historicos.length);
 });
+
+test('nova_demanda: append na FALTANTES (com a coluna origem nova) antes do historico', () => {
+  const p = planilha([
+    ['FALTANTES', [['id', 'os', 'deal_id', 'descricao_item', 'qtd_falta'], ['a', '9', '1', 'X', 1]]],
+    ['HISTORICO_APP', [['id', 'quando', 'texto', 'ploomes_status']]]
+  ]);
+  const r = req([op('FALTANTES', 'append', 'id', { id: '1|POS_SAIDA|u1', os: '9', deal_id: '1', descricao_item: 'BOTÃO', qtd_falta: 2, origem: 'POS_SAIDA' })],
+    [{ id: 'h1', quando: 'T', texto: 'demanda', ploomes_status: 'PENDENTE' }], p);
+  assert.deepEqual(r.map((x) => x.url.replace(BASE, '')), [
+    ':batchUpdate',
+    '/' + encodeURIComponent("'FALTANTES'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
+    '/' + encodeURIComponent("'HISTORICO_APP'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE'
+  ]);
+  assert.deepEqual(r[0].body.data, [{ range: "'FALTANTES'!F1", values: [['origem']] }]);
+  assert.deepEqual(r[1].body.values, [['1|POS_SAIDA|u1', '9', '1', 'BOTÃO', 2, 'POS_SAIDA']]);
+});

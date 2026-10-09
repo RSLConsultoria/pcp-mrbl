@@ -90,7 +90,8 @@ function itemDaLinha(l, ano) {
     previsao: dataISO(l.previsao, ano),
     resolvidoEm: dataISO(l.data_resolucao, ano),
     versao: texto(l.atualizado_em_app),
-    editavel: true
+    editavel: true,
+    posSaida: semAcento(l.origem) === 'POS_SAIDA'
   };
 }
 
@@ -118,7 +119,8 @@ function itensDoTexto(dealId, txt) {
         previsao: '',
         resolvidoEm: '',
         versao: '',
-        editavel: false
+        editavel: false,
+        posSaida: false
       };
     });
 }
@@ -196,7 +198,8 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     linhas.forEach(function (l) {
       var it = itemDaLinha(l, ano);
       var ehCorte = texto(l.ciclo).toUpperCase() === 'CORTE';
-      if (!temCorte || ehCorte || itemEstaAberto(it)) itens.push(it);
+      // item pos-saida fica sempre (o sync do corte nao o conhece)
+      if (!temCorte || ehCorte || it.posSaida || itemEstaAberto(it)) itens.push(it);
     });
     var p = linhas[0];
     var resp = '';
@@ -226,7 +229,7 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
         id: dealId + '|ganha|0', nome: 'Itens não detalhados na planilha', cor: '', un: '',
         necessaria: null, separada: null, falta: null, faltaG: null, status: 'ABERTO',
         baixada: 0, resta: null, restaG: null, obsAlmox: '', obsPcp: '', previsao: '',
-        resolvidoEm: '', versao: '', editavel: false
+        resolvidoEm: '', versao: '', editavel: false, posSaida: false
       });
     }
     caixas.push(marcarSaida(marcarExtras({

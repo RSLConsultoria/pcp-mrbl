@@ -28,6 +28,7 @@ var DESTINOS_ESCRITA = [
   { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id' },
   { aba: 'ETAPAS_PEDIDO', operacao: 'update', chave: 'id' },
   { aba: 'FALTANTES', operacao: 'update', chave: 'id' },
+  { aba: 'FALTANTES', operacao: 'append', chave: 'id' },  // nova demanda pos-saida
   { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.

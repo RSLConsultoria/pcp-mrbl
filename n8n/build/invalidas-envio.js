@@ -171,7 +171,8 @@ function itemDaLinha(l, ano) {
     previsao: dataISO(l.previsao, ano),
     resolvidoEm: dataISO(l.data_resolucao, ano),
     versao: texto(l.atualizado_em_app),
-    editavel: true
+    editavel: true,
+    posSaida: semAcento(l.origem) === 'POS_SAIDA'
   };
 }
 
@@ -199,7 +200,8 @@ function itensDoTexto(dealId, txt) {
         previsao: '',
         resolvidoEm: '',
         versao: '',
-        editavel: false
+        editavel: false,
+        posSaida: false
       };
     });
 }
@@ -277,7 +279,8 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     linhas.forEach(function (l) {
       var it = itemDaLinha(l, ano);
       var ehCorte = texto(l.ciclo).toUpperCase() === 'CORTE';
-      if (!temCorte || ehCorte || itemEstaAberto(it)) itens.push(it);
+      // item pos-saida fica sempre (o sync do corte nao o conhece)
+      if (!temCorte || ehCorte || it.posSaida || itemEstaAberto(it)) itens.push(it);
     });
     var p = linhas[0];
     var resp = '';
@@ -307,7 +310,7 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
         id: dealId + '|ganha|0', nome: 'Itens não detalhados na planilha', cor: '', un: '',
         necessaria: null, separada: null, falta: null, faltaG: null, status: 'ABERTO',
         baixada: 0, resta: null, restaG: null, obsAlmox: '', obsPcp: '', previsao: '',
-        resolvidoEm: '', versao: '', editavel: false
+        resolvidoEm: '', versao: '', editavel: false, posSaida: false
       });
     }
     caixas.push(marcarSaida(marcarExtras({
@@ -521,7 +524,7 @@ function aplicarAcao(acao, alvo, contexto) {
 // Cada acao devolve { operacoes: [{ aba, operacao, chave, linha }], historicos }.
 
 var TIPOS_PEDIDO = ['gerar_pedido', 'editar_pedido', 'mover_pedido', 'baixar_pedido',
-  'dividir_pedido', 'dividir_por_previsao', 'salvar_etapas'];
+  'dividir_pedido', 'dividir_por_previsao', 'salvar_etapas', 'nova_demanda'];
 var ETAPAS_PADRAO = [
   { id: 'a_pedir', nome: 'A pedir', ordem: 1 },
   { id: 'solicitado', nome: 'Solicitado', ordem: 2 },
@@ -534,6 +537,8 @@ var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
 var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
 var ERRO_VERSAO_PEDIDO = 'Alguém alterou este pedido agora há pouco.';
 var ERRO_ETAPA_PELO_CARD = 'Para mudar a etapa, arraste o card.';
+var NOMES_CAIXA = { COSTURA: 'Costura', ACABAMENTO: 'Acabamento' };
+var MAX_ITENS_DEMANDA = 30;
 var CAMPOS_PEDIDO = ['origem', 'quem', 'local', 'previsao', 'responsavel'];
 var NOMES_CAMPO = { origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
 
@@ -842,6 +847,31 @@ function validarAcaoPedido(corpo) {
   var r;
   var i;
 
+  if (tipo === 'nova_demanda') {
+    acao.os = texto(corpo.os);
+    if (!acao.os) return erroAcao(400, 'Informe a OS.');
+    acao.caixa = semAcento(corpo.caixa);
+    if (!NOMES_CAIXA[acao.caixa]) return erroAcao(400, 'Escolha o tipo de caixa.');
+    if (!Array.isArray(corpo.itens) || !corpo.itens.length) return erroAcao(400, 'Informe ao menos um item.');
+    if (corpo.itens.length > MAX_ITENS_DEMANDA) return erroAcao(400, 'No máximo 30 itens por demanda.');
+    acao.itens = [];
+    for (i = 0; i < corpo.itens.length; i++) {
+      var d = corpo.itens[i] || {};
+      var rn = textoCurto(d.nome, 100, 'Nome do item muito longo.');
+      if (!rn.ok) return erroAcao(400, rn.erro);
+      if (!rn.valor) return erroAcao(400, 'Informe o nome do item.');
+      var rc = textoCurto(d.cor, 40, 'Cor muito longa.');
+      if (!rc.ok) return erroAcao(400, rc.erro);
+      var qn = qtdValida(d.qtd);
+      if (qn === null) return erroAcao(400, 'Informe uma quantidade maior que zero');
+      var ru = textoCurto(d.un, 10, 'Unidade muito longa.');
+      if (!ru.ok) return erroAcao(400, ru.erro);
+      if (!ru.valor) return erroAcao(400, 'Informe a unidade do item.');
+      acao.itens.push({ nome: rn.valor, cor: rc.valor, qtd: qn, un: ru.valor });
+    }
+    return { ok: true, acao: acao };
+  }
+
   if (tipo === 'salvar_etapas') {
     if (!Array.isArray(corpo.etapas)) return erroAcao(400, 'Etapas inválidas.');
     var vistosNome = {};
@@ -1046,6 +1076,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var tipo = acao.tipo;
 
   if (tipo === 'salvar_etapas') return aplicarEtapas(acao, linhas, ctx, lista);
+  if (tipo === 'nova_demanda') return aplicarNovaDemanda(acao, linhas, ctx);
 
   if (tipo === 'gerar_pedido') {
     var deals = acao.itens.map(function (i) { return i.dealId; });
@@ -1423,6 +1454,55 @@ function aplicarEtapas(acao, linhas, ctx, lista) {
   return { ok: true, operacoes: operacoes, historicos: [], versao: ctx.agora };
 }
 
+// 'aaaa-mm-dd hh:mm' no horario de Brasilia (como o Sync Faltantes grava data_separacao).
+function dataHoraBrasilia(iso) {
+  var d = new Date(new Date(iso).getTime() - 3 * 3600 * 1000).toISOString();
+  return d.slice(0, 10) + ' ' + d.slice(11, 16);
+}
+
+// nova_demanda: falta descoberta depois que a caixa saiu. A caixa e achada na CAIXAS
+// GANHAS pela OS + tipo; sem caixa, ou caixa que ainda nao saiu, recusa sem gravar nada.
+// Os itens entram na FALTANTES com ciclo e origem POS_SAIDA e id <deal>|POS_SAIDA|<uuid>:
+// o Sync Faltantes so mexe nas linhas do mesmo deal com ciclo PEDIDO/CORTE e casa por id.
+function aplicarNovaDemanda(acao, linhas, ctx) {
+  var rotulo = 'OS ' + acao.os + ' (' + NOMES_CAIXA[acao.caixa] + ')';
+  var ganhas = (linhas.ganhas || []).filter(function (g) {
+    return g && texto(g.os) === acao.os && tipoDaSecao(g.caixa) === acao.caixa && texto(g.deal_id) !== '';
+  });
+  var deals = {};
+  ganhas.forEach(function (g) { deals[texto(g.deal_id)] = 1; });
+  if (Object.keys(deals).length > 1) return erroAcao(409, 'Mais de uma caixa da ' + rotulo + ' saiu. Fale com o PCP.');
+  if (!ganhas.length) {
+    var noAlmox = (linhas.faltantes || []).some(function (l) {
+      return l && texto(l.os) === acao.os && tipoDaSecao(l.secao) === acao.caixa;
+    });
+    return noAlmox ? erroAcao(409, 'A caixa da ' + rotulo + ' ainda não saiu.') : erroAcao(404, 'Caixa da ' + rotulo + ' não encontrada.');
+  }
+  var g = ganhas[0];
+  var dealId = texto(g.deal_id);
+  if (!dealEditavel(dealId)) return erroAcao(403, ERRO_NAO_EDITAVEL);
+  var agora = ctx.agora;
+  var quando = dataHoraBrasilia(agora);
+  var os = texto(g.os);
+  var operacoes = acao.itens.map(function (it) {
+    return op('FALTANTES', 'append', 'id', {
+      id: dealId + '|POS_SAIDA|' + ctx.gerarId(), os: os, ciclo: 'POS_SAIDA', origem: 'POS_SAIDA',
+      referencia: texto(g.referencia), descricao_peca: texto(g.descricao_peca), cliente: texto(g.cliente), secao: acao.caixa,
+      descricao_item: it.nome, nome_cor: it.cor, unidade: it.un, qtd_falta: it.qtd, qtd_baixada: 0, status: 'ABERTO',
+      data_separacao: quando, deal_id: dealId, atualizado_em_app: agora
+    });
+  });
+  var partes = acao.itens.map(function (it) {
+    return formatarQtd(it.qtd) + ' ' + it.un + ' de ' + it.nome + (it.cor ? ' ' + it.cor : '');
+  });
+  return {
+    ok: true,
+    operacoes: operacoes,
+    historicos: [linhaHistorico(ctx, dealId, os, '', acao.tipo, ctx.usuario + ' criou demanda pós-saída: ' + partes.join('; '))],
+    versao: agora
+  };
+}
+
 // ----- src/envioPloomes.js -----
 // ===== src/envioPloomes.js =====
 // Regras do workflow "Enviar ao Ploomes": quais linhas do HISTORICO_APP
@@ -1635,6 +1715,7 @@ var DESTINOS_ESCRITA = [
   { aba: 'ETAPAS_PEDIDO', operacao: 'appendOrUpdate', chave: 'id' },
   { aba: 'ETAPAS_PEDIDO', operacao: 'update', chave: 'id' },
   { aba: 'FALTANTES', operacao: 'update', chave: 'id' },
+  { aba: 'FALTANTES', operacao: 'append', chave: 'id' },  // nova demanda pos-saida
   { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
