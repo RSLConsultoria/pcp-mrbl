@@ -117,10 +117,17 @@ test('soltar o card em Resolvido pede confirmação e envia mover_pedido (a baix
   await card.dragTo(resolvido);
   const confirmacao = resolvido.getByRole('group', { name: 'Confirmar Resolvido do PED-0042' });
   await expect(confirmacao).toContainText('Mover para Resolvido dá baixa de 1 item em 1 OS. A baixa não pode ser desfeita.');
-  await expect(confirmacao.getByRole('button', { name: 'Confirmar' })).toBeFocused();
+  // a baixa não volta: o foco começa em Cancelar, para um Enter distraído não confirmar
+  await expect(confirmacao.getByRole('button', { name: 'Cancelar' })).toBeFocused();
   await expect(confirmacao.getByRole('button', { name: 'Confirmar' })).toHaveClass(/botao--signal/);
   await confirmacao.getByRole('button', { name: 'Cancelar' }).click();
   await expect(confirmacao).toHaveCount(0);
+  // Esc também cancela
+  await card.dragTo(resolvido);
+  await expect(confirmacao).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(confirmacao).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('button', { name: 'Pedido PED-0042' })).toBeVisible();
   expect(mock.bodies).toHaveLength(0);
   await card.dragTo(resolvido);
   await confirmacao.getByRole('button', { name: 'Confirmar' }).click();
@@ -143,6 +150,12 @@ test('painel: escolher Resolvido na Etapa e salvar pede a mesma confirmação', 
   const confirmacao = painel.getByRole('group', { name: 'Confirmar Resolvido do PED-0042' });
   await expect(confirmacao).toContainText('Mover para Resolvido dá baixa de 1 item em 1 OS. A baixa não pode ser desfeita.');
   expect(mock.bodies).toHaveLength(0);
+  // Esc cancela só a confirmação; o painel continua aberto
+  await expect(confirmacao.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirmacao).toHaveCount(0);
+  await expect(painel).toBeVisible();
+  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
   await confirmacao.getByRole('button', { name: 'Confirmar' }).click();
   await expect(aviso(page, 'PED-0042 movido para Resolvido · baixa registrada nas caixas')).toBeVisible();
   expect(mock.bodies).toEqual([{ tipo: 'editar_pedido', pedidoId: 'PED-0042', versao: V_PED, campos: { etapa: 'entregue' } }]);
