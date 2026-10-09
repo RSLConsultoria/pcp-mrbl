@@ -191,37 +191,8 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     return caixa;
   }
 
-  var caixas = ordem.map(function (dealId) {
-    var linhas = grupos[dealId];
-    var temCorte = linhas.some(function (l) { return texto(l.ciclo).toUpperCase() === 'CORTE'; });
-    var itens = [];
-    linhas.forEach(function (l) {
-      var it = itemDaLinha(l, ano);
-      var ehCorte = texto(l.ciclo).toUpperCase() === 'CORTE';
-      // item pos-saida fica sempre (o sync do corte nao o conhece)
-      if (!temCorte || ehCorte || it.posSaida || itemEstaAberto(it)) itens.push(it);
-    });
-    var p = linhas[0];
-    var resp = '';
-    linhas.forEach(function (l) { if (!resp) resp = texto(l.responsavel); });
-    return marcarSaida(marcarExtras({
-      id: dealId,
-      dealId: dealId,
-      os: texto(p.os),
-      ciclo: temCorte ? 'CORTE' : 'PEDIDO',
-      tipo: tipoDaSecao(p.secao),
-      referencia: texto(p.referencia),
-      peca: texto(p.descricao_peca),
-      cliente: texto(p.cliente),
-      responsavel: resp,
-      registradoEm: menorData(linhas.map(function (l) { return dataISO(l.data_separacao, ano); })),
-      itens: itens
-    }, linhas), ganhasPorDeal[dealId]);
-  });
-
-  Object.keys(ganhasPorDeal).forEach(function (dealId) {
-    if (grupos[dealId]) return;
-    var g = ganhasPorDeal[dealId];
+  // Itens da falta registrada em texto na CAIXAS GANHAS (ou o item generico).
+  function itensDaGanha(dealId, g) {
     var comFalta = semAcento(g.saiu_com_falta) === 'SIM';
     var itensGanha = comFalta ? itensDoTexto(dealId, g.itens_faltando) : [];
     if (comFalta && itensGanha.length === 0) {
@@ -232,6 +203,47 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
         resolvidoEm: '', versao: '', editavel: false, posSaida: false
       });
     }
+    return itensGanha;
+  }
+
+  var caixas = ordem.map(function (dealId) {
+    var linhas = grupos[dealId];
+    // Caixa conhecida so pela GANHAS que depois recebeu demanda pos-saida: o texto da falta
+    // original continua valendo e a data/ciclo vem da GANHAS.
+    var gTexto = ganhasPorDeal[dealId];
+    var soPosSaida = !!gTexto && linhas.every(function (l) { return semAcento(l.origem) === 'POS_SAIDA'; });
+    if (!soPosSaida) gTexto = null;
+    var temCorte = linhas.some(function (l) { return texto(l.ciclo).toUpperCase() === 'CORTE'; });
+    var itens = [];
+    linhas.forEach(function (l) {
+      var it = itemDaLinha(l, ano);
+      var ehCorte = texto(l.ciclo).toUpperCase() === 'CORTE';
+      // item pos-saida fica sempre (o sync do corte nao o conhece)
+      if (!temCorte || ehCorte || it.posSaida || itemEstaAberto(it)) itens.push(it);
+    });
+    if (gTexto) itens = itensDaGanha(dealId, gTexto).concat(itens);
+    var p = linhas[0];
+    var resp = '';
+    linhas.forEach(function (l) { if (!resp) resp = texto(l.responsavel); });
+    return marcarSaida(marcarExtras({
+      id: dealId,
+      dealId: dealId,
+      os: texto(p.os),
+      ciclo: gTexto ? (texto(gTexto.conferido_em).toUpperCase() === 'CORTE' ? 'CORTE' : 'PEDIDO') : (temCorte ? 'CORTE' : 'PEDIDO'),
+      tipo: tipoDaSecao(p.secao),
+      referencia: texto(p.referencia),
+      peca: texto(p.descricao_peca),
+      cliente: texto(p.cliente),
+      responsavel: resp,
+      registradoEm: gTexto ? dataISO(gTexto.data_ganho, ano) : menorData(linhas.map(function (l) { return dataISO(l.data_separacao, ano); })),
+      itens: itens
+    }, linhas), ganhasPorDeal[dealId]);
+  });
+
+  Object.keys(ganhasPorDeal).forEach(function (dealId) {
+    if (grupos[dealId]) return;
+    var g = ganhasPorDeal[dealId];
+    var itensGanha = itensDaGanha(dealId, g);
     caixas.push(marcarSaida(marcarExtras({
       id: dealId,
       dealId: dealId,

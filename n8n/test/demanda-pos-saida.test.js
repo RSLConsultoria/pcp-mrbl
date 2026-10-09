@@ -60,6 +60,9 @@ test('nova_demanda: validacoes do corpo, iguais no pre e no processar', () => {
     [{ itens: [{ nome: 'X', qtd: 0, un: 'UN' }] }, 'Informe uma quantidade maior que zero'],
     [{ itens: [{ nome: 'X', qtd: 1, un: '' }] }, 'Informe a unidade do item.'],
     [{ itens: [{ nome: 'X'.repeat(101), qtd: 1, un: 'UN' }] }, 'Nome do item muito longo.'],
+    [{ itens: [{ nome: 'X', cor: 'c'.repeat(41), qtd: 1, un: 'UN' }] }, 'Cor muito longa.'],
+    [{ itens: [{ nome: 'X', qtd: 1, un: 'U'.repeat(11) }] }, 'Unidade muito longa.'],
+    [{ itens: [null] }, 'Informe o nome do item.'],
     [{ itens: Array.from({ length: 31 }, () => ({ nome: 'X', qtd: 1, un: 'UN' })) }, 'No máximo 30 itens por demanda.']
   ];
   for (const [extra, erro] of casos) {
@@ -93,4 +96,19 @@ test('board: item com origem POS_SAIDA vem com posSaida e fica na caixa mesmo re
   assert.deepEqual(cx.itens.map((i) => [i.nome, i.posSaida]), [['TECIDO', false], ['BOTÃO 12MM', true]]);
   assert.equal(cx.saiu, true);
   assert.equal(cx.saiuComFalta, false);
+});
+
+test('board: caixa so da GANHAS com falta em texto mantem os itens do texto e a data da GANHAS depois da demanda pos-saida', () => {
+  const g = Object.assign({}, GANHA, { saiu_com_falta: 'SIM', itens_faltando: 'FITA (falta 3 MT)', conferido_em: 'CORTE', data_ganho: '2026-10-01' });
+  const linha = acao(CORPO, linhas({ ganhas: [g] })).operacoes[0].linha;
+  const cx = limpo(ctx.montarRespostaBoard({}, [linha], [g], T0, {})).body.caixas[0];
+  assert.deepEqual(cx.itens.map((i) => [i.nome, i.posSaida]), [['FITA', false], ['BOTÃO 12MM', true]]);
+  assert.equal(cx.registradoEm, '2026-10-01');
+  assert.equal(cx.ciclo, 'CORTE');
+  const g2 = Object.assign({}, g, { itens_faltando: '' });
+  const cx2 = limpo(ctx.montarRespostaBoard({}, [linha], [g2], T0, {})).body.caixas[0];
+  assert.deepEqual(cx2.itens.map((i) => i.nome), ['Itens não detalhados na planilha', 'BOTÃO 12MM']);
+  // demanda sobre caixa que saiu sem falta: so o item novo
+  const g3 = Object.assign({}, g, { saiu_com_falta: 'NAO' });
+  assert.deepEqual(limpo(ctx.montarRespostaBoard({}, [linha], [g3], T0, {})).body.caixas[0].itens.map((i) => i.nome), ['BOTÃO 12MM']);
 });
