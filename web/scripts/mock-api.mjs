@@ -190,7 +190,9 @@ function montarBoard() {
       })),
       itens: c.itens.map((i) => ({
         ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
-        editavel: editavel(c.dealId) && aberto(i),
+        // como o servidor (n8n/src/montarCaixas.js): todo item da FALTANTES é editável; quem
+        // decide se a caixa aceita edição é dealsEditaveis, e o site trata o item resolvido
+        editavel: true,
         pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((p) => p.id),
         pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
       }))

@@ -198,3 +198,20 @@ test('pedido em etapa que saiu do quadro: escolher a primeira etapa no painel co
   await painel.getByRole('button', { name: 'Salvar alterações' }).click();
   await ficaNaColuna(page, api, 'PED-0005', 'A pedir', 'Outra etapa');
 });
+
+// Como o servidor (n8n/src/montarCaixas.js): só item de caixa ganha (fora da FALTANTES) vem
+// com editavel false. Item resolvido e item de caixa somente leitura são da FALTANTES.
+test('mock: item resolvido e caixa somente leitura não dizem "lido da planilha de caixas ganhas"', async ({ page, api }) => {
+  void api;
+  await entrar(page, '');
+  await page.getByRole('button', { name: 'OS 90001' }).click();
+  const p1 = page.getByRole('complementary', { name: 'Caixa da OS 90001' });
+  const etiqueta = p1.getByRole('listitem').filter({ hasText: 'ETIQUETA COMPOSICAO' }).filter({ hasNotText: 'deu baixa' });
+  await expect(etiqueta).toContainText('Item resolvido.');
+  await expect(p1.getByText(/lido da planilha de caixas ganhas/)).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'OS 90002' }).click();
+  const p2 = page.getByRole('complementary', { name: 'Caixa da OS 90002' });
+  await expect(p2.getByText('Edição liberada em breve para esta caixa.')).toBeVisible();
+  await expect(p2.getByText(/lido da planilha de caixas ganhas/)).toHaveCount(0);
+});
