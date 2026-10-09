@@ -17,6 +17,7 @@ var ETAPAS_PADRAO = [
 var ORIGENS = { FORNECEDOR: 'Fornecedor', CLIENTE: 'Cliente' };
 var LOCAIS = { BRAGANCA: 'Bragança', SAO_PAULO: 'São Paulo', OFICINA: 'Oficina', CLIENTE: 'Cliente' };
 var ERRO_VERSAO = 'Alguém alterou esta caixa agora há pouco.';
+var ERRO_VERSAO_PEDIDO = 'Alguém alterou este pedido agora há pouco.';
 var CAMPOS_PEDIDO = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'];
 var NOMES_CAMPO = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
 
@@ -564,7 +565,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var dealsP = p.itens.map(function (x) { return texto(x.deal_id); });
   if (primeiroNaoEditavel(dealsP) !== null) return erroAcao(403, ERRO_NAO_EDITAVEL);
   if (!pedidoAberto(p)) return erroAcao(409, 'Pedido finalizado não pode ser alterado.');
-  if (acao.versao !== texto(p.linha.atualizado_em)) return erroAcao(409, ERRO_VERSAO);
+  if (acao.versao !== texto(p.linha.atualizado_em)) return erroAcao(409, ERRO_VERSAO_PEDIDO);
   var grupos = porOS(p.itens, function (x) { return texto(x.deal_id); }, function (x) { return texto(x.os); });
   function existeEtapa(id) { return etapas.some(function (e) { return e.id === id; }); }
 

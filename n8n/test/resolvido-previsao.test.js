@@ -248,7 +248,7 @@ test('dividir_por_previsao: item sem data vai por ultimo; validacoes', () => {
   assert.deepEqual(acao({ tipo: 'dividir_por_previsao', pedidoId: 'PED-0044', versao: 'P1' }),
     { status: 400, body: { erro: 'Os itens têm a mesma previsão.' } });
   assert.deepEqual(acao({ tipo: 'dividir_por_previsao', pedidoId: 'PED-0044', versao: 'X' }, TRES()),
-    { status: 409, body: { erro: 'Alguém alterou esta caixa agora há pouco.' } });
+    { status: 409, body: { erro: 'Alguém alterou este pedido agora há pouco.' } });
   assert.deepEqual(acao({ tipo: 'dividir_por_previsao', versao: 'P1' }), { status: 400, body: { erro: 'Pedido não informado.' } });
   assert.deepEqual(acao({ tipo: 'dividir_por_previsao', pedidoId: 'PED-0044', versao: 'P1' }, linhas({ pedidos: [ped({ baixado_em: 'X' })] })),
     { status: 409, body: { erro: 'Pedido finalizado não pode ser alterado.' } });

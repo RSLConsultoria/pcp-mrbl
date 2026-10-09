@@ -132,8 +132,9 @@ const erroQuemVazio = (origem) => (origem === 'CLIENTE' ? 'Informe o cliente.' :
 function exigirEditavel(dealIds) {
   for (const d of dealIds) if (!editavel(d)) throw new Erro(403, 'Edição liberada em breve para esta caixa.');
 }
-function conferirVersao(atual, enviada) {
-  if ((atual ?? '') !== (enviada ?? '')) throw new Erro(409, 'Alguém alterou esta caixa agora há pouco.');
+// alvo: 'esta caixa' (caixa e item) ou 'este pedido', como no servidor (n8n/src/pedidos.js).
+function conferirVersao(atual, enviada, alvo = 'esta caixa') {
+  if ((atual ?? '') !== (enviada ?? '')) throw new Erro(409, `Alguém alterou ${alvo} agora há pouco.`);
 }
 function validarData(v) {
   if (v === '' || v === undefined) return;
@@ -290,7 +291,7 @@ function gerarPedido(c, usuario) {
 function editarPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoEditavel(p);
-  conferirVersao(p.versao, c.versao);
+  conferirVersao(p.versao, c.versao, 'este pedido');
   const campos = c.campos ?? {};
   const porDeal = new Map();
   const add = (d, t) => porDeal.set(d, [...(porDeal.get(d) ?? []), t]);
@@ -355,7 +356,7 @@ function editarPedido(c, usuario) {
 function moverPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoEditavel(p);
-  conferirVersao(p.versao, c.versao);
+  conferirVersao(p.versao, c.versao, 'este pedido');
   if (!estado.etapas.some((e) => e.id === c.etapa)) throw bad('Etapa inválida.');
   if (p.etapa === c.etapa) throw bad('O pedido já está nessa etapa.');
   p.etapa = c.etapa; p.versao = agoraIso();
@@ -385,7 +386,7 @@ const textoBaixa = (partes) => (partes?.length ? ` e deu baixa: ${partes.join(';
 function baixarPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoEditavel(p);
-  conferirVersao(p.versao, c.versao);
+  conferirVersao(p.versao, c.versao, 'este pedido');
   if (p.etapa !== ultimaEtapa()) throw bad('Dar baixa só na última etapa.');
   const partes = baixarItens(itensValidos(p));
   p.baixadoEm = diaIso(); p.versao = agoraIso();
@@ -397,7 +398,7 @@ function baixarPedido(c, usuario) {
 function dividirPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoEditavel(p);
-  conferirVersao(p.versao, c.versao);
+  conferirVersao(p.versao, c.versao, 'este pedido');
   const etapa = estado.etapas.find((e) => e.id === c.etapa);
   if (!etapa) throw bad('Etapa inválida.');
   if (!Array.isArray(c.itens) || c.itens.length === 0) throw bad('Marque ao menos um item que chegou.');
@@ -444,7 +445,7 @@ function dividirPedido(c, usuario) {
 function dividirPorPrevisao(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
   pedidoEditavel(p);
-  conferirVersao(p.versao, c.versao);
+  conferirVersao(p.versao, c.versao, 'este pedido');
   const datas = previsoesDistintas(p);
   if (datas.length < 2) throw bad('Os itens têm a mesma previsão.');
   const raiz = raizDoPedido(p.id);

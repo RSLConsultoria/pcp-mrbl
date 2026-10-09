@@ -112,7 +112,7 @@ test('dividir_pedido: numero do filho = maior filho + 1; dividir um filho cria o
 
 test('dividir_pedido: validacoes', () => {
   assert.deepEqual(div({ pedidoId: 'PED-0099' }), { status: 404, body: { erro: 'Pedido não encontrado.' } });
-  assert.deepEqual(div({ versao: 'VELHA' }), { status: 409, body: { erro: 'Alguém alterou esta caixa agora há pouco.' } });
+  assert.deepEqual(div({ versao: 'VELHA' }), { status: 409, body: { erro: 'Alguém alterou este pedido agora há pouco.' } });
   assert.deepEqual(div({}, linhas({ pedidos: [ped({ baixado_em: 'X' })] })), { status: 409, body: { erro: 'Pedido finalizado não pode ser alterado.' } });
   assert.deepEqual(div({ etapa: 'nao_existe' }), { status: 400, body: { erro: 'Etapa inválida.' } });
   assert.deepEqual(div({ itens: [] }), { status: 400, body: { erro: 'Marque ao menos um item que chegou.' } });

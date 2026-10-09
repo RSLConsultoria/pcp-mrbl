@@ -184,7 +184,7 @@ test('mover_pedido: update da etapa e historico por OS', () => {
 
 test('mover_pedido: 409 versao, 404, etapa invalida, mesma etapa, finalizado', () => {
   const m = (o, lin) => acao(Object.assign({ tipo: 'mover_pedido', pedidoId: 'PED-0043', versao: 'P1', etapa: 'entregue' }, o), lin || LIN_P());
-  assert.deepEqual(m({ versao: 'VELHA' }), { status: 409, body: { erro: 'Alguém alterou esta caixa agora há pouco.' } });
+  assert.deepEqual(m({ versao: 'VELHA' }), { status: 409, body: { erro: 'Alguém alterou este pedido agora há pouco.' } });
   assert.deepEqual(m({ pedidoId: 'PED-0099' }), { status: 404, body: { erro: 'Pedido não encontrado.' } });
   assert.equal(m({ pedidoId: 'PED-0000' }).status, 404);
   assert.equal(m({ etapa: 'nao_existe' }).body.erro, 'Etapa inválida.');
