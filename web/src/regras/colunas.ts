@@ -34,3 +34,8 @@ export function visivelNoQuadro(c: Caixa, hoje: Date): boolean {
   const d = diasEntre(c.saiuEm, hoje);
   return d === null || d <= DIAS_SAIU_SEM_VISIVEL;
 }
+
+// No Ploomes não mostra a demanda pós-saída: a caixa fica como estava antes dela.
+export function semPosSaida(c: Caixa): Caixa {
+  return c.itens.some((i) => i.posSaida) ? { ...c, itens: c.itens.filter((i) => !i.posSaida) } : c;
+}

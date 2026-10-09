@@ -640,3 +640,60 @@ test('histórico do pedido: a mesma ação em 2 OS aparece uma vez, com as OS', 
   await expect(linhas.first()).toContainText('Lucca moveu PED-0042 para Solicitado');
   await expect(linhas.first()).toContainText('OS 90001, 90002');
 });
+
+test('Nova demanda: cria itens pós-saída na caixa que saiu; aparecem em Faltas sem pedido e em Saídas', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos', {
+    resposta: (corpo) => corpo.tipo === 'nova_demanda' ? { status: 200, json: { ok: true, versao: 'v2', historico: null, historicos: [] } } : undefined,
+    aoAgir: (b) => {
+      const c = b.caixas[2];
+      c.itens.push({ ...c.itens[0], id: '700003|POS_SAIDA|u1', nome: 'BOTÃO 12MM', cor: 'azul', un: 'UN', falta: 2, resta: 2, posSaida: true } as never);
+    }
+  });
+  await page.getByRole('button', { name: 'Nova demanda' }).click();
+  const janela = page.getByRole('dialog', { name: 'Nova demanda' });
+  await janela.getByRole('textbox', { name: 'OS', exact: true }).fill('90001');
+  await janela.getByLabel('Tipo de caixa').selectOption('ACABAMENTO');
+  await expect(janela.getByRole('alert')).toHaveText('A caixa da OS 90001 (Acabamento) ainda não saiu.');
+  await janela.getByRole('textbox', { name: 'OS', exact: true }).fill('90003');
+  await janela.getByLabel('Tipo de caixa').selectOption('COSTURA');
+  await expect(janela.getByRole('alert')).toHaveCount(0);
+  await janela.getByRole('textbox', { name: 'Item 1', exact: true }).fill('BOTÃO 12MM');
+  await janela.getByLabel('Cor do item 1 (opcional)').fill('azul');
+  await janela.getByLabel('Quantidade do item 1').fill('2');
+  await janela.getByLabel('Unidade do item 1').fill('UN');
+  await janela.getByRole('button', { name: 'Criar demanda' }).click();
+  await expect(janela).toHaveCount(0);
+  await expect(aviso(page, 'Demanda pós-saída criada · 1 item na OS 90003')).toBeVisible();
+  expect(mock.bodies).toEqual([{ tipo: 'nova_demanda', os: '90003', caixa: 'COSTURA', itens: [{ nome: 'BOTÃO 12MM', cor: 'azul', qtd: 2, un: 'UN' }] }]);
+  const faltas = page.getByRole('complementary', { name: 'Faltas sem pedido' });
+  await expect(faltas.getByRole('checkbox', { name: /BOTÃO 12MM/ })).toBeVisible();
+  await expect(faltas.locator('.selo-pos')).toHaveText('pós-saída');
+  await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Saídas com falta' }).click();
+  await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toContainText('BOTÃO 12MM');
+});
+
+test('Nova demanda: sem item não envia e mostra o motivo', async ({ page }) => {
+  const mock = await preparar(page, '#pedidos');
+  await page.getByRole('button', { name: 'Nova demanda' }).click();
+  const janela = page.getByRole('dialog', { name: 'Nova demanda' });
+  await janela.getByRole('textbox', { name: 'OS', exact: true }).fill('90003');
+  await janela.getByLabel('Tipo de caixa').selectOption('COSTURA');
+  await janela.getByRole('button', { name: 'Criar demanda' }).click();
+  await expect(janela).toContainText('Informe ao menos um item.');
+  expect(mock.bodies).toHaveLength(0);
+});
+
+test('No Ploomes não mostra a demanda pós-saída; Saídas mostra a caixa que saiu sem falta', async ({ page }) => {
+  await preparar(page, '', {
+    ajustar: (b) => {
+      const c = b.caixas[2] as Corpo & { itens: Corpo[] };
+      c.saiuComFalta = false;
+      c.itens = [{ ...c.itens[0], id: '700003|POS_SAIDA|u1', nome: 'BOTÃO 12MM', posSaida: true }];
+    }
+  });
+  const card = page.getByRole('region', { name: 'Saiu sem faltas' }).getByRole('button', { name: 'OS 90003' });
+  await expect(card).toBeVisible();
+  await expect(card).not.toContainText('BOTÃO 12MM');
+  await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Saídas com falta' }).click();
+  await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toContainText('BOTÃO 12MM');
+});

@@ -81,6 +81,10 @@ export function mensagemSucesso(
       const n = extra.partes ?? 0;
       return `${acao.pedidoId} dividido por previsão${n > 0 ? ` · ${n} ${n === 1 ? 'parte' : 'partes'}` : ''}`;
     }
+    case 'nova_demanda': {
+      const n = acao.itens.length;
+      return `Demanda pós-saída criada · ${n} ${n === 1 ? 'item' : 'itens'} na OS ${acao.os}`;
+    }
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
   }
@@ -133,6 +137,7 @@ export function chaveDaAcao(acao: Acao): string {
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
   if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';
   if (acao.tipo === 'salvar_etapas') return 'etapas';
+  if (acao.tipo === 'nova_demanda') return `demanda:${acao.os}:${acao.caixa}`;
   return `caixa:${acao.dealId}`;
 }
 

@@ -81,7 +81,10 @@ export function FaltasSemPedido({ grupos, selecao, marcados, temBusca, recolhive
                     <li key={i.id}>
                       <label className="grupo__item">
                         <input type="checkbox" checked={selecao.has(k)} onChange={(e) => onMarcar([k], e.target.checked)} />
-                        <span className="grupo__nome">{i.nome}{i.cor && <span className="card__item-cor"> {i.cor}</span>}</span>
+                        <span className="grupo__nome">
+                          {i.nome}{i.cor && <span className="card__item-cor"> {i.cor}</span>}
+                          {i.posSaida && <span className="selo-pos" title="Falta registrada depois que a caixa saiu">pós-saída</span>}
+                        </span>
                         <span className="grupo__qtd">{formatarQtd(i.resta, i.un, i.restaG)}</span>
                       </label>
                     </li>

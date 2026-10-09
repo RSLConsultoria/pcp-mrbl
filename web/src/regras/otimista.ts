@@ -132,6 +132,18 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comCaixa(board, acao.dealId, (c) => ({ ...c, previsao: acao.valor }));
     case 'obs_caixa':
       return comCaixa(board, acao.dealId, (c) => ({ ...c, observacao: normalizarTexto(acao.valor) }));
+    case 'nova_demanda': {
+      // Itens novos na caixa que saiu, com id provisório: ficam fora de Faltas sem pedido
+      // (editavel false) até a recarga trazer o id gravado.
+      const c = board.caixas.find((x) => x.saiu && x.os === acao.os && x.tipo === acao.caixa);
+      if (!c) return board;
+      const novos: Item[] = acao.itens.map((x, k) => ({
+        id: `${PREFIXO_NOVO}${ctx.n}.${k}`, nome: x.nome, cor: x.cor, un: x.un, necessaria: null, separada: null,
+        falta: x.qtd, faltaG: null, status: 'ABERTO', baixada: 0, resta: x.qtd, restaG: null, obsAlmox: '', obsPcp: '',
+        previsao: '', resolvidoEm: '', versao: '', editavel: false, pedidoId: '', pedidoIds: [], posSaida: true
+      }));
+      return comCaixa(board, c.dealId, (y) => ({ ...y, itens: [...y.itens, ...novos] }));
+    }
     case 'salvar_etapas':
       return {
         ...board,

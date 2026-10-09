@@ -96,9 +96,9 @@ export function partesDaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]
   return presentes.map((coluna, k) => ({ coluna, indice: k + 1, total: presentes.length, itens: porColuna.get(coluna)! }));
 }
 
-// Caixa que aparece em Saídas: saiu com falta.
+// Caixa que aparece em Saídas: saiu com falta, ou saiu e ganhou demanda pós-saída.
 export function saiuComFalta(c: Caixa): boolean {
-  return c.saiu && c.saiuComFalta;
+  return c.saiu && (c.saiuComFalta || c.itens.some((i) => i.posSaida));
 }
 
 // A data mais recente entre a saída, o último histórico, a última baixa e a conclusão dos

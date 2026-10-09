@@ -14,10 +14,11 @@ interface Props {
   podeEditarEtapas: boolean; // só ADM
   onEtapas: () => void;
   onGerar: () => void;
+  onNovaDemanda: () => void;
 }
 
 // Lado direito da barra em Solicitações de faltas.
-export function AcoesPedidos({ filtro, onFiltro, selecionados, podeEditarEtapas, onEtapas, onGerar }: Props) {
+export function AcoesPedidos({ filtro, onFiltro, selecionados, podeEditarEtapas, onEtapas, onGerar, onNovaDemanda }: Props) {
   return (
     <>
       <div className="segmentado" role="group" aria-label="Mostrar pedidos">
@@ -30,6 +31,10 @@ export function AcoesPedidos({ filtro, onFiltro, selecionados, podeEditarEtapas,
           <Icone nome="config" tamanho={15} />Etapas do quadro
         </button>
       )}
+      <button type="button" className="botao botao--contorno" onClick={onNovaDemanda}
+        title="Falta descoberta depois que a caixa saiu do almoxarifado">
+        Nova demanda
+      </button>
       <button type="button" className="botao botao--signal" disabled={selecionados === 0} onClick={onGerar}
         title={selecionados === 0 ? 'Marque itens em Faltas sem pedido' : undefined}>
         Gerar pedido

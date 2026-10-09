@@ -7,6 +7,7 @@
 // Etapas: A pedir · Solicitado · Aguardando entrega · Enviado ao destino final (mover para ela dá a baixa
 // nas caixas) · Concluído (o destino confirmou; finaliza). Pedido com baixa só vai para Concluído.
 // PED-0001 tem itens com previsões diferentes (Dividir por previsão). PED-0004 está concluído.
+// Nova demanda: OS 90006 (Acabamento) ou 90003 (Costura) já saíram; 90001 (Acabamento) ainda não saiu (409).
 // Saídas com falta: 90003 sem pedido; 90004 dividida (A pedir pelo PED-0005 em etapa que saiu do quadro, e Solicitado pelo PED-0001); 90005 dividida (Aguardando entrega e Enviado ao destino final, PED-0003.1 com a baixa); 90006 e 90007 em Enviado ao destino final; 90008 em Concluído (tudo resolvido sem pedido).
 import http from 'node:http';
 
@@ -22,6 +23,7 @@ const RESPONSAVEIS = ['Gi', 'Fátima', 'Cesar', 'Luana', 'Lucca', 'Renata'].map(
 const ativos = (linhas) => [...new Set(linhas.filter((l) => !l.ativo || l.ativo === 'SIM').map((l) => l.nome.trim()).filter(Boolean))]
   .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 const ENVIO_PLOOMES_MS = 20_000;
+let seqDemanda = 0;
 const ATRASO_MS = Number(process.env.MOCK_ATRASO_MS) || 0;
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const agoraIso = () => new Date().toISOString();
@@ -30,7 +32,7 @@ const diaIso = (deslocDias = 0) => new Date(Date.now() + deslocDias * 86_400_000
 // ---------- estado em memória ----------
 const item = (id, nome, un, falta, extra = {}) => ({
   id, nome, cor: '', un, necessaria: falta + (extra.separada ?? 0), separada: 0, falta, faltaG: null, baixada: 0,
-  restaG: null, obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '', versao: '', status: 'ABERTO', ...extra
+  restaG: null, obsAlmox: '', obsPcp: '', previsao: '', resolvidoEm: '', versao: '', status: 'ABERTO', posSaida: false, ...extra
 });
 const caixa = (os, ciclo, tipo, peca, cliente, responsavel, itens, extra = {}) => ({
   dealId: String(700000 + (os - 90000)), os: String(os), ciclo, tipo, referencia: `REF-0${os - 90000}`, peca, cliente,
@@ -518,6 +520,33 @@ function salvarEtapas(c) {
   return { ok: true, versao: agoraIso(), historico: null, historicos: [] };
 }
 
+// Nova demanda pós-saída, como o servidor: caixa que saiu, achada pela OS e pelo tipo.
+function novaDemanda(c, usuario) {
+  const os = String(c.os ?? '').trim();
+  if (!os) throw bad('Informe a OS.');
+  if (c.caixa !== 'COSTURA' && c.caixa !== 'ACABAMENTO') throw bad('Escolha o tipo de caixa.');
+  if (!Array.isArray(c.itens) || c.itens.length === 0) throw bad('Informe ao menos um item.');
+  const rotulo = `OS ${os} (${c.caixa === 'COSTURA' ? 'Costura' : 'Acabamento'})`;
+  const doTipo = estado.caixas.filter((x) => x.os === os && x.tipo === c.caixa);
+  if (!doTipo.length) throw new Erro(404, `Caixa da ${rotulo} não encontrada.`);
+  const cx = doTipo.find((x) => x.saiu);
+  if (!cx) throw new Erro(409, `A caixa da ${rotulo} ainda não saiu.`);
+  exigirEditavel([cx.dealId]);
+  const novos = c.itens.map((i) => {
+    const nome = String(i?.nome ?? '').trim();
+    const un = String(i?.un ?? '').trim();
+    const cor = String(i?.cor ?? '').trim();
+    if (!nome) throw bad('Informe o nome do item.');
+    if (!num(i.qtd) || i.qtd <= 0) throw bad('Informe uma quantidade maior que zero');
+    if (!un) throw bad('Informe a unidade do item.');
+    return { nome, un, cor, qtd: i.qtd };
+  });
+  for (const n of novos) cx.itens.push(item(`${cx.dealId}|POS_SAIDA|${++seqDemanda}`, n.nome, n.un, n.qtd, { cor: n.cor, posSaida: true }));
+  const historicos = [];
+  registrar(cx.dealId, usuario, `${usuario} criou demanda pós-saída: ${novos.map((n) => `${fmtNum(n.qtd)} ${n.un} de ${n.nome}${n.cor ? ` ${n.cor}` : ''}`).join('; ')}`, historicos);
+  return resposta(agoraIso(), historicos);
+}
+
 function processar(corpo, usuario) {
   switch (corpo?.tipo) {
     case 'baixa': case 'previsao_item': case 'obs_item':
@@ -528,6 +557,7 @@ function processar(corpo, usuario) {
     case 'baixar_pedido': return baixarPedido(corpo, usuario);
     case 'dividir_pedido': return dividirPedido(corpo, usuario);
     case 'dividir_por_previsao': return dividirPorPrevisao(corpo, usuario);
+    case 'nova_demanda': return novaDemanda(corpo, usuario);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);

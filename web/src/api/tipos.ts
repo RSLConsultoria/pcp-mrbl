@@ -18,6 +18,7 @@ export interface Item {
   resolvidoEm: string; // 'aaaa-mm-dd' ou ''
   versao: string;
   editavel: boolean;
+  posSaida?: boolean; // falta registrada depois que a caixa saiu (Nova demanda): selo em Faltas sem pedido, fora do No Ploomes
   pedidoId: string; // primeiro pedido aberto que contém o item, ou ''
   pedidoIds: string[]; // todos os pedidos abertos com o item (o original e as partes dele)
 }
@@ -124,6 +125,7 @@ export type Acao =
   | { tipo: 'baixar_pedido'; pedidoId: string; versao: string }
   | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; itens: { itemId: string; qtd: number }[] } // a parte vai para a etapa da baixa
   | { tipo: 'dividir_por_previsao'; pedidoId: string; versao: string }
+  | { tipo: 'nova_demanda'; os: string; caixa: 'COSTURA' | 'ACABAMENTO'; itens: { nome: string; cor: string; qtd: number; un: string }[] }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
 
 export interface DadosPedido {

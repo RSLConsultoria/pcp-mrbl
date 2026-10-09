@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } fr
 import type { Board } from '../api/tipos';
 import { FaltasSemPedido } from '../componentes/pedidos/FaltasSemPedido';
 import { JanelaEtapas } from '../componentes/pedidos/JanelaEtapas';
+import { JanelaNovaDemanda } from '../componentes/pedidos/JanelaNovaDemanda';
 import { JanelaGerarPedido } from '../componentes/pedidos/JanelaGerarPedido';
 import { PainelPedido } from '../componentes/pedidos/PainelPedido';
 import { QuadroPedidos } from '../componentes/pedidos/QuadroPedidos';
@@ -10,7 +11,7 @@ import { caixaAtendeBusca } from '../regras/busca';
 import { faltasSemPedido, filtrarPedidos, type FiltroPedidos } from '../regras/pedidos';
 import { etapasOrdenadas, itensSelecionados, pedidoAtendeBusca } from '../regras/pedidosQuadro';
 
-export type JanelaPedidos = 'gerar' | 'etapas' | null;
+export type JanelaPedidos = 'gerar' | 'etapas' | 'demanda' | null;
 
 interface Props {
   board: Board;
@@ -64,6 +65,7 @@ export function Pedidos({ board, q, filtro, janela, selecao, executar, onJanela,
           })} onFechar={fecharJanela} />
       )}
       {janela === 'etapas' && <JanelaEtapas etapas={etapas} pedidos={todos} executar={executar} onFechar={fecharJanela} />}
+      {janela === 'demanda' && <JanelaNovaDemanda board={board} executar={executar} onFechar={fecharJanela} />}
     </div>
   );
 }

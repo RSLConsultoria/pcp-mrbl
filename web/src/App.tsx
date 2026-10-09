@@ -63,7 +63,8 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
       <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
         {tela === 'pedidos'
           ? <AcoesPedidos filtro={filtro} onFiltro={setFiltro} selecionados={selecionados} podeEditarEtapas={ehAdm}
-              onEtapas={() => setJanela('etapas')} onGerar={() => setJanela('gerar')} />
+              onEtapas={() => setJanela('etapas')} onGerar={() => setJanela('gerar')}
+              onNovaDemanda={() => setJanela('demanda')} />
           : <Legenda />}
       </Subnav>
       {erroDesde && <FaixaOffline desde={erroDesde} temDados={board !== null} />}

@@ -1,18 +1,20 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { Board } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { CardCaixa } from '../componentes/CardCaixa';
 import { caixaEditavelNoApp } from '../regras/edicao';
 import { PainelCaixa } from '../componentes/PainelCaixa';
 import { caixaAtendeBusca } from '../regras/busca';
-import { colunaDaCaixa, COLUNAS, visivelNoQuadro } from '../regras/colunas';
+import { colunaDaCaixa, COLUNAS, semPosSaida, visivelNoQuadro } from '../regras/colunas';
 
 interface Props { board: Board; q: string; hoje: Date; executar: Executar }
 
 export function NoPloomes({ board, q, hoje, executar }: Props) {
   const [selId, setSelId] = useState<string | null>(null);
-  const visiveis = board.caixas.filter((c) => visivelNoQuadro(c, hoje) && caixaAtendeBusca(c, q));
-  const sel = board.caixas.find((c) => c.id === selId) ?? null;
+  // A demanda pós-saída não entra no No Ploomes: a caixa fica como estava antes dela.
+  const caixas = useMemo(() => board.caixas.map(semPosSaida), [board.caixas]);
+  const visiveis = caixas.filter((c) => visivelNoQuadro(c, hoje) && caixaAtendeBusca(c, q));
+  const sel = caixas.find((c) => c.id === selId) ?? null;
   const fechar = useCallback(() => setSelId(null), []);
   return (
     <div className="quadro">
