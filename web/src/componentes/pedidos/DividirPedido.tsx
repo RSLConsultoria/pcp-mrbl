@@ -3,8 +3,8 @@ import type { Acao, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
 import {
-  entraNaUltimaEtapa, etapasParaDividir, partesPorPrevisao, previsoesDiferentes, proximoIdParte, resumoDivisao,
-  resumoDivisaoPorPrevisao, textoConfirmarResolvido, validarDivisao, type LinhaDivisao
+  entraNaEtapaDaBaixa, etapasParaDividir, partesPorPrevisao, previsoesDiferentes, proximoIdParte, resumoDivisao,
+  resumoDivisaoPorPrevisao, textoConfirmarBaixa, validarDivisao, type LinhaDivisao
 } from '../../regras/pedidosQuadro';
 import { qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { ConfirmarResolvido } from './ConfirmarResolvido';
@@ -97,7 +97,7 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
   };
   const algumMarcado = linhas.some((l) => l.chegou);
   // a parte que vai para a última etapa (Resolvido) já nasce com a baixa: pede confirmação
-  const paraUltima = entraNaUltimaEtapa(pedido.etapa, etapa, etapas);
+  const paraUltima = entraNaEtapaDaBaixa(pedido.etapa, etapa, etapas);
   const itensDaParte = pedido.itens.filter((i) => v.itens.some((x) => x.itemId === i.itemId));
 
   function confirmar() {
@@ -152,7 +152,7 @@ export function DividirPedido({ pedido, pedidos, etapas, executar }: Props) {
       )}
       {confirmando ? (
         <ConfirmarResolvido rotulo={`Confirmar ${nomeEtapa} da divisão do ${pedido.id}`}
-          texto={textoConfirmarResolvido(itensDaParte, nomeEtapa)} ocupado={false}
+          texto={textoConfirmarBaixa(itensDaParte, nomeEtapa)} ocupado={false}
           onConfirmar={confirmar} onCancelar={() => setConfirmando(false)} />
       ) : (
         <div className="acoes">

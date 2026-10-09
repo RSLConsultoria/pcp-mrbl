@@ -80,9 +80,10 @@ export interface Pedido {
   previsoesDiferentes?: boolean; // itens com previsões diferentes
   responsavel: string;
   criadoEm: string;
-  baixadoEm: string;
+  baixadoEm: string; // baixa dada nas caixas (entrou em "Enviado ao destino final"); o pedido segue aberto
+  concluidoEm?: string; // o destino confirmou o recebimento (etapa final)
   versao: string;
-  finalizado: boolean;
+  finalizado: boolean; // concluído
   itens: ItemPedido[];
   provisorio?: boolean; // só no site: pedido previsto na tela enquanto o servidor grava (regras/otimista.ts)
 }
@@ -118,7 +119,7 @@ export type Acao =
       tipo: 'editar_pedido';
       pedidoId: string;
       versao: string;
-      campos: Partial<DadosPedido & { etapa: string }>;
+      campos: Partial<DadosPedido>; // a etapa muda só arrastando (mover_pedido)
       itens?: { itemId: string; qtd: number; fornecedor: string; previsao?: string }[];
     }
   | { tipo: 'mover_pedido'; pedidoId: string; versao: string; etapa: string }

@@ -1,12 +1,11 @@
 import { useId } from 'react';
-import type { DadosPedido, EtapaPedido, LocalPedido, OrigemPedido } from '../../api/tipos';
+import type { DadosPedido, LocalPedido, OrigemPedido } from '../../api/tipos';
 import { NOME_LOCAL, opcoesComAtual, opcoesDeQuem, quemAoTrocarOrigem } from '../../regras/pedidos';
 
 // No Gerar pedido "Solicitar a" e "Local de entrega" começam vazios ("Selecionar").
 export type FormPedido = Omit<DadosPedido, 'origem' | 'local'> & {
   origem: OrigemPedido | '';
   local: LocalPedido | '';
-  etapa?: string;
 };
 
 interface Props {
@@ -15,7 +14,6 @@ interface Props {
   fornecedores: string[]; // aba FORNECEDORES
   clientes: string[]; // clientes das OSs do pedido
   responsaveis: string[]; // aba RESPONSAVEIS
-  etapas?: EtapaPedido[]; // presente só no painel do pedido
 }
 
 // Asterisco vermelho dos campos obrigatórios (o select também leva required).
@@ -28,10 +26,10 @@ function Rotulo({ para, texto, obrigatorio }: { para: string; texto: string; obr
   );
 }
 
-// Dados do pedido: etapa (no painel), solicitar a, fornecedor/cliente, local, previsão e
-// responsável. Obrigatórios (asterisco): solicitar a, fornecedor/cliente, local e
+// Dados do pedido: solicitar a, fornecedor/cliente, local, previsão e responsável. A etapa
+// muda só arrastando o card. Obrigatórios (asterisco): solicitar a, fornecedor/cliente, local e
 // responsável; vazios, os selects mostram "Selecionar".
-export function CamposPedido({ valor, onMudar, fornecedores, clientes, responsaveis, etapas }: Props) {
+export function CamposPedido({ valor, onMudar, fornecedores, clientes, responsaveis }: Props) {
   const id = useId();
   const mudar = (parcial: Partial<FormPedido>) => onMudar({ ...valor, ...parcial });
   const nomeQuem = valor.origem === 'CLIENTE' ? 'Cliente' : 'Fornecedor';
@@ -39,16 +37,6 @@ export function CamposPedido({ valor, onMudar, fornecedores, clientes, responsav
   const opcoesResp = opcoesComAtual(responsaveis, valor.responsavel);
   return (
     <div className="campos">
-      {etapas && (
-        <div className="campo">
-          <label htmlFor={`${id}-etapa`}>Etapa</label>
-          <select id={`${id}-etapa`} value={valor.etapa} onChange={(e) => mudar({ etapa: e.target.value })}>
-            {/* etapa que saiu do quadro: aparece como está, para que escolher qualquer etapa conte como mudança */}
-            {valor.etapa && !etapas.some((e) => e.id === valor.etapa) && <option value={valor.etapa} disabled>Outra etapa</option>}
-            {etapas.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-          </select>
-        </div>
-      )}
       <div className="campo">
         <Rotulo para={`${id}-origem`} texto="Solicitar a" obrigatorio />
         <select id={`${id}-origem`} value={valor.origem} required onChange={(e) => {

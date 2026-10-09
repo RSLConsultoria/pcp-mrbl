@@ -4,7 +4,7 @@ import { normalizar } from './busca';
 import { caixaEditavelNoApp } from './edicao';
 import type { EstadoEditavel, FiltroPedidos } from './pedidos';
 import { ddmm } from './datas';
-import { faltasSemPedido, previsaoDoItemMudou, ultimaEtapa } from './pedidos';
+import { etapaDaBaixa, etapaFinal, faltasSemPedido, previsaoDoItemMudou } from './pedidos';
 import { qtdComUn } from './quantidade';
 
 export const chaveItem = (dealId: string, itemId: string): string => `${dealId}|${itemId}`;
@@ -33,42 +33,63 @@ export function qtdOsDoPedido(p: Pick<Pedido, 'itens'>): number {
   return new Set(p.itens.map((i) => i.dealId)).size;
 }
 
-// A última etapa (maior ordem) é sempre a "Resolvido": entrar nela dá a baixa nas caixas.
-// O pedido finalizado (com baixa) fica nela no quadro, qualquer que seja a etapa gravada.
-export function etapaNoQuadro(p: Pick<Pedido, 'etapa' | 'finalizado'>, etapas: EtapaPedido[]): string {
-  return p.finalizado ? ultimaEtapa(etapas)?.id ?? p.etapa : p.etapa;
+// Coluna do pedido no quadro: o concluído fica na etapa final; o que já tem a baixa fica na
+// etapa da baixa (mesmo com outra etapa gravada); os outros, na etapa gravada.
+export function etapaNoQuadro(p: Pick<Pedido, 'etapa' | 'finalizado' | 'baixadoEm'>, etapas: EtapaPedido[]): string {
+  if (p.finalizado) return etapaFinal(etapas)?.id ?? p.etapa;
+  if (p.baixadoEm) return etapaDaBaixa(etapas)?.id ?? p.etapa;
+  return p.etapa;
 }
 
-// Mudar de `de` para `para` entra na última etapa (pede confirmação: a baixa não volta).
-export function entraNaUltimaEtapa(de: string, para: string, etapas: EtapaPedido[]): boolean {
-  const u = ultimaEtapa(etapas);
-  return !!u && para === u.id && de !== u.id;
+// Mudar de `de` para `para` entra na etapa da baixa (pede confirmação: a baixa não volta).
+export function entraNaEtapaDaBaixa(de: string, para: string, etapas: EtapaPedido[]): boolean {
+  const b = etapaDaBaixa(etapas);
+  return !!b && para === b.id && de !== b.id;
 }
 
-// "Mover para Resolvido dá baixa de 2 itens em 2 OS. A baixa não pode ser desfeita."
-export function textoConfirmarResolvido(itens: Pick<ItemPedido, 'dealId'>[], nomeUltima: string): string {
+// "Mover para Enviado ao destino final dá baixa de 2 itens em 2 OS. A baixa não pode ser desfeita."
+export function textoConfirmarBaixa(itens: Pick<ItemPedido, 'dealId'>[], nomeEtapa: string): string {
   const n = itens.length;
   const os = new Set(itens.map((i) => i.dealId)).size;
-  return `Mover para ${nomeUltima} dá baixa de ${n} ${n === 1 ? 'item' : 'itens'} em ${os} OS. A baixa não pode ser desfeita.`;
+  return `Mover para ${nomeEtapa} dá baixa de ${n} ${n === 1 ? 'item' : 'itens'} em ${os} OS. A baixa não pode ser desfeita.`;
 }
 
-// Pedido editável no app: não finalizado, já gravado (não provisório) e todas as OS liberadas para edição.
+// Por que o pedido não pode ir para `para` (null = pode). Com a baixa dada ele só vai para a
+// etapa final, e a final só aceita pedido com a baixa dada. Mesma regra do servidor.
+export function motivoMoverPedido(p: Pick<Pedido, 'baixadoEm'>, para: string, etapas: EtapaPedido[]): string | null {
+  const final = etapaFinal(etapas);
+  if (!final) return null;
+  if (p.baixadoEm && para !== final.id) return `Pedido com baixa só pode ir para ${final.nome}.`;
+  if (!p.baixadoEm && para === final.id) return `Mova o pedido primeiro para ${etapaDaBaixa(etapas)?.nome ?? final.nome}.`;
+  return null;
+}
+
+const osLiberadas = (board: Pick<Board, 'dealsEditaveis'>, p: Pedido): boolean =>
+  p.itens.every((i) => caixaEditavelNoApp(board, { dealId: i.dealId }));
+
+// Pedido que pode ser arrastado: não finalizado, já gravado (não provisório) e com todas as OS liberadas.
+export function pedidoArrastavel(board: Pick<Board, 'dealsEditaveis'>, p: Pedido): boolean {
+  return !p.finalizado && !p.provisorio && osLiberadas(board, p);
+}
+
+// Pedido editável no painel: arrastável e ainda sem a baixa (com a baixa, só vai para a etapa final).
 export function pedidoEditavel(board: Pick<Board, 'dealsEditaveis'>, p: Pedido): boolean {
-  return !p.finalizado && !p.provisorio && p.itens.every((i) => caixaEditavelNoApp(board, { dealId: i.dealId }));
+  return pedidoArrastavel(board, p) && !p.baixadoEm;
 }
 
 export function vazioDaEtapa(filtro: FiltroPedidos, indice: number, total: number, temBusca: boolean): string {
   if (temBusca) return 'Nenhum pedido desta etapa atende à busca.';
   const ultima = indice === total - 1;
   if (filtro === 'finalizado') return ultima ? 'Nenhum pedido finalizado ainda.' : 'Pedidos finalizados ficam na última etapa.';
+  if (ultima) return 'O destino confirmou o recebimento: o pedido termina aqui.';
+  if (indice === total - 2) return 'Mover um pedido para cá dá baixa nas caixas.';
   if (indice === 0) return 'Pedidos gerados a partir das faltas entram aqui.';
-  if (ultima) return 'Mover um pedido para cá dá baixa nas caixas.';
   return 'Arraste um pedido para esta etapa.';
 }
 
 export function estadoDoPedido(p: Pedido): EstadoEditavel {
   return {
-    etapa: p.etapa, origem: p.origem, quem: p.quem, local: p.local, previsao: p.previsao, responsavel: p.responsavel,
+    origem: p.origem, quem: p.quem, local: p.local, previsao: p.previsao, responsavel: p.responsavel,
     itens: p.itens.map((i) => ({
       itemId: i.itemId, nome: i.nome, un: i.un, qtd: i.qtd ?? 0, fornecedor: i.fornecedor,
       // só a previsão própria: igual à do pedido fica vazia ("Igual à do pedido")
@@ -91,7 +112,7 @@ export function comAlterados<T extends object>(atual: T, alterados: Partial<T>):
   return { ...atual, ...alterados };
 }
 
-const CAMPOS = ['etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel'] as const;
+const CAMPOS = ['origem', 'quem', 'local', 'previsao', 'responsavel'] as const;
 
 // Corpo do editar_pedido só com o que mudou; null quando nada mudou.
 export function acaoEditarPedido(p: Pick<Pedido, 'id' | 'versao'>, antes: EstadoEditavel, depois: EstadoEditavel): Acao | null {
@@ -109,7 +130,7 @@ export function acaoEditarPedido(p: Pick<Pedido, 'id' | 'versao'>, antes: Estado
   if (Object.keys(campos).length === 0 && itens.length === 0) return null;
   return {
     tipo: 'editar_pedido', pedidoId: p.id, versao: p.versao,
-    campos: campos as Partial<DadosPedido & { etapa: string }>,
+    campos: campos as Partial<DadosPedido>,
     ...(itens.length ? { itens } : {})
   };
 }
@@ -185,7 +206,7 @@ export function historicoDoPedido(caixas: Caixa[], pedidoId: string): EntradaDoP
 export function motivoTravaEtapa(id: string | undefined, totalNoRascunho: number, pedidos: Pedido[]): string | null {
   const n = id ? pedidos.filter((p) => !p.finalizado && p.etapa === id).length : 0;
   if (n > 0) return `Tem ${n} ${n > 1 ? 'pedidos abertos' : 'pedido aberto'} nesta etapa`;
-  if (totalNoRascunho <= 2) return 'O quadro precisa de pelo menos 2 etapas';
+  if (totalNoRascunho <= 3) return 'O quadro precisa de pelo menos 3 etapas';
   return null;
 }
 

@@ -9,7 +9,8 @@ const ctx = { hoje: '2026-10-08', n: 7 };
 const etapas: EtapaPedido[] = [
   { id: 'a', nome: 'A pedir', ordem: 1 },
   { id: 'sol', nome: 'Solicitado', ordem: 2 },
-  { id: 'ent', nome: 'Resolvido', ordem: 3 }
+  { id: 'ent', nome: 'Enviado ao destino final', ordem: 3 },
+  { id: 'fim', nome: 'Concluído', ordem: 4 }
 ];
 const pi = (o: Partial<ItemPedido> = {}): ItemPedido => ({
   itemId: 'i1', dealId: '600001', os: '90001', nome: 'ZIPER METAL', un: 'UN', qtd: 52, fornecedor: '', previsao: '', ...o
@@ -71,11 +72,20 @@ describe('aplicarOtimista: pedidos', () => {
     const b = aplicar(quadro(), { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'a' });
     expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'a', finalizado: false, versao: 'v1' });
   });
-  it('mover para a última etapa finaliza, dá a baixa e solta o item do pedido', () => {
+  it('mover para a etapa da baixa dá a baixa e solta o item, mas o pedido continua aberto', () => {
     const b = aplicar(quadro(), { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent' });
-    expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'ent', finalizado: true, baixadoEm: '2026-10-08' });
+    expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'ent', finalizado: false, baixadoEm: '2026-10-08' });
     expect(itemDe(b, 'i1')).toMatchObject({ baixada: 52, resta: 0, pedidoIds: [], pedidoId: '' });
     expect(itemDe(b, 'i2')).toMatchObject({ resta: 0 });
+  });
+  it('etapa final: só com a baixa; grava concluidoEm e finaliza; com baixa não muda de outro jeito', () => {
+    const b0 = quadro({ pedidos: [ped({ etapa: 'ent', baixadoEm: '2026-10-07' })] });
+    const b = aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'fim' });
+    expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'fim', finalizado: true, concluidoEm: '2026-10-08' });
+    const sem = quadro();
+    expect(aplicar(sem, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'fim' })).toBe(sem);
+    expect(aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'a' })).toBe(b0);
+    expect(aplicar(b0, { tipo: 'editar_pedido', pedidoId: 'PED-0002', versao: 'v1', campos: { quem: 'X' } })).toBe(b0);
   });
   it('baixa do pedido não passa do que falta', () => {
     const b0 = quadro();
@@ -88,11 +98,12 @@ describe('aplicarOtimista: pedidos', () => {
     expect(aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'a' })).toBe(b0);
     expect(aplicar(b0, { tipo: 'mover_pedido', pedidoId: 'PED-9', versao: 'v1', etapa: 'a' })).toBe(b0);
   });
-  it('baixar_pedido só na última etapa', () => {
+  it('baixar_pedido só na etapa da baixa; dá a baixa sem finalizar', () => {
     const b0 = quadro();
     expect(aplicar(b0, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1' })).toBe(b0);
     const b1 = quadro({ pedidos: [ped({ etapa: 'ent' })] });
-    expect(pedidoDe(aplicar(b1, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1' }), 'PED-0002')?.finalizado).toBe(true);
+    expect(pedidoDe(aplicar(b1, { tipo: 'baixar_pedido', pedidoId: 'PED-0002', versao: 'v1' }), 'PED-0002'))
+      .toMatchObject({ baixadoEm: '2026-10-08', finalizado: false });
   });
   it('editar_pedido: campos, itens e a previsão herdada acompanha a do pedido', () => {
     const b0 = quadro({ pedidos: [ped({ previsao: '2026-10-10', itens: [pi({ previsao: '2026-10-10' }), pi({ itemId: 'i2', previsao: '2026-10-15' })] })] });
@@ -110,18 +121,13 @@ describe('aplicarOtimista: pedidos', () => {
     const b = aplicar(b0, { tipo: 'editar_pedido', pedidoId: 'PED-0002', versao: 'v1', campos: {}, itens: [{ itemId: 'i1', qtd: 52, fornecedor: '', previsao: '' }] });
     expect(pedidoDe(b, 'PED-0002')!.itens[0].previsao).toBe('2026-10-10');
   });
-  it('editar_pedido para a última etapa dá a baixa com a quantidade editada', () => {
-    const b = aplicar(quadro(), { tipo: 'editar_pedido', pedidoId: 'PED-0002', versao: 'v1', campos: { etapa: 'ent' }, itens: [{ itemId: 'i1', qtd: 30, fornecedor: '' }] });
-    expect(pedidoDe(b, 'PED-0002')).toMatchObject({ etapa: 'ent', finalizado: true });
-    expect(itemDe(b, 'i1')).toMatchObject({ baixada: 30, resta: 22, pedidoIds: [] });
-  });
   it('dividir_pedido: parte provisória com o id previsto e o resto no original', () => {
     const b = aplicar(quadro(), { tipo: 'dividir_pedido', pedidoId: 'PED-0002', versao: 'v1', etapa: 'ent', itens: [{ itemId: 'i1', qtd: 20 }, { itemId: 'i2', qtd: 10 }] });
     expect(pedidoDe(b, 'PED-0002')!.itens.map((i) => [i.itemId, i.qtd])).toEqual([['i1', 32]]);
     const parte = pedidoDe(b, 'PED-0002.1')!;
-    expect(parte).toMatchObject({ pai: 'PED-0002', etapa: 'ent', provisorio: true, finalizado: true, criadoEm: '2026-10-08' });
+    expect(parte).toMatchObject({ pai: 'PED-0002', etapa: 'ent', provisorio: true, finalizado: false, baixadoEm: '2026-10-08', criadoEm: '2026-10-08' });
     expect(parte.itens.map((i) => [i.itemId, i.qtd])).toEqual([['i1', 20], ['i2', 10]]);
-    // a parte em Resolvido já deu a baixa; o i2 foi todo e saiu do PED-0002
+    // a parte em Enviado ao destino final já deu a baixa; o i2 foi todo e saiu do PED-0002
     expect(itemDe(b, 'i1')).toMatchObject({ baixada: 20, resta: 32, pedidoIds: ['PED-0002'] });
     expect(itemDe(b, 'i2')).toMatchObject({ resta: 0, pedidoIds: [] });
   });

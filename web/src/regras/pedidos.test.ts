@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Acao, Board, DadosPedido, EtapaPedido, Pedido } from '../api/tipos';
 import { mensagemSucesso } from './acoes';
 import {
-  clientesDasCaixas, erroDadosPedido, erroEdicaoPedido, faltasSemPedido, filtrarPedidos, nomeLocal, opcoesComAtual, quemAoTrocarOrigem, quemDoPedido, resumoAlteracoes, ultimaEtapa, validarEtapas,
+  clientesDasCaixas, erroDadosPedido, erroEdicaoPedido, faltasSemPedido, filtrarPedidos, nomeLocal, opcoesComAtual, quemAoTrocarOrigem, quemDoPedido, resumoAlteracoes, etapaFinal,
   validarGerarPedido, type EstadoEditavel
 } from './pedidos';
 import { caixa, item } from './teste-util';
@@ -40,8 +40,8 @@ describe('faltasSemPedido', () => {
   });
 });
 
-describe('ultimaEtapa / quemDoPedido', () => {
-  it('última pela ordem', () => expect(ultimaEtapa(etapas)?.id).toBe('c'));
+describe('etapaFinal / quemDoPedido', () => {
+  it('última pela ordem', () => expect(etapaFinal(etapas)?.id).toBe('c'));
   it('quem preenchido vence', () => expect(quemDoPedido(ped({ itens: [itemPed('X'), itemPed('Y')] }))).toBe('ALFA'));
   it('vazio com fornecedores diferentes', () => {
     expect(quemDoPedido(ped({ quem: '', itens: [itemPed('X'), itemPed('Y')] }))).toBe('Vários fornecedores');
@@ -53,45 +53,21 @@ describe('ultimaEtapa / quemDoPedido', () => {
 
 describe('resumoAlteracoes', () => {
   const base: EstadoEditavel = {
-    etapa: 'a', origem: 'FORNECEDOR', quem: 'ALFA', local: 'BRAGANCA', previsao: '2026-10-09', responsavel: 'Renata',
+    origem: 'FORNECEDOR', quem: 'ALFA', local: 'BRAGANCA', previsao: '2026-10-09', responsavel: 'Renata',
     itens: [{ itemId: 'i1', nome: 'ZÍPER', un: 'UN', qtd: 10, fornecedor: '', previsao: '' }]
   };
-  it('sem mudança: vazio', () => expect(resumoAlteracoes(base, structuredClone(base), etapas)).toEqual([]));
+  it('sem mudança: vazio', () => expect(resumoAlteracoes(base, structuredClone(base))).toEqual([]));
   it('linhas no formato do servidor', () => {
     const depois: EstadoEditavel = {
-      ...base, etapa: 'b', previsao: '2026-10-12', responsavel: '',
+      ...base, previsao: '2026-10-12', responsavel: '',
       itens: [{ itemId: 'i1', nome: 'ZÍPER', un: 'UN', qtd: 8, fornecedor: 'FITAS', previsao: '' }]
     };
-    expect(resumoAlteracoes(base, depois, etapas)).toEqual([
-      'Etapa: A pedir → Solicitado',
+    expect(resumoAlteracoes(base, depois)).toEqual([
       'Previsão: 09/10 → 12/10',
       'Responsável: Renata → —',
       'qtd de ZÍPER: 10 → 8',
       'fornecedor de ZÍPER: — → FITAS'
     ]);
-  });
-});
-
-describe('validarEtapas', () => {
-  const pedidos = [ped({ etapa: 'b' }), ped({ id: 'PED-0002', etapa: 'c', finalizado: true })];
-  it('mínimo de 2', () => expect(validarEtapas([{ nome: 'A' }], [])).toBe('O quadro precisa de pelo menos 2 etapas.'));
-  it('nome vazio', () => expect(validarEtapas([{ nome: 'A' }, { nome: ' ' }], [])).toBe('Dê um nome a todas as etapas.'));
-  it('nomes repetidos sem acento e caixa', () => {
-    expect(validarEtapas([{ nome: 'Em trânsito' }, { nome: 'EM TRANSITO' }], [])).toBe('Já existe uma etapa chamada EM TRANSITO.');
-  });
-  it('não remove etapa com pedido aberto', () => {
-    const novas = [{ id: 'a', nome: 'A pedir' }, { id: 'c', nome: 'Entregue' }];
-    expect(validarEtapas(novas, pedidos, etapas)).toBe('A etapa Solicitado tem pedidos abertos.');
-  });
-  it('remove etapa sem pedido aberto (finalizados não contam)', () => {
-    const novas = [{ id: 'a', nome: 'A pedir' }, { id: 'c', nome: 'Entregue' }];
-    expect(validarEtapas(novas, [ped({ etapa: 'b', finalizado: true })], etapas)).toBeNull();
-  });
-  it('a última etapa continua por último (pode ser renomeada)', () => {
-    const msg = 'A última etapa (Entregue) precisa continuar por último.';
-    expect(validarEtapas([{ id: 'a', nome: 'A pedir' }, { id: 'b', nome: 'Solicitado' }], [], etapas)).toBe(msg);
-    expect(validarEtapas([{ id: 'a', nome: 'A pedir' }, { id: 'c', nome: 'Entregue' }, { nome: 'Depois' }], [], etapas)).toBe(msg);
-    expect(validarEtapas([{ id: 'a', nome: 'A pedir' }, { nome: 'Nova' }, { id: 'c', nome: 'Resolvido' }], [], etapas)).toBeNull();
   });
 });
 

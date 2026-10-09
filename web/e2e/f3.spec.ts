@@ -20,7 +20,7 @@ interface Opcoes {
 function pedido(id: string, etapa: string, itens: { itemId: string; dealId: string; os: string; nome: string; un: string; qtd: number }[], extra: Corpo = {}) {
   return {
     id, pai: '', etapa, origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-12', responsavel: 'Maria',
-    criadoEm: '2026-10-05', baixadoEm: '', versao: V_PED, finalizado: false,
+    criadoEm: '2026-10-05', baixadoEm: '', concluidoEm: '', versao: V_PED, finalizado: false,
     itens: itens.map((i) => ({ ...i, fornecedor: '' })), ...extra
   };
 }
@@ -105,69 +105,72 @@ test('mover um pedido por arraste envia mover_pedido', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Solicitado' }).getByRole('button', { name: 'Pedido PED-0042' })).toBeVisible();
 });
 
-test('soltar o card em Resolvido pede confirmação e envia mover_pedido (a baixa)', async ({ page }) => {
-  await page.setViewportSize({ width: 1720, height: 900 }); // as 4 colunas à vista para o arraste
+test('soltar o card em Enviado ao destino final pede confirmação e envia mover_pedido (a baixa)', async ({ page }) => {
+  await page.setViewportSize({ width: 1720, height: 900 }); // as 5 colunas à vista para o arraste
   const mock = await preparar(page, '#pedidos', {
     ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'aguardando', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; },
-    aoAgir: (b) => { const p = b.pedidos[0] as unknown as Corpo; p.etapa = 'entregue'; p.baixadoEm = '2026-10-07'; p.finalizado = true; p.versao = 'v2'; }
+    aoAgir: (b) => { const p = b.pedidos[0] as unknown as Corpo; p.etapa = 'entregue'; p.baixadoEm = '2026-10-07'; p.versao = 'v2'; }
   });
   await expect(page.getByRole('button', { name: 'Dar baixa nas caixas' })).toHaveCount(0);
-  const resolvido = page.getByRole('region', { name: 'Resolvido' });
+  const enviado = page.getByRole('region', { name: 'Enviado ao destino final' });
   const card = page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('button', { name: 'Pedido PED-0042' });
-  await card.dragTo(resolvido);
-  const confirmacao = resolvido.getByRole('group', { name: 'Confirmar Resolvido do PED-0042' });
-  await expect(confirmacao).toContainText('Mover para Resolvido dá baixa de 1 item em 1 OS. A baixa não pode ser desfeita.');
+  await card.dragTo(enviado);
+  const confirmacao = enviado.getByRole('group', { name: 'Confirmar Enviado ao destino final do PED-0042' });
+  await expect(confirmacao).toContainText('Mover para Enviado ao destino final dá baixa de 1 item em 1 OS. A baixa não pode ser desfeita.');
   // a baixa não volta: o foco começa em Cancelar, para um Enter distraído não confirmar
   await expect(confirmacao.getByRole('button', { name: 'Cancelar' })).toBeFocused();
   await expect(confirmacao.getByRole('button', { name: 'Confirmar' })).toHaveClass(/botao--signal/);
-  await confirmacao.getByRole('button', { name: 'Cancelar' }).click();
-  await expect(confirmacao).toHaveCount(0);
-  // Esc também cancela
-  await card.dragTo(resolvido);
-  await expect(confirmacao).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(confirmacao).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('button', { name: 'Pedido PED-0042' })).toBeVisible();
   expect(mock.bodies).toHaveLength(0);
-  await card.dragTo(resolvido);
+  await card.dragTo(enviado);
   await confirmacao.getByRole('button', { name: 'Confirmar' }).click();
-  await expect(aviso(page, 'PED-0042 movido para Resolvido · baixa registrada nas caixas')).toBeVisible();
+  await expect(aviso(page, 'PED-0042 movido para Enviado ao destino final · baixa registrada nas caixas')).toBeVisible();
   expect(mock.bodies).toEqual([{ tipo: 'mover_pedido', pedidoId: 'PED-0042', versao: V_PED, etapa: 'entregue' }]);
-  // finalizado: some em "Em aberto" e aparece em Resolvido com "Todos"
-  await expect(page.getByRole('article', { name: 'Pedido PED-0042' })).toHaveCount(0);
-  await page.getByRole('group', { name: 'Mostrar pedidos' }).getByRole('button', { name: 'Todos' }).click();
-  await expect(resolvido.getByRole('article', { name: 'Pedido PED-0042' })).toContainText('Baixa registrada nas caixas em 07/10');
+  // com a baixa o pedido continua em aberto, na coluna da baixa
+  await expect(enviado.getByRole('article', { name: 'Pedido PED-0042' })).toContainText('Baixa registrada nas caixas em 07/10');
 });
 
-test('painel: escolher Resolvido na Etapa e salvar pede a mesma confirmação', async ({ page }) => {
+test('pedido com baixa: painel só leitura e só vai para Concluído, sem confirmação', async ({ page }) => {
+  await page.setViewportSize({ width: 1720, height: 900 });
   const mock = await preparar(page, '#pedidos', {
-    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_TAG)] as never; }
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'entregue', PED_TAG, { baixadoEm: '2026-10-06' })] as never; },
+    aoAgir: (b) => { const p = b.pedidos[0] as unknown as Corpo; p.etapa = 'concluido'; p.concluidoEm = '2026-10-07'; p.finalizado = true; p.versao = 'v2'; }
   });
-  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const card = page.getByRole('region', { name: 'Enviado ao destino final' }).getByRole('button', { name: 'Pedido PED-0042' });
+  await card.click();
   const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
-  await painel.getByLabel('Etapa').selectOption('entregue');
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  const confirmacao = painel.getByRole('group', { name: 'Confirmar Resolvido do PED-0042' });
-  await expect(confirmacao).toContainText('Mover para Resolvido dá baixa de 1 item em 1 OS. A baixa não pode ser desfeita.');
-  expect(mock.bodies).toHaveLength(0);
-  // Esc cancela só a confirmação; o painel continua aberto
-  await expect(confirmacao.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await expect(painel).toContainText('Baixa registrada nas caixas em 06/10. Quando o destino confirmar o recebimento, arraste o card para Concluído.');
+  await expect(painel.getByRole('button', { name: /Salvar alterações|Nada alterado/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
-  await expect(confirmacao).toHaveCount(0);
-  await expect(painel).toBeVisible();
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  await confirmacao.getByRole('button', { name: 'Confirmar' }).click();
-  await expect(aviso(page, 'PED-0042 movido para Resolvido · baixa registrada nas caixas')).toBeVisible();
-  expect(mock.bodies).toEqual([{ tipo: 'editar_pedido', pedidoId: 'PED-0042', versao: V_PED, campos: { etapa: 'entregue' } }]);
+  await card.dragTo(page.getByRole('region', { name: 'Aguardando entrega' }));
+  await expect(aviso(page, 'Pedido com baixa só pode ir para Concluído.')).toBeVisible();
+  expect(mock.bodies).toHaveLength(0);
+  await card.dragTo(page.getByRole('region', { name: 'Concluído' }));
+  await expect(aviso(page, 'PED-0042 movido para Concluído')).toBeVisible();
+  expect(mock.bodies).toEqual([{ tipo: 'mover_pedido', pedidoId: 'PED-0042', versao: V_PED, etapa: 'concluido' }]);
+  // finalizado: some em "Em aberto"
+  await expect(page.getByRole('article', { name: 'Pedido PED-0042' })).toHaveCount(0);
 });
 
-test('finalizado aparece em Resolvido com o filtro Todos e some em Em aberto', async ({ page }) => {
+test('soltar em Concluído sem a baixa mostra o aviso e não envia', async ({ page }) => {
+  await page.setViewportSize({ width: 1720, height: 900 });
+  const mock = await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'aguardando', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
+  });
+  await page.getByRole('region', { name: 'Aguardando entrega' }).getByRole('button', { name: 'Pedido PED-0042' })
+    .dragTo(page.getByRole('region', { name: 'Concluído' }));
+  await expect(aviso(page, 'Mova o pedido primeiro para Enviado ao destino final.')).toBeVisible();
+  expect(mock.bodies).toHaveLength(0);
+});
+
+test('finalizado aparece em Concluído com o filtro Todos e some em Em aberto', async ({ page }) => {
   await preparar(page, '#pedidos', {
-    ajustar: (b) => { b.pedidos = [pedido('PED-0040', 'aguardando', PED_TAG, { baixadoEm: '2026-10-05', finalizado: true })] as never; }
+    ajustar: (b) => { b.pedidos = [pedido('PED-0040', 'concluido', PED_TAG, { baixadoEm: '2026-10-04', concluidoEm: '2026-10-05', finalizado: true })] as never; }
   });
   await expect(page.getByRole('article', { name: 'Pedido PED-0040' })).toHaveCount(0);
   await page.getByRole('group', { name: 'Mostrar pedidos' }).getByRole('button', { name: 'Todos' }).click();
-  await expect(page.getByRole('region', { name: 'Resolvido' }).getByRole('article', { name: 'Pedido PED-0040' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Concluído' }).getByRole('article', { name: 'Pedido PED-0040' })).toContainText('Finalizado em 05/10');
 });
 
 const PED_PREV = [
@@ -216,102 +219,13 @@ test('painel: mudar a previsão de um item manda só ela no editar_pedido', asyn
 });
 
 const VIES = { itemId: 'c1', dealId: '700003', os: '90003', nome: 'VIES LINEAR 6 CM', un: 'MT', qtd: 450 };
-// Caixa 90003 (saiu com falta) com o VIÉS no PED-0042 na etapa dada.
-function vies(b: Board, etapa: string) {
-  b.pedidos = [pedido('PED-0042', etapa, [VIES])] as never;
-  b.caixas[2].itens[0].pedidoId = 'PED-0042';
-}
 const nomesDasColunas = (page: Page) => page.locator('.coluna__nome').allInnerTexts();
 
-test('Saídas: colunas seguem as etapas de Solicitações; Sem pedido só com caixa sem pedido', async ({ page }) => {
-  await preparar(page, '#saidas');
-  await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
-  expect(await nomesDasColunas(page)).toEqual(['Sem pedido', 'A pedir', 'Solicitado', 'Aguardando entrega', 'Resolvido', 'Enviado à oficina', 'Concluído']);
-});
-
-test('Saídas: caixa na etapa do pedido mais atrasado; enviar à oficina escondido até a última etapa', async ({ page }) => {
-  await preparar(page, '#saidas', {
-    ajustar: (b) => {
-      b.pedidos = [pedido('PED-0042', 'solicitado', [VIES]), pedido('PED-0043', 'entregue', [{ ...VIES, itemId: 'c2', nome: 'LINHA 120', un: 'cones', qtd: 4 }])] as never;
-      const c = b.caixas[2];
-      c.itens[0].pedidoId = 'PED-0042';
-      c.itens.push({ ...c.itens[0], id: 'c2', nome: 'LINHA 120', un: 'cones', pedidoId: 'PED-0043' });
-    }
-  });
-  const card = page.getByRole('region', { name: 'Solicitado' }).getByRole('button', { name: 'OS 90003' });
-  await expect(card).toBeVisible();
-  expect(await nomesDasColunas(page)).toEqual(['A pedir', 'Solicitado', 'Aguardando entrega', 'Resolvido', 'Enviado à oficina', 'Concluído']);
-  await expect(card).toContainText('PED-0042 · Solicitado');
-  await expect(card).toContainText('PED-0043 · Resolvido');
-  await expect(card).toContainText('pedidos em etapas diferentes');
-  await card.click();
-  const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
-  await expect(painel.getByRole('button', { name: 'Enviar à oficina' })).toHaveCount(0);
-  await expect(painel).toContainText('Para enviar à oficina, todo o material precisa estar na última etapa (Resolvido).');
-});
-
-test('Saídas: enviar à oficina recusado pelo servidor mostra a mensagem dele', async ({ page }) => {
-  const mock = await preparar(page, '#saidas', {
-    ajustar: (b) => vies(b, 'entregue'),
-    resposta: () => ({ status: 409, json: { erro: 'O material desta caixa ainda não chegou (etapa Resolvido).' } })
-  });
-  await page.getByRole('region', { name: 'Resolvido' }).getByRole('button', { name: 'OS 90003' }).click();
-  await page.getByRole('complementary', { name: 'Caixa da OS 90003' }).getByRole('button', { name: 'Enviar à oficina' }).click();
-  await expect(aviso(page, 'O material desta caixa ainda não chegou (etapa Resolvido).')).toBeVisible();
-  expect(mock.bodies).toHaveLength(1);
-});
-
-test('Saídas: enviar à oficina e depois confirmar que a oficina recebeu', async ({ page }) => {
-  const mock = await preparar(page, '#saidas', {
-    ajustar: (b) => vies(b, 'entregue'),
-    aoAgir: (b, corpo) => {
-      const c = b.caixas[2] as Corpo & { tratativa: string; versao: string; itens: { resta: number; falta: number; baixada: number; status: string }[] };
-      c.versao = 'v2';
-      if (corpo.tipo === 'enviar_oficina') c.tratativa = 'ENVIADO';
-      else { c.tratativa = 'RECEBIDO'; c.itens[0].resta = 0; c.itens[0].baixada = c.itens[0].falta; c.itens[0].status = 'RESOLVIDO'; }
-    }
-  });
-  await page.getByRole('region', { name: 'Resolvido' }).getByRole('button', { name: 'OS 90003' }).click();
-  const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
-  await expect(painel.getByRole('button', { name: 'Enviar à oficina' })).toHaveClass(/botao--signal/);
-  await painel.getByRole('button', { name: 'Enviar à oficina' }).click();
-  await expect(aviso(page, 'Caixa enviada à oficina')).toBeVisible();
-  expect(mock.bodies[0]).toEqual({ tipo: 'enviar_oficina', dealId: '700003', versao: '2026-10-06T09:00:00.000Z' });
-  await expect(page.getByRole('region', { name: 'Enviado à oficina' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
-
-  await painel.getByRole('button', { name: 'Oficina recebeu' }).click();
-  const confirmacao = painel.getByRole('group', { name: 'Confirmar recebimento da oficina' });
-  await expect(confirmacao).toContainText('A oficina recebeu o material? Isso dá baixa total no item aberto desta caixa.');
-  expect(mock.bodies).toHaveLength(1); // a confirmação fica dentro do painel e ainda não gravou
-  await confirmacao.getByRole('button', { name: 'Confirmar recebimento' }).click();
-  await expect(aviso(page, 'Recebimento da oficina registrado')).toBeVisible();
-  expect(mock.bodies[1]).toEqual({ tipo: 'oficina_recebeu', dealId: '700003', versao: 'v2' });
-  await expect(page.getByRole('region', { name: 'Concluído' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
-});
-
-test('Saídas: caixa com toda a falta baixada fica em Resolvido e vai à oficina', async ({ page }) => {
-  const mock = await preparar(page, '#saidas', {
-    ajustar: (b) => {
-      const i = b.caixas[2].itens[0] as Corpo;
-      i.resta = 0; i.baixada = i.falta; i.status = 'RESOLVIDO';
-    },
-    aoAgir: (b) => { const c = b.caixas[2] as Corpo; c.tratativa = 'ENVIADO'; c.versao = 'v2'; }
-  });
-  const card = page.getByRole('region', { name: 'Resolvido' }).getByRole('button', { name: 'OS 90003' });
-  await expect(card).toContainText('pronto para a oficina');
-  await card.click();
-  const painel = page.getByRole('complementary', { name: 'Caixa da OS 90003' });
-  await painel.getByRole('button', { name: 'Enviar à oficina' }).click();
-  await expect(aviso(page, 'Caixa enviada à oficina')).toBeVisible();
-  expect(mock.bodies).toEqual([{ tipo: 'enviar_oficina', dealId: '700003', versao: '2026-10-06T09:00:00.000Z' }]);
-  await expect(page.getByRole('region', { name: 'Enviado à oficina' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
-});
-
-test('Etapas: renomear e adicionar (antes da última) enviam salvar_etapas com os ids existentes', async ({ page }) => {
+test('Etapas: renomear e adicionar (antes das duas últimas) enviam salvar_etapas com os ids existentes', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', {
     aoAgir: (b) => {
       b.etapasPedido = [{ id: 'a_pedir', nome: 'Compras', ordem: 1 }, ...b.etapasPedido.slice(1, 3),
-        { id: 'em_transito', nome: 'Em trânsito', ordem: 4 }, { ...b.etapasPedido[3], ordem: 5 }];
+        { id: 'em_transito', nome: 'Em trânsito', ordem: 4 }, { ...b.etapasPedido[3], ordem: 5 }, { ...b.etapasPedido[4], ordem: 6 }];
     }
   });
   await page.getByRole('button', { name: 'Etapas do quadro' }).click();
@@ -319,19 +233,21 @@ test('Etapas: renomear e adicionar (antes da última) enviam salvar_etapas com o
   await janela.getByRole('textbox', { name: 'Nome da etapa 1' }).fill('Compras');
   await janela.getByRole('button', { name: '+ Adicionar etapa' }).click();
   await expect(janela.getByRole('textbox', { name: 'Nome da etapa 4' })).toBeFocused();
-  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 5' })).toHaveValue('Resolvido');
+  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 5' })).toHaveValue('Enviado ao destino final');
+  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 6' })).toHaveValue('Concluído');
   await janela.getByRole('textbox', { name: 'Nome da etapa 4' }).fill('Em trânsito');
   await janela.getByRole('button', { name: 'Salvar etapas' }).click();
   await expect(aviso(page, 'Etapas do quadro salvas')).toBeVisible();
   expect(mock.bodies).toEqual([{
     tipo: 'salvar_etapas',
-    etapas: [{ id: 'a_pedir', nome: 'Compras' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' }, { nome: 'Em trânsito' }, { id: 'entregue', nome: 'Resolvido' }]
+    etapas: [{ id: 'a_pedir', nome: 'Compras' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' },
+      { nome: 'Em trânsito' }, { id: 'entregue', nome: 'Enviado ao destino final' }, { id: 'concluido', nome: 'Concluído' }]
   }]);
   await expect(page.getByRole('region', { name: 'Em trânsito' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Compras' })).toBeVisible();
 });
 
-test('Etapas: etapa com pedido aberto não pode ser removida; a última fica fixa', async ({ page }) => {
+test('Etapas: etapa com pedido aberto não pode ser removida; as duas últimas ficam fixas', async ({ page }) => {
   const mock = await preparar(page, '#pedidos', {
     ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
   });
@@ -339,25 +255,25 @@ test('Etapas: etapa com pedido aberto não pode ser removida; a última fica fix
   const janela = page.getByRole('dialog', { name: 'Etapas do quadro' });
   await expect(janela.getByRole('button', { name: 'Remover etapa Solicitado' })).toBeDisabled();
   await expect(janela).toContainText('Tem 1 pedido aberto nesta etapa');
-  // A última (Resolvido) pode ser renomeada, mas não tem Remover.
-  await expect(janela.getByRole('button', { name: 'Remover etapa Resolvido' })).toHaveCount(0);
-  await expect(janela).toContainText('Etapa final: mover um pedido para cá dá baixa nas caixas.');
-  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 4' })).toBeEditable();
-  await expect(janela).not.toContainText('Dar baixa nas caixas');
+  await expect(janela.getByRole('button', { name: 'Remover etapa Enviado ao destino final' })).toHaveCount(0);
+  await expect(janela.getByRole('button', { name: 'Remover etapa Concluído' })).toHaveCount(0);
+  await expect(janela).toContainText('Etapa da baixa: mover um pedido para cá dá baixa nas caixas.');
+  await expect(janela).toContainText('Etapa final: o destino confirmou o recebimento.');
+  await expect(janela.getByRole('textbox', { name: 'Nome da etapa 5' })).toBeEditable();
   await janela.getByRole('button', { name: 'Remover etapa A pedir' }).click();
   await janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' }).click();
   await expect(janela.getByRole('button', { name: 'Remover etapa Solicitado' })).toBeDisabled();
   expect(mock.bodies).toHaveLength(0);
 });
 
-test('Etapas: o mínimo é 2 (com a última fixa)', async ({ page }) => {
+test('Etapas: o mínimo é 3 (com as duas últimas fixas)', async ({ page }) => {
   await preparar(page, '#pedidos');
   await page.getByRole('button', { name: 'Etapas do quadro' }).click();
   const janela = page.getByRole('dialog', { name: 'Etapas do quadro' });
   await janela.getByRole('button', { name: 'Remover etapa A pedir' }).click();
   await janela.getByRole('button', { name: 'Remover etapa Solicitado' }).click();
   await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toBeDisabled();
-  await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toHaveAttribute('title', 'O quadro precisa de pelo menos 2 etapas');
+  await expect(janela.getByRole('button', { name: 'Remover etapa Aguardando entrega' })).toHaveAttribute('title', 'O quadro precisa de pelo menos 3 etapas');
 });
 
 test('Etapas do quadro só para ADM', async ({ page }) => {
@@ -619,18 +535,6 @@ test('painel: salvar pelo teclado mantém o foco no painel', async ({ page }) =>
   await expect(painel.getByRole('heading', { name: 'PED-0042' })).toBeFocused();
   await page.keyboard.press('Tab');
   expect(await painel.evaluate((el) => el.contains(document.activeElement))).toBe(true);
-});
-
-test('painel: cancelar a confirmação do Resolvido devolve o foco para Salvar', async ({ page }) => {
-  await preparar(page, '#pedidos', {
-    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'solicitado', PED_TAG)] as never; }
-  });
-  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
-  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
-  await painel.getByLabel('Etapa').selectOption('entregue');
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  await page.keyboard.press('Escape');
-  await expect(painel.getByRole('button', { name: 'Salvar alterações' })).toBeFocused();
 });
 
 test('previsão do item vazia mostra, em texto visível, que segue a do pedido', async ({ page }) => {

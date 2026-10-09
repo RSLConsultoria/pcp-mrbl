@@ -6,15 +6,14 @@ import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import {
-  clientesDasCaixas, erroEdicaoPedido, nomeLocal, nomeOrigem, opcoesDeQuem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel
+  clientesDasCaixas, erroEdicaoPedido, etapaFinal, nomeLocal, nomeOrigem, opcoesDeQuem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel
 } from '../../regras/pedidos';
 import {
-  acaoEditarPedido, camposAlterados, comAlterados, entraNaUltimaEtapa, estadoDoPedido, historicoDoPedido, partesDoPedido, pedidoEditavel, textoConfirmarResolvido, textoFamilia
+  acaoEditarPedido, camposAlterados, comAlterados, estadoDoPedido, etapaNoQuadro, historicoDoPedido, partesDoPedido, pedidoEditavel, textoFamilia
 } from '../../regras/pedidosQuadro';
 import { formatarQtd, qtdComUn, quantidadeParaCampo } from '../../regras/quantidade';
 import { Historico } from '../painel/Historico';
 import { CamposPedido, type FormPedido } from './CamposPedido';
-import { ConfirmarResolvido } from './ConfirmarResolvido';
 import { DividirPedido } from './DividirPedido';
 import { LinhaItemPedido, type TextoItem } from './LinhaItemPedido';
 import { ResumoAlteracoes } from './ResumoAlteracoes';
@@ -27,11 +26,11 @@ interface Props {
   onFechar: () => void;
 }
 
-// Painel do pedido: edição com o resumo exato do que será gravado. O formulário é o pedido
-// como está agora mais o que o usuário mudou: se o pedido mudar com o painel aberto (arraste,
-// ação na fila, recarga), os campos não mexidos acompanham e o que foi digitado fica.
-// Escolher a última etapa (Resolvido) e salvar pede confirmação: a baixa nas caixas não volta.
-// Salvar não espera o servidor: o board já mostra as alterações (e volta atrás se ele recusar).
+// Painel do pedido: edição com o resumo exato do que será gravado. A etapa muda só arrastando
+// o card. O formulário é o pedido como está agora mais o que o usuário mudou: se o pedido mudar
+// com o painel aberto (arraste, ação na fila, recarga), os campos não mexidos acompanham e o que
+// foi digitado fica. Pedido com baixa (ou finalizado) é só leitura. Salvar não espera o servidor:
+// o board já mostra as alterações (e volta atrás se ele recusar).
 export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Props) {
   useTeclaEsc(onFechar);
   const editavel = pedidoEditavel(board, pedido);
@@ -41,24 +40,22 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     [antes]
   );
   const formInicial: FormPedido = {
-    etapa: pedido.etapa, origem: pedido.origem, quem: pedido.quem, local: pedido.local, previsao: pedido.previsao, responsavel: pedido.responsavel
+    origem: pedido.origem, quem: pedido.quem, local: pedido.local, previsao: pedido.previsao, responsavel: pedido.responsavel
   };
   // Só o que o usuário mudou; o resto vem do pedido como está agora (regras/pedidosQuadro.ts).
   const [formAlterado, setFormAlterado] = useState<Partial<FormPedido>>({});
   const [textosAlterados, setTextosAlterados] = useState<Record<string, Partial<TextoItem>>>({});
   const form = comAlterados(formInicial, formAlterado);
   const textos = Object.fromEntries(Object.entries(textosIniciais).map(([k, t]) => [k, comAlterados(t, textosAlterados[k] ?? {})])) as Record<string, TextoItem>;
-  const [confirmando, setConfirmando] = useState(false);
-  // Depois de salvar o botão vira "Nada alterado" (desabilitado) e, ao cancelar a confirmação,
-  // ela some: o foco iria para o <body>. Vai para o título do painel ou de volta ao Salvar.
+  // Depois de salvar o botão vira "Nada alterado" (desabilitado) e o foco iria para o <body>:
+  // vai para o título do painel.
   const tituloRef = useRef<HTMLHeadingElement>(null);
-  const salvarRef = useRef<HTMLButtonElement>(null);
-  const [focar, setFocar] = useState<'titulo' | 'salvar' | null>(null);
+  const [focarTitulo, setFocarTitulo] = useState(false);
   useEffect(() => {
-    if (!focar) return;
-    (focar === 'titulo' ? tituloRef : salvarRef).current?.focus();
-    setFocar(null);
-  }, [focar]);
+    if (!focarTitulo) return;
+    tituloRef.current?.focus();
+    setFocarTitulo(false);
+  }, [focarTitulo]);
 
   const restaDe = (dealId: string, itemId: string) =>
     board.caixas.find((c) => c.dealId === dealId)?.itens.find((i) => i.id === itemId)?.resta ?? Number.POSITIVE_INFINITY;
@@ -67,41 +64,38 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     Object.fromEntries(mexidos.map((i) => [i.itemId, textos[i.itemId].qtd])));
   const depois: EstadoEditavel = {
     // no painel origem e local sempre vêm do pedido (nunca "Selecionar")
-    etapa: form.etapa ?? pedido.etapa, origem: form.origem || pedido.origem, quem: form.quem.trim(), local: form.local || pedido.local,
+    origem: form.origem || pedido.origem, quem: form.quem.trim(), local: form.local || pedido.local,
     previsao: form.previsao, responsavel: form.responsavel,
     itens: antes.itens.map((i) => {
       const q = erros[i.itemId] ? null : lerQuantidade(textos[i.itemId].qtd);
       return { ...i, qtd: q ?? i.qtd, fornecedor: textos[i.itemId].fornecedor.trim(), previsao: textos[i.itemId].previsao ?? '' };
     })
   };
-  const linhas = resumoAlteracoes(antes, depois, etapas);
+  const linhas = resumoAlteracoes(antes, depois);
   const erroDados = erroEdicaoPedido(antes, depois); // não deixa limpar fornecedor/cliente nem responsável
   const temErro = Object.keys(erros).length > 0 || erroDados !== null;
   const clientes = clientesDasCaixas(board.caixas, pedido.itens.map((i) => i.dealId));
   const fornecedores = board.fornecedores ?? [];
-  const paraUltima = entraNaUltimaEtapa(antes.etapa, depois.etapa, etapas);
-  const nomeDestino = etapas.find((e) => e.id === depois.etapa)?.nome ?? depois.etapa;
 
-  function gravar() {
+  function salvar() {
     const acao = acaoEditarPedido(pedido, antes, depois);
     if (!acao || temErro) return;
-    void executar(acao, paraUltima ? `${pedido.id} movido para ${nomeDestino} · baixa registrada nas caixas` : mensagemSucesso(acao));
+    void executar(acao, mensagemSucesso(acao));
     // o pedido na tela já tem as alterações (board otimista): o formulário volta a segui-lo
     setFormAlterado({});
     setTextosAlterados({});
-    setConfirmando(false);
-    setFocar('titulo');
-  }
-
-  function salvar() {
-    if (paraUltima) setConfirmando(true);
-    else gravar();
+    setFocarTitulo(true);
   }
 
   const historico = historicoDoPedido(board.caixas, pedido.id);
-  const nomeEtapa = (pedido.finalizado ? etapas[etapas.length - 1]?.nome : undefined) ?? etapas.find((e) => e.id === pedido.etapa)?.nome ?? pedido.etapa;
+  const nomeEtapa = etapas.find((e) => e.id === etapaNoQuadro(pedido, etapas))?.nome ?? pedido.etapa;
   const todos = board.pedidos ?? [];
   const familia = textoFamilia(pedido, partesDoPedido(todos, pedido.id).length);
+  const nota = pedido.finalizado
+    ? `Pedido finalizado${pedido.concluidoEm ? ` em ${ddmm(pedido.concluidoEm)}` : ''}: o destino confirmou o recebimento.`
+    : pedido.baixadoEm
+      ? `Baixa registrada nas caixas em ${ddmm(pedido.baixadoEm)}. Quando o destino confirmar o recebimento, arraste o card para ${etapaFinal(etapas)?.nome ?? 'a última etapa'}.`
+      : MSG_SOMENTE_LEITURA;
   return (
     <aside className="painel" aria-label={`Pedido ${pedido.id}`}>
       <div className="painel__cabecalho">
@@ -117,8 +111,8 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
       <div className="painel__corpo">
         {editavel ? (
           <>
-            <CamposPedido valor={form} onMudar={(v) => { setFormAlterado(camposAlterados(formInicial, v)); setConfirmando(false); }}
-              fornecedores={fornecedores} clientes={clientes} responsaveis={board.responsaveis ?? []} etapas={etapas} />
+            <CamposPedido valor={form} onMudar={(v) => setFormAlterado(camposAlterados(formInicial, v))}
+              fornecedores={fornecedores} clientes={clientes} responsaveis={board.responsaveis ?? []} />
             <section className="secao">
               <h3 className="secao__titulo">Itens do pedido <span>{pedido.itens.length}</span></h3>
               <ul className="linhas-itens">
@@ -128,31 +122,23 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                     <LinhaItemPedido key={i.itemId} os={i.os} nome={i.nome} un={i.un}
                       detalhe={Number.isFinite(resta) ? `resta ${qtdComUn(resta, i.un)} na caixa` : ''}
                       valor={textos[i.itemId]} erro={erros[i.itemId]} fornecedores={opcoesDeQuem(form.origem, fornecedores, clientes)}
-                      onMudar={(v) => { setTextosAlterados((t) => ({ ...t, [i.itemId]: camposAlterados(textosIniciais[i.itemId], v) })); setConfirmando(false); }} />
+                      onMudar={(v) => setTextosAlterados((t) => ({ ...t, [i.itemId]: camposAlterados(textosIniciais[i.itemId], v) }))} />
                   );
                 })}
               </ul>
             </section>
             <ResumoAlteracoes linhas={linhas} />
-            {confirmando ? (
-              <ConfirmarResolvido rotulo={`Confirmar ${nomeDestino} do ${pedido.id}`}
-                texto={textoConfirmarResolvido(pedido.itens, nomeDestino)} ocupado={false}
-                onConfirmar={gravar} onCancelar={() => { setConfirmando(false); setFocar('salvar'); }} />
-            ) : (
-              <div className="acoes">
-                {erroDados && <p className="campo__erro" role="alert">{erroDados}</p>}
-                <button ref={salvarRef} type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro} onClick={salvar}>
-                  {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
-                </button>
-              </div>
-            )}
+            <div className="acoes">
+              {erroDados && <p className="campo__erro" role="alert">{erroDados}</p>}
+              <button type="button" className="botao botao--navy" disabled={linhas.length === 0 || temErro} onClick={salvar}>
+                {linhas.length === 0 ? 'Nada alterado' : 'Salvar alterações'}
+              </button>
+            </div>
             <DividirPedido pedido={pedido} pedidos={todos} etapas={etapas} executar={executar} />
           </>
         ) : (
           <>
-            <p className="item__nota" role="note">
-              {pedido.finalizado ? `Pedido finalizado: baixa registrada nas caixas em ${ddmm(pedido.baixadoEm)}.` : MSG_SOMENTE_LEITURA}
-            </p>
+            <p className="item__nota" role="note">{nota}</p>
             <dl className="leitura">
               <div><dt>Etapa</dt><dd>{nomeEtapa}</dd></div>
               <div><dt>Previsão de entrega</dt><dd>{pedido.previsao ? ddmm(pedido.previsao) : '—'}</dd></div>

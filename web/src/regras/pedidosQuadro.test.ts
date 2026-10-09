@@ -41,7 +41,7 @@ describe('busca, OS e baixa', () => {
 describe('vazioDaEtapa', () => {
   it('textos por filtro e posição', () => {
     expect(vazioDaEtapa('aberto', 0, 3, false)).toBe('Pedidos gerados a partir das faltas entram aqui.');
-    expect(vazioDaEtapa('aberto', 1, 3, false)).toBe('Arraste um pedido para esta etapa.');
+    expect(vazioDaEtapa('aberto', 1, 4, false)).toBe('Arraste um pedido para esta etapa.');
     expect(vazioDaEtapa('finalizado', 2, 3, false)).toBe('Nenhum pedido finalizado ainda.');
     expect(vazioDaEtapa('finalizado', 0, 3, false)).toBe('Pedidos finalizados ficam na última etapa.');
     expect(vazioDaEtapa('todos', 0, 3, true)).toBe('Nenhum pedido desta etapa atende à busca.');
@@ -55,11 +55,11 @@ describe('acaoEditarPedido', () => {
     expect(acaoEditarPedido(p, antes, structuredClone(antes))).toBeNull();
   });
   it('só os campos e itens alterados', () => {
-    const depois: EstadoEditavel = { ...structuredClone(antes), etapa: 'b', previsao: '2026-10-20' };
+    const depois: EstadoEditavel = { ...structuredClone(antes), previsao: '2026-10-20' };
     depois.itens[1].qtd = 4;
     expect(acaoEditarPedido(p, antes, depois)).toEqual({
       tipo: 'editar_pedido', pedidoId: 'PED-0044', versao: 'v1',
-      campos: { etapa: 'b', previsao: '2026-10-20' },
+      campos: { previsao: '2026-10-20' },
       itens: [{ itemId: 'i2', qtd: 4, fornecedor: 'ALFA' }]
     });
   });
@@ -122,11 +122,11 @@ describe('historicoDoPedido', () => {
 });
 
 describe('motivoTravaEtapa', () => {
-  it('etapa com pedido aberto ou quadro com 2 etapas não sai', () => {
+  it('etapa com pedido aberto ou quadro com 3 etapas não sai', () => {
     expect(motivoTravaEtapa('a', 4, [ped()])).toBe('Tem 1 pedido aberto nesta etapa');
     expect(motivoTravaEtapa('a', 4, [ped({ finalizado: true })])).toBeNull();
-    expect(motivoTravaEtapa(undefined, 2, [])).toBe('O quadro precisa de pelo menos 2 etapas');
-    expect(motivoTravaEtapa('z', 3, [ped()])).toBeNull();
+    expect(motivoTravaEtapa(undefined, 3, [])).toBe('O quadro precisa de pelo menos 3 etapas');
+    expect(motivoTravaEtapa('z', 4, [ped()])).toBeNull();
   });
 });
 

@@ -34,7 +34,7 @@
 .card__abrir:focus-visible { outline: 0; }
 .card:has(.card__abrir:focus-visible) { box-shadow: var(--focus-ring); }
 .card__acoes { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin-top: 10px; cursor: default; }
-/* Confirmação de mover para a última etapa (Resolvido): dá a baixa nas caixas. */
+/* Confirmação de mover para a etapa da baixa (Enviado ao destino final): dá a baixa nas caixas. */
 .confirmacao--resolvido { border-left-color: var(--signal); }
 .coluna__cards .confirmacao--resolvido { margin-top: 0; padding: 12px; background: #fff; }
 .coluna__cards .confirmacao--resolvido .confirmacao__texto { font-size: 13px; }

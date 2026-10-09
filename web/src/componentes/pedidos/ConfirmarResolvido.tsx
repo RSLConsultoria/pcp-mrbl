@@ -1,14 +1,14 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 
 interface Props {
-  rotulo: string; // nome acessível do grupo (ex.: "Confirmar Resolvido do PED-0044")
-  texto: string; // "Mover para Resolvido dá baixa de 2 itens em 2 OS. A baixa não pode ser desfeita."
+  rotulo: string; // nome acessível do grupo (ex.: "Confirmar Enviado ao destino final do PED-0044")
+  texto: string; // "Mover para Enviado ao destino final dá baixa de 2 itens em 2 OS. A baixa não pode ser desfeita."
   ocupado: boolean;
   onConfirmar: () => void;
   onCancelar: () => void;
 }
 
-// Confirmação na própria tela (sem confirm()) antes de mover um pedido para a última etapa,
+// Confirmação na própria tela (sem confirm()) antes de mover um pedido para a etapa da baixa,
 // que dá a baixa nas caixas. Usada no quadro (soltar o card), no painel e no Dividir pedido.
 // A baixa não volta: o foco começa em Cancelar (um Enter distraído não confirma) e Esc cancela.
 export function ConfirmarResolvido({ rotulo, texto, ocupado, onConfirmar, onCancelar }: Props) {

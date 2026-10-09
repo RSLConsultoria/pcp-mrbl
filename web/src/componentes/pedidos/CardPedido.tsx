@@ -73,7 +73,12 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir
           <span className="card__estado card__estado--salvando">salvando…</span>
         </footer>
       )}
-      {p.baixadoEm && !p.provisorio && (
+      {!p.provisorio && p.finalizado && (
+        <footer className="card__acoes">
+          <span className="card__estado card__estado--ok">{p.concluidoEm ? `Finalizado em ${ddmm(p.concluidoEm)}` : 'Finalizado'}</span>
+        </footer>
+      )}
+      {!p.provisorio && !p.finalizado && p.baixadoEm && (
         <footer className="card__acoes">
           <span className="card__estado card__estado--ok">Baixa registrada nas caixas em {ddmm(p.baixadoEm)}</span>
         </footer>

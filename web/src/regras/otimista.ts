@@ -1,8 +1,8 @@
 import type { Acao, Board, Caixa, Item, ItemPedido, Pedido } from '../api/tipos';
 import { arredondar3, chaveDaAcao } from './acoes';
 import { itemAberto } from './colunas';
-import { PREFIXO_NOVO, ultimaEtapa } from './pedidos';
-import { etapasOrdenadas, partesPorPrevisao, proximoIdParte, raizDoPedido } from './pedidosQuadro';
+import { PREFIXO_NOVO, etapaDaBaixa, etapaFinal } from './pedidos';
+import { etapasOrdenadas, motivoMoverPedido, partesPorPrevisao, proximoIdParte, raizDoPedido } from './pedidosQuadro';
 
 // Quadro otimista: a tela mostra na hora o que cada ação vai causar, enquanto a fila envia
 // em segundo plano. As previsões seguem as regras do servidor (n8n/src/pedidos.js e
@@ -73,13 +73,13 @@ function baixaDosItens(board: Board, itens: Pick<ItemPedido, 'itemId' | 'dealId'
   return b;
 }
 
-// pedidoIds/pedidoId dos itens tocados, refeitos a partir dos pedidos abertos do board.
+// pedidoIds/pedidoId dos itens tocados: só pedidos ainda sem baixa (o pedido com a baixa dada não segura mais o item).
 function atualizarPedidosDosItens(board: Board, itens: Pick<ItemPedido, 'itemId' | 'dealId'>[]): Board {
   const pedidos = pedidosDe(board);
   let b = board;
   for (const alvo of itens) {
     const ids = pedidos
-      .filter((p) => !p.finalizado && p.itens.some((x) => x.itemId === alvo.itemId && x.dealId === alvo.dealId))
+      .filter((p) => !p.baixadoEm && p.itens.some((x) => x.itemId === alvo.itemId && x.dealId === alvo.dealId))
       .map((p) => p.id)
       .sort(compararPedidos);
     b = comItem(b, alvo.dealId, alvo.itemId, (i) => ({ ...i, pedidoIds: ids, pedidoId: ids[0] ?? '' }));
@@ -94,11 +94,12 @@ function comPrevisoesResumidas(p: Pedido): Pedido {
   return { ...p, previsaoMaisProxima: datas.length && datas[0] !== '' ? datas[0] : p.previsao, previsoesDiferentes: datas.length > 1 };
 }
 
-// Entrar na última etapa (Resolvido) finaliza o pedido e dá a baixa nas caixas.
-function finalizar(board: Board, id: string, hoje: string): Board {
+// Entrar na etapa da baixa (Enviado ao destino final) dá a baixa nas caixas e solta os itens;
+// o pedido continua aberto até a etapa final.
+function darBaixa(board: Board, id: string, hoje: string): Board {
   const p = pedidoDe(board, id);
   if (!p) return board;
-  let b = comPedido(board, id, (x) => ({ ...x, baixadoEm: hoje, finalizado: true }));
+  let b = comPedido(board, id, (x) => ({ ...x, baixadoEm: hoje }));
   b = baixaDosItens(b, p.itens);
   return atualizarPedidosDosItens(b, p.itens);
 }
@@ -116,7 +117,8 @@ function novaParte(p: Pedido, id: string, etapa: string, previsao: string, itens
 // (pedido sumido, finalizado) devolve o board sem mudança.
 export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista): Board {
   const etapas = board.etapasPedido ?? [];
-  const ultima = ultimaEtapa(etapas)?.id;
+  const baixa = etapaDaBaixa(etapas)?.id;
+  const final = etapaFinal(etapas)?.id;
   switch (acao.tipo) {
     case 'baixa':
       return comItem(board, acao.dealId, acao.itemId, (i) => comBaixada(i, i.baixada + acao.valor));
@@ -167,12 +169,15 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
   if (!p || p.finalizado) return board;
   switch (acao.tipo) {
     case 'mover_pedido': {
+      if (motivoMoverPedido(p, acao.etapa, etapas)) return board; // o servidor recusaria
       const b = comPedido(board, p.id, (x) => ({ ...x, etapa: acao.etapa }));
-      return acao.etapa === ultima && p.etapa !== ultima ? finalizar(b, p.id, ctx.hoje) : b;
+      if (acao.etapa === final) return comPedido(b, p.id, (x) => ({ ...x, concluidoEm: ctx.hoje, finalizado: true }));
+      return acao.etapa === baixa && !p.baixadoEm ? darBaixa(b, p.id, ctx.hoje) : b;
     }
     case 'baixar_pedido':
-      return p.etapa === ultima ? finalizar(board, p.id, ctx.hoje) : board;
+      return p.etapa === baixa && !p.baixadoEm ? darBaixa(board, p.id, ctx.hoje) : board;
     case 'editar_pedido': {
+      if (p.baixadoEm) return board;
       const c = acao.campos;
       const previsao = c.previsao ?? p.previsao;
       const itens = p.itens.map((i) => {
@@ -183,10 +188,10 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
         return n;
       });
       const definidos = Object.fromEntries(Object.entries(c).filter(([, v]) => v !== undefined));
-      const b = comPedido(board, p.id, (x) => comPrevisoesResumidas({ ...x, ...definidos, itens }));
-      return c.etapa !== undefined && c.etapa === ultima && p.etapa !== ultima ? finalizar(b, p.id, ctx.hoje) : b;
+      return comPedido(board, p.id, (x) => comPrevisoesResumidas({ ...x, ...definidos, itens }));
     }
     case 'dividir_pedido': {
+      if (p.baixadoEm) return board;
       const parteId = proximoIdParte(pedidosDe(board), p.id);
       const vao: ItemPedido[] = [];
       const ficam: ItemPedido[] = [];
@@ -198,11 +203,12 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       }
       let b = comPedido(board, p.id, (x) => comPrevisoesResumidas({ ...x, itens: ficam }));
       b = comPedidosNovos(b, [novaParte(p, parteId, acao.etapa, p.previsao, vao, ctx.hoje)]);
-      // a parte que vai direto para a última etapa já nasce com a baixa
-      if (acao.etapa === ultima) b = finalizar(b, parteId, ctx.hoje);
+      // a parte que vai direto para a etapa da baixa já nasce com a baixa
+      if (acao.etapa === baixa) b = darBaixa(b, parteId, ctx.hoje);
       return atualizarPedidosDosItens(b, p.itens);
     }
     case 'dividir_por_previsao': {
+      if (p.baixadoEm) return board;
       const partes = partesPorPrevisao(p, pedidosDe(board));
       if (partes.length === 0) return board;
       const vao = new Set(partes.flatMap((x) => x.itens.map((i) => i.itemId)));

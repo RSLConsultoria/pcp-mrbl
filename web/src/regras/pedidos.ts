@@ -45,10 +45,20 @@ export function faltasSemPedido(board: Board): FaltaSemPedido[] {
   return grupos;
 }
 
-export function ultimaEtapa(etapas: EtapaPedido[]): EtapaPedido | undefined {
-  let u: EtapaPedido | undefined;
-  for (const e of etapas) if (!u || e.ordem > u.ordem) u = e;
-  return u;
+// Etapas em ordem. As duas últimas são fixas: a penúltima dá a baixa (Enviado ao destino
+// final) e a última finaliza o pedido (Concluído: o destino confirmou que recebeu).
+function emOrdem(etapas: EtapaPedido[]): EtapaPedido[] {
+  return [...etapas].sort((a, b) => a.ordem - b.ordem);
+}
+
+export function etapaFinal(etapas: EtapaPedido[]): EtapaPedido | undefined {
+  const o = emOrdem(etapas);
+  return o[o.length - 1];
+}
+
+export function etapaDaBaixa(etapas: EtapaPedido[]): EtapaPedido | undefined {
+  const o = emOrdem(etapas);
+  return o.length >= 2 ? o[o.length - 2] : undefined;
 }
 
 export const VARIOS_FORNECEDORES = 'Vários fornecedores';
@@ -120,7 +130,6 @@ export function quemAoTrocarOrigem(quem: string, opcoes: string[]): string {
 }
 
 export interface EstadoEditavel {
-  etapa: string;
   origem: DadosPedido['origem'];
   quem: string;
   local: DadosPedido['local'];
@@ -142,11 +151,9 @@ export function previsaoDoItemMudou(antes: EstadoEditavel, depois: EstadoEditave
 const ou = (s: string): string => (s.trim() === '' ? '—' : s);
 
 // Mesmas linhas que o servidor grava no histórico do editar_pedido. Vazio = "Nada alterado".
-export function resumoAlteracoes(antes: EstadoEditavel, depois: EstadoEditavel, etapas: EtapaPedido[] = []): string[] {
-  const nomeEtapa = (id: string) => etapas.find((e) => e.id === id)?.nome ?? id;
+export function resumoAlteracoes(antes: EstadoEditavel, depois: EstadoEditavel): string[] {
   const dia = (s: string) => (s === '' ? '—' : ddmm(s) || s);
   const out: string[] = [];
-  if (antes.etapa !== depois.etapa) out.push(`Etapa: ${nomeEtapa(antes.etapa)} → ${nomeEtapa(depois.etapa)}`);
   if (antes.origem !== depois.origem) out.push(`Origem: ${nomeOrigem(antes.origem)} → ${nomeOrigem(depois.origem)}`);
   if (antes.quem !== depois.quem) out.push(`Quem: ${ou(antes.quem)} → ${ou(depois.quem)}`);
   if (antes.local !== depois.local) out.push(`Local: ${nomeLocal(antes.local)} → ${nomeLocal(depois.local)}`);
@@ -162,14 +169,15 @@ export function resumoAlteracoes(antes: EstadoEditavel, depois: EstadoEditavel, 
   return out;
 }
 
-// Etapas como ficariam: ao menos 2, nomes não vazios e únicos, e nenhuma etapa com
-// pedido aberto sai do quadro (as atuais são comparadas pelo id).
+// Etapas como ficariam: ao menos 3, nomes não vazios e únicos, as duas últimas atuais no fim
+// e na mesma ordem (podem ser renomeadas) e nenhuma etapa com pedido aberto (não concluído)
+// sai do quadro (as atuais são comparadas pelo id). Mesmas regras do servidor.
 export function validarEtapas(
   etapas: { id?: string; nome: string }[],
   pedidos: Pedido[],
   atuais: EtapaPedido[] = []
 ): string | null {
-  if (etapas.length < 2) return 'O quadro precisa de pelo menos 2 etapas.';
+  if (etapas.length < 3) return 'O quadro precisa de pelo menos 3 etapas.';
   const vistos = new Set<string>();
   for (const e of etapas) {
     const n = e.nome.trim();
@@ -178,11 +186,17 @@ export function validarEtapas(
     if (vistos.has(chave)) return `Já existe uma etapa chamada ${n}.`;
     vistos.add(chave);
   }
-  // A última etapa (Resolvido: mover para ela dá baixa) fica sempre por último.
-  const ultima = atuais.length ? atuais[atuais.length - 1] : null;
-  if (ultima && etapas[etapas.length - 1].id !== ultima.id) return `A última etapa (${ultima.nome}) precisa continuar por último.`;
+  const o = emOrdem(atuais);
+  if (o.length >= 2) {
+    const baixa = o[o.length - 2];
+    const final = o[o.length - 1];
+    const n = etapas.length;
+    if (etapas[n - 2].id !== baixa.id || etapas[n - 1].id !== final.id) {
+      return `As etapas ${baixa.nome} e ${final.nome} precisam continuar no fim, nessa ordem.`;
+    }
+  }
   const mantidas = new Set(etapas.map((e) => e.id).filter(Boolean));
-  for (const a of atuais) {
+  for (const a of o) {
     if (!mantidas.has(a.id) && pedidos.some((p) => !p.finalizado && p.etapa === a.id)) {
       return `A etapa ${a.nome} tem pedidos abertos.`;
     }

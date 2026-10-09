@@ -213,8 +213,13 @@
     },
     {
       "id": "entregue",
-      "nome": "Resolvido",
+      "nome": "Enviado ao destino final",
       "ordem": 4
+    },
+    {
+      "id": "concluido",
+      "nome": "Concluído",
+      "ordem": 5
     }
   ]
 }

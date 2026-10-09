@@ -4,11 +4,9 @@
 // mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
 // ?atraso=4000 na URL da ação.
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
-// A última etapa é "Resolvido": mover um pedido para ela dá a baixa nas caixas (e finaliza o pedido).
-// Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
-// 90005 em Aguardando entrega (a parte PED-0003.1 já foi resolvida); 90007 em Resolvido (material baixado, pronta
-// para ir à oficina); 90006 já enviada; 90008 concluída (a oficina recebeu). PED-0001 tem itens com previsões
-// diferentes (Dividir por previsão). Enviar à oficina com material faltando: 409, como no servidor.
+// Etapas: A pedir · Solicitado · Aguardando entrega · Enviado ao destino final (mover para ela dá a baixa
+// nas caixas) · Concluído (o destino confirmou; finaliza). Pedido com baixa só vai para Concluído.
+// PED-0001 tem itens com previsões diferentes (Dividir por previsão). PED-0004 está concluído.
 import http from 'node:http';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
@@ -60,7 +58,7 @@ const estado = {
     caixa(90005, 'PEDIDO', 'COSTURA', 'PECA TESTE E', 'CLIENTE BETA', 'Maria', [
       item('e1', 'FITA GROSGRAIN 25MM', 'MT', 300, { baixada: 120, status: 'PARCIAL' })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-6),
-      historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Resolvido) e deu baixa: 120 MT de FITA GROSGRAIN 25MM (resta 180 MT)')] }),
+      historico: [hist(1, 'Renata', 'Renata dividiu PED-0003: 120 MT de FITA GROSGRAIN 25MM foram para PED-0003.1 (Enviado ao destino final) e deu baixa: 120 MT de FITA GROSGRAIN 25MM (resta 180 MT)')] }),
     caixa(90006, 'PEDIDO', 'ACABAMENTO', 'PECA TESTE F', 'CLIENTE GAMA', 'Lucca', [
       item('f1', 'ELASTICO CHATO 30MM', 'MT', 80, { separada: 20, baixada: 80, status: 'RESOLVIDO', resolvidoEm: diaIso(-3) })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-4), tratativa: 'ENVIADO', tratativaEm: diaIso(-2) }),
@@ -68,14 +66,14 @@ const estado = {
       item('g1', 'BOTAO PRESSAO 12MM', 'UN', 200, { baixada: 200, status: 'RESOLVIDO', resolvidoEm: diaIso(-1) }),
       item('g2', 'ENTRETELA FINA', 'MT', 15, { baixada: 15, status: 'RESOLVIDO', resolvidoEm: diaIso(-1) })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-2),
-      historico: [hist(1, 'Renata', 'Renata moveu PED-0007 para Resolvido e deu baixa: 200 UN de BOTAO PRESSAO 12MM (resta 0 UN); 15 MT de ENTRETELA FINA (resta 0 MT)')] }),
+      historico: [hist(1, 'Renata', 'Renata moveu PED-0007 para Enviado ao destino final e deu baixa: 200 UN de BOTAO PRESSAO 12MM (resta 0 UN); 15 MT de ENTRETELA FINA (resta 0 MT)')] }),
     caixa(90008, 'PEDIDO', 'COSTURA', 'PECA TESTE H', 'CLIENTE BETA', 'Maria', [
       item('h1', 'LINHA 80 POLIESTER', 'cones', 6, { baixada: 6, status: 'RESOLVIDO', resolvidoEm: diaIso(-5) })
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-12), tratativa: 'RECEBIDO', tratativaEm: diaIso(-3) })
   ],
   etapas: [
-    { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' },
-    { id: 'aguardando', nome: 'Aguardando entrega' }, { id: 'entregue', nome: 'Resolvido' }
+    { id: 'a_pedir', nome: 'A pedir' }, { id: 'solicitado', nome: 'Solicitado' }, { id: 'aguardando', nome: 'Aguardando entrega' },
+    { id: 'entregue', nome: 'Enviado ao destino final' }, { id: 'concluido', nome: 'Concluído' }
   ],
   pedidos: [
     { id: 'PED-0001', etapa: 'solicitado', origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'SAO_PAULO', previsao: diaIso(6), responsavel: 'Renata', criadoEm: diaIso(-5), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd1', dealId: '700004', qtd: 20, fornecedor: 'TECIDOS BETA', previsao: '' }, { itemId: 'a2', dealId: '700001', qtd: 30, fornecedor: '', previsao: diaIso(12) }] },
@@ -83,7 +81,7 @@ const estado = {
     // já dividido: 120 MT chegaram e viraram o PED-0003.1; o PED-0003 espera os outros 180 MT
     { id: 'PED-0003', etapa: 'aguardando', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Gi', criadoEm: diaIso(-8), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 180, fornecedor: 'AVIAMENTOS DELTA' }] },
     { id: 'PED-0003.1', pai: 'PED-0003', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-1), responsavel: 'Gi', criadoEm: diaIso(-1), baixadoEm: diaIso(-1), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'e1', dealId: '700005', qtd: 120, fornecedor: 'AVIAMENTOS DELTA' }] },
-    { id: 'PED-0004', etapa: 'entregue', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Gi', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
+    { id: 'PED-0004', etapa: 'concluido', origem: 'CLIENTE', quem: 'CLIENTE ALFA', local: 'BRAGANCA', previsao: diaIso(-6), responsavel: 'Gi', criadoEm: diaIso(-12), baixadoEm: diaIso(-3), concluidoEm: diaIso(-2), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'a3', dealId: '700001', qtd: 26, fornecedor: '' }] },
     // etapa que saiu do quadro: aparece na coluna Outra etapa até ser movido
     // material da 90006 (já enviada à oficina) e da 90007 (pronta para enviar): resolvido, com a baixa dada
     { id: 'PED-0006', etapa: 'entregue', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(-3), responsavel: 'Lucca', criadoEm: diaIso(-6), baixadoEm: diaIso(-3), versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'f1', dealId: '700006', qtd: 80, fornecedor: '' }] },
@@ -100,7 +98,8 @@ const bad = (m) => new Erro(400, m);
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const fmtNum = (n) => String(Math.round(n * 1000) / 1000).replace('.', ',');
 const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
-const ultimaEtapa = () => estado.etapas[estado.etapas.length - 1].id;
+const etapaFinal = () => estado.etapas[estado.etapas.length - 1];
+const etapaDaBaixa = () => estado.etapas[estado.etapas.length - 2];
 const nomeEtapa = (id) => estado.etapas.find((e) => e.id === id)?.nome ?? id;
 const resta = (it) => Math.max(0, it.falta - it.baixada);
 const aberto = (it) => it.status !== 'RESOLVIDO' && resta(it) > 0;
@@ -111,7 +110,6 @@ const itemDe = (dealId, itemId) => caixaDe(dealId)?.itens.find((i) => i.id === i
 const numPedido = (id) => parseInt(id.slice(4), 10);
 const raizDoPedido = (id) => id.split('.')[0];
 const parteDoPedido = (id) => Number(id.split('.')[1] ?? 0);
-const ehUltima = (etapaId) => etapaId === ultimaEtapa();
 // Previsão que vale para o item do pedido: a dele ou, vazia, a do pedido.
 const previsaoDoItem = (p, i) => i.previsao || p.previsao || '';
 const previsoesDistintas = (p) => [...new Set(itensValidos(p).map((i) => previsaoDoItem(p, i)))]
@@ -173,7 +171,8 @@ function montarBoard() {
     pedidos: [...estado.pedidos].sort(compararPedidos).map((p) => ({
       ...p,
       pai: p.pai ?? '',
-      finalizado: !!p.baixadoEm,
+      concluidoEm: p.concluidoEm ?? '',
+      finalizado: !!p.concluidoEm,
       previsaoMaisProxima: previsoesDistintas(p)[0] || p.previsao,
       previsoesDiferentes: previsoesDistintas(p).length > 1,
       itens: itensValidos(p).map((i) => {
@@ -251,9 +250,12 @@ function pedidoPorId(id) {
   return p;
 }
 const dealsDe = (p) => [...new Set(itensValidos(p).map((i) => i.dealId))];
-function pedidoEditavel(p) {
+// Como o servidor: concluído não muda; com a baixa, só mover para a etapa final.
+function pedidoAlteravel(p, corpo) {
   exigirEditavel(dealsDe(p));
-  if (p.baixadoEm) throw new Erro(409, 'Pedido finalizado não pode ser alterado.');
+  if (p.concluidoEm) throw new Erro(409, 'Pedido finalizado não pode ser alterado.');
+  const final = etapaFinal();
+  if (p.baixadoEm && !(corpo.tipo === 'mover_pedido' && corpo.etapa === final.id)) throw new Erro(409, `Pedido com baixa só pode ir para ${final.nome}.`);
 }
 
 function gerarPedido(c, usuario) {
@@ -292,20 +294,19 @@ function gerarPedido(c, usuario) {
 
 function editarPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
-  pedidoEditavel(p);
+  pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   const campos = c.campos ?? {};
+  if ('etapa' in campos) throw bad('Para mudar a etapa, arraste o card.');
   const porDeal = new Map();
   const add = (d, t) => porDeal.set(d, [...(porDeal.get(d) ?? []), t]);
   const comuns = [];
   if ('origem' in campos && campos.origem !== 'FORNECEDOR' && campos.origem !== 'CLIENTE') throw bad('Origem inválida.');
   if ('local' in campos && !LOCAIS[campos.local]) throw bad('Local inválido.');
   if ('previsao' in campos) validarData(campos.previsao);
-  if ('etapa' in campos && !estado.etapas.some((e) => e.id === campos.etapa)) throw bad('Etapa inválida.');
-  const rot = { etapa: 'Etapa', origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
+  const rot = { origem: 'Origem', quem: 'Quem', local: 'Local', previsao: 'Previsão', responsavel: 'Responsável' };
   const fmt = (k, v) => {
     if (v === '' || v == null) return '—';
-    if (k === 'etapa') return nomeEtapa(v);
     if (k === 'local') return nomeLocal(v);
     if (k === 'origem') return v === 'CLIENTE' ? 'Cliente' : 'Fornecedor';
     return k === 'previsao' ? ddmm(v) : v;
@@ -341,31 +342,36 @@ function editarPedido(c, usuario) {
     }
   }
   if (!comuns.length && !porDeal.size) throw bad('Nada alterado.');
-  const resolver = 'etapa' in novos && ehUltima(novos.etapa);
   Object.assign(p, novos);
   for (const [pi, k, v] of novosItens) pi[k] = v;
   p.versao = agoraIso();
-  const baixas = resolver ? baixarItens(itensValidos(p)) : new Map();
-  if (resolver) p.baixadoEm = diaIso();
   const historicos = [];
   for (const d of dealsDe(p)) {
     const partes = [...comuns, ...(porDeal.get(d) ?? [])];
-    if (partes.length) registrar(d, usuario, `${usuario} alterou ${p.id}: ${partes.join(', ')}${textoBaixa(baixas.get(d))}`, historicos);
+    if (partes.length) registrar(d, usuario, `${usuario} alterou ${p.id}: ${partes.join(', ')}`, historicos);
   }
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
 
 function moverPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
-  pedidoEditavel(p);
+  pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   if (!estado.etapas.some((e) => e.id === c.etapa)) throw bad('Etapa inválida.');
   if (p.etapa === c.etapa) throw bad('O pedido já está nessa etapa.');
-  p.etapa = c.etapa; p.versao = agoraIso();
-  // Entrar na última etapa (Resolvido) dá a baixa nas caixas e finaliza o pedido.
-  const baixas = ehUltima(c.etapa) ? baixarItens(itensValidos(p)) : new Map();
-  if (ehUltima(c.etapa)) p.baixadoEm = diaIso();
   const historicos = [];
+  if (c.etapa === etapaFinal().id) {
+    // o destino confirmou: só com a baixa dada
+    if (!p.baixadoEm) throw bad(`Mova o pedido primeiro para ${etapaDaBaixa().nome}.`);
+    p.etapa = c.etapa; p.concluidoEm = diaIso(); p.versao = agoraIso();
+    for (const d of dealsDe(p)) registrar(d, usuario, `${usuario} moveu ${p.id} para ${nomeEtapa(c.etapa)}`, historicos);
+    return resposta(p.versao, historicos, { pedidoId: p.id });
+  }
+  p.etapa = c.etapa; p.versao = agoraIso();
+  // Entrar na etapa da baixa (Enviado ao destino final) dá a baixa nas caixas; o pedido segue aberto.
+  const naBaixa = c.etapa === etapaDaBaixa().id;
+  const baixas = naBaixa ? baixarItens(itensValidos(p)) : new Map();
+  if (naBaixa) p.baixadoEm = diaIso();
   for (const d of dealsDe(p)) registrar(d, usuario, `${usuario} moveu ${p.id} para ${nomeEtapa(c.etapa)}${textoBaixa(baixas.get(d))}`, historicos);
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
@@ -387,9 +393,9 @@ const textoBaixa = (partes) => (partes?.length ? ` e deu baixa: ${partes.join(';
 // Mantido por compatibilidade (o app dá a baixa movendo para a última etapa).
 function baixarPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
-  pedidoEditavel(p);
+  pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
-  if (p.etapa !== ultimaEtapa()) throw bad('Dar baixa só na última etapa.');
+  if (p.etapa !== etapaDaBaixa().id) throw bad(`Dar baixa só na etapa ${etapaDaBaixa().nome}.`);
   const partes = baixarItens(itensValidos(p));
   p.baixadoEm = diaIso(); p.versao = agoraIso();
   const historicos = [];
@@ -399,7 +405,7 @@ function baixarPedido(c, usuario) {
 
 function dividirPedido(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
-  pedidoEditavel(p);
+  pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   const etapa = estado.etapas.find((e) => e.id === c.etapa);
   if (!etapa) throw bad('Etapa inválida.');
@@ -433,9 +439,9 @@ function dividirPedido(c, usuario) {
   estado.pedidos.push(parte);
   for (const m of movidos) m.pi.qtd = Math.round((m.pi.qtd - m.qtd) * 1000) / 1000;
   p.versao = versao;
-  // parte que vai direto para a última etapa (Resolvido) já nasce com a baixa
-  const baixas = ehUltima(etapa.id) ? baixarItens(parte.itens) : new Map();
-  if (ehUltima(etapa.id)) parte.baixadoEm = diaIso();
+  // parte que vai direto para a etapa da baixa já nasce com a baixa
+  const baixas = etapa.id === etapaDaBaixa().id ? baixarItens(parte.itens) : new Map();
+  if (etapa.id === etapaDaBaixa().id) parte.baixadoEm = diaIso();
   const historicos = [];
   const porDeal = new Map();
   for (const m of movidos) porDeal.set(m.pi.dealId, [...(porDeal.get(m.pi.dealId) ?? []), `${fmtNum(m.qtd)} ${m.it.un} de ${m.it.nome}`]);
@@ -446,7 +452,7 @@ function dividirPedido(c, usuario) {
 // Uma parte por data de previsão dos itens; a mais próxima fica no pedido.
 function dividirPorPrevisao(c, usuario) {
   const p = pedidoPorId(c.pedidoId);
-  pedidoEditavel(p);
+  pedidoAlteravel(p, c);
   conferirVersao(p.versao, c.versao, 'este pedido');
   const datas = previsoesDistintas(p);
   if (datas.length < 2) throw bad('Os itens têm a mesma previsão.');
@@ -477,7 +483,7 @@ function dividirPorPrevisao(c, usuario) {
 
 function salvarEtapas(c) {
   const lista = c.etapas;
-  if (!Array.isArray(lista) || lista.length < 2) throw bad('O quadro precisa de pelo menos 2 etapas.');
+  if (!Array.isArray(lista) || lista.length < 3) throw bad('O quadro precisa de pelo menos 3 etapas.');
   const nomes = new Set();
   for (const e of lista) {
     const nome = String(e?.nome ?? '').trim();
@@ -486,12 +492,14 @@ function salvarEtapas(c) {
     nomes.add(chaveNome(nome));
     if (e.id && !estado.etapas.some((x) => x.id === e.id)) throw bad('Etapa desconhecida.');
   }
-  const ultima = estado.etapas[estado.etapas.length - 1];
-  if (lista[lista.length - 1].id !== ultima.id) throw bad(`A última etapa (${ultima.nome}) precisa continuar por último.`);
+  const baixa = etapaDaBaixa();
+  const final = etapaFinal();
+  const n = lista.length;
+  if (lista[n - 2].id !== baixa.id || lista[n - 1].id !== final.id) throw bad(`As etapas ${baixa.nome} e ${final.nome} precisam continuar no fim, nessa ordem.`);
   const mantidos = new Set(lista.filter((e) => e.id).map((e) => e.id));
   for (const antiga of estado.etapas) {
     if (mantidos.has(antiga.id)) continue;
-    if (estado.pedidos.some((p) => !p.baixadoEm && p.etapa === antiga.id)) throw new Erro(409, `A etapa ${antiga.nome} tem pedidos abertos.`);
+    if (estado.pedidos.some((p) => !p.concluidoEm && p.etapa === antiga.id)) throw new Erro(409, `A etapa ${antiga.nome} tem pedidos abertos.`);
   }
   const ids = new Set();
   estado.etapas = lista.map((e) => {
@@ -516,9 +524,9 @@ function oficina(c, usuario, recebeu) {
     // Sem item aberto (tudo baixado) ou todo item aberto com pedido e todos os pedidos dele na última etapa.
     const naUltima = cx.itens.filter(aberto).every((it) => {
       const ps = pedidosAbertosDoItem(cx.dealId, it.id);
-      return ps.length > 0 && ps.every((p) => p.etapa === ultimaEtapa());
+      return ps.length > 0 && ps.every((p) => p.etapa === etapaDaBaixa().id);
     });
-    if (!naUltima) throw new Erro(409, `O material desta caixa ainda não chegou (etapa ${nomeEtapa(ultimaEtapa())}).`);
+    if (!naUltima) throw new Erro(409, `O material desta caixa ainda não chegou (etapa ${nomeEtapa(etapaDaBaixa().id)}).`);
   }
   cx.versao = agoraIso(); cx.tratativaEm = diaIso();
   const historicos = [];

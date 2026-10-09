@@ -91,31 +91,6 @@ async function ficaNaColuna(page: Page, api: { boardGets: () => number }, id: st
   await expect(card(page, antiga, id)).toHaveCount(0);
 }
 
-test('editar a etapa no painel e salvar: o card vai para a coluna nova e fica lá', async ({ page, api }) => {
-  await entrar(page, '#pedidos');
-  await card(page, 'Solicitado', 'PED-0001').getByRole('button', { name: 'Pedido PED-0001' }).click();
-  const painel = page.getByRole('complementary', { name: 'Pedido PED-0001' });
-  await painel.getByLabel('Etapa').selectOption('aguardando');
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  await ficaNaColuna(page, api, 'PED-0001', 'Aguardando entrega', 'Solicitado');
-  // o painel continua aberto e mostra a etapa gravada
-  await expect(painel.getByLabel('Etapa')).toHaveValue('aguardando');
-  expect(api.acoes.map((a) => a.tipo)).toEqual(['editar_pedido']);
-});
-
-test('editar a etapa duas vezes seguidas sem esperar o servidor: fica na última escolhida', async ({ page, api }) => {
-  await entrar(page, '#pedidos');
-  await card(page, 'Solicitado', 'PED-0001').getByRole('button', { name: 'Pedido PED-0001' }).click();
-  const painel = page.getByRole('complementary', { name: 'Pedido PED-0001' });
-  await painel.getByLabel('Etapa').selectOption('aguardando');
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  await expect(card(page, 'Aguardando entrega', 'PED-0001')).toBeVisible();
-  await painel.getByLabel('Etapa').selectOption('a_pedir');
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  await ficaNaColuna(page, api, 'PED-0001', 'A pedir', 'Aguardando entrega');
-  await expect(card(page, 'Solicitado', 'PED-0001')).toHaveCount(0);
-});
-
 test('arrastar o pedido para outra etapa: o card fica na coluna nova depois da recarga', async ({ page, api }) => {
   await entrar(page, '#pedidos');
   await card(page, 'Aguardando entrega', 'PED-0003').getByRole('button', { name: 'Pedido PED-0003' })
@@ -151,13 +126,13 @@ test('painel aberto e o card arrastado: o painel acompanha a etapa e salvar não
   await entrar(page, '#pedidos');
   await card(page, 'Solicitado', 'PED-0001').getByRole('button', { name: 'Pedido PED-0001' }).click();
   const painel = page.getByRole('complementary', { name: 'Pedido PED-0001' });
-  await expect(painel.getByLabel('Etapa')).toHaveValue('solicitado');
+  await expect(painel.locator('.painel__meta').first()).toContainText('Solicitado');
   await card(page, 'Solicitado', 'PED-0001').getByRole('button', { name: 'Pedido PED-0001' })
     .dragTo(page.getByRole('region', { name: 'Aguardando entrega' }));
   await expect(card(page, 'Aguardando entrega', 'PED-0001')).toBeVisible();
   // ainda antes de o servidor responder ao arraste (o mock segura ${ATRASO_MS} ms)
   await expect(salvando(page)).toBeVisible();
-  await expect(painel.getByLabel('Etapa')).toHaveValue('aguardando', { timeout: 300 });
+  await expect(painel.locator('.painel__meta').first()).toContainText('Aguardando entrega', { timeout: 300 });
   await expect(painel.getByRole('button', { name: 'Nada alterado' })).toBeDisabled({ timeout: 300 });
   // muda outra coisa e salva ainda com o arraste na fila
   await painel.getByLabel('Responsável').selectOption('Lucca');
@@ -175,32 +150,19 @@ test('digitando no painel quando a recarga chega: o que foi digitado continua l�
   await entrar(page, '#pedidos');
   await card(page, 'Solicitado', 'PED-0001').getByRole('button', { name: 'Pedido PED-0001' }).click();
   const painel = page.getByRole('complementary', { name: 'Pedido PED-0001' });
-  await painel.getByLabel('Etapa').selectOption('aguardando');
+  await painel.getByLabel('Responsável').selectOption('Lucca');
   await painel.getByRole('button', { name: 'Salvar alterações' }).click();
   // enquanto grava, começa outra alteração
-  await painel.getByLabel('Responsável').selectOption('Lucca');
+  await painel.getByLabel('Local de entrega').selectOption('OFICINA');
   const gets = api.boardGets();
   await expect(salvando(page)).toHaveCount(0, { timeout: 10_000 });
   await expect.poll(() => api.boardGets()).toBeGreaterThan(gets);
   await page.waitForTimeout(300);
+  await expect(painel.getByLabel('Local de entrega')).toHaveValue('OFICINA');
   await expect(painel.getByLabel('Responsável')).toHaveValue('Lucca');
-  await expect(painel.getByLabel('Etapa')).toHaveValue('aguardando');
   await expect(painel.getByRole('button', { name: 'Salvar alterações' })).toBeEnabled();
 });
 
-test('pedido em etapa que saiu do quadro: escolher a primeira etapa no painel conta como mudança', async ({ page, api }) => {
-  await page.setViewportSize({ width: 1720, height: 900 });
-  await entrar(page, '#pedidos');
-  await card(page, 'Outra etapa', 'PED-0005').getByRole('button', { name: 'Pedido PED-0005' }).click();
-  const painel = page.getByRole('complementary', { name: 'Pedido PED-0005' });
-  await expect(painel.getByLabel('Etapa')).toHaveValue('conferencia');
-  await painel.getByLabel('Etapa').selectOption('a_pedir');
-  await painel.getByRole('button', { name: 'Salvar alterações' }).click();
-  await ficaNaColuna(page, api, 'PED-0005', 'A pedir', 'Outra etapa');
-});
-
-// Como o servidor (n8n/src/montarCaixas.js): só item de caixa ganha (fora da FALTANTES) vem
-// com editavel false. Item resolvido e item de caixa somente leitura são da FALTANTES.
 test('mock: item resolvido e caixa somente leitura não dizem "lido da planilha de caixas ganhas"', async ({ page, api }) => {
   void api;
   await entrar(page, '');
