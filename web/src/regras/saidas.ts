@@ -113,6 +113,15 @@ export function textoEnviarSoNaUltima(etapas: EtapaPedido[]): string {
   return `Para enviar à oficina, todo o material precisa estar na última etapa${u ? ` (${u.nome})` : ''}.`;
 }
 
+// Confirmação do "Oficina recebeu". O servidor marca a caixa como recebida (vai para
+// Concluído) e dá baixa total só nos itens ainda abertos com falta informada; sem nenhum,
+// não há baixa a anunciar.
+export function textoOficinaRecebeu(abertos: number): string {
+  const p = 'A oficina recebeu o material?';
+  if (abertos <= 0) return `${p} A caixa vai para Concluído.`;
+  return `${p} Isso dá baixa total ${abertos > 1 ? `nos ${abertos} itens abertos` : 'no item aberto'} desta caixa.`;
+}
+
 export const TEXTO_ETAPAS_DIFERENTES = 'pedidos em etapas diferentes';
 
 function ultimaAtividade(c: Caixa): string {

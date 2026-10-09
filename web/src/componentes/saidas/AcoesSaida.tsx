@@ -3,7 +3,7 @@ import type { Acao, Caixa, EtapaPedido, Pedido } from '../../api/tipos';
 import type { Executar } from '../../hooks/useAcao';
 import { mensagemSucesso } from '../../regras/acoes';
 import { itensAbertos } from '../../regras/colunas';
-import { itensParaPedido, podeEnviarOficina, textoEnviarSoNaUltima, type ColunaSaidaId } from '../../regras/saidas';
+import { itensParaPedido, podeEnviarOficina, textoEnviarSoNaUltima, textoOficinaRecebeu, type ColunaSaidaId } from '../../regras/saidas';
 
 interface Props {
   caixa: Caixa;
@@ -29,7 +29,8 @@ export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecio
 
   if (coluna === 'concluido') return null;
   const paraPedido = itensParaPedido(caixa).length;
-  const abertos = itensAbertos(caixa).length;
+  // os que o servidor baixa no "Oficina recebeu": abertos e com a falta informada
+  const abertos = itensAbertos(caixa).filter((i) => i.falta !== null).length;
   const enviada = caixa.tratativa === 'ENVIADO';
   const podeEnviar = !enviada && podeEnviarOficina(caixa, pedidos, etapas);
 
@@ -62,9 +63,7 @@ export function AcoesSaida({ caixa, coluna, pedidos, etapas, executar, onSelecio
       {!enviada && !podeEnviar && <p className="acoes__nota">{textoEnviarSoNaUltima(etapas)}</p>}
       {enviada && confirmando && (
         <div className="confirmacao" role="group" aria-label="Confirmar recebimento da oficina">
-          <p className="confirmacao__texto">
-            A oficina recebeu o material? Isso dá baixa total {abertos > 1 ? `nos ${abertos} itens abertos` : 'no item aberto'} desta caixa.
-          </p>
+          <p className="confirmacao__texto">{textoOficinaRecebeu(abertos)}</p>
           <div className="acoes">
             <button ref={confirmarRef} type="button" className="botao botao--navy"
               onClick={() => {

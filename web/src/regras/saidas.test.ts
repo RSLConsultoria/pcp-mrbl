@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Board, EtapaPedido, Pedido } from '../api/tipos';
 import {
   caixasDeSaida, colunaSaida, colunasSaida, nomeColunaSaida, podeEnviarOficina, saidasComColuna, diasDesdeSaida, itensParaPedido,
-  seloSaidaVermelho, textoEnviarSoNaUltima, textoParcial, textoPedidoDoItem, textoSaiu, textoTratativa
+  seloSaidaVermelho, textoEnviarSoNaUltima, textoOficinaRecebeu, textoParcial, textoPedidoDoItem, textoSaiu, textoTratativa
 } from './saidas';
 import { caixa, item } from './teste-util';
 
@@ -157,5 +157,13 @@ describe('textos de Saídas', () => {
   it('itens para pedido: abertos, editáveis e sem pedido', () => {
     const c = saiu({ itens: [item({ id: 'a' }), item({ id: 'b', pedidoId: 'PED-0001' }), item({ id: 'c', editavel: false }), item({ id: 'd', status: 'RESOLVIDO', resta: 0 }), item({ id: 'e', resta: null })] });
     expect(itensParaPedido(c).map((i) => i.id)).toEqual(['a']);
+  });
+});
+
+describe('textoOficinaRecebeu', () => {
+  it('fala da baixa só quando há item aberto (o servidor só baixa os abertos)', () => {
+    expect(textoOficinaRecebeu(0)).toBe('A oficina recebeu o material? A caixa vai para Concluído.');
+    expect(textoOficinaRecebeu(1)).toBe('A oficina recebeu o material? Isso dá baixa total no item aberto desta caixa.');
+    expect(textoOficinaRecebeu(3)).toBe('A oficina recebeu o material? Isso dá baixa total nos 3 itens abertos desta caixa.');
   });
 });
