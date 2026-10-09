@@ -96,14 +96,27 @@ function linhaInicialDoRange(range) {
   return m ? Number(m[1]) : 1;
 }
 
+// Numero (na planilha) da ultima linha com algum dado, contando o cabecalho e as
+// linhas que o linhasDaAba pula (coluna sem nome); so cabecalho ou aba vazia = a
+// linha do cabecalho.
+function ultimaLinhaComDados(values, linhaInicial) {
+  var v = values || [];
+  for (var i = v.length - 1; i > 0; i--) {
+    if (!(v[i] || []).every(celulaVazia)) return linhaInicial + i;
+  }
+  return linhaInicial;
+}
+
 // Resposta do values:batchGet -> { linhas: { ABA: [...] }, cabecalhos: { ABA: [...] },
-// linhaCabecalho: { ABA: n } }. Os valueRanges vem na ordem pedida.
+// linhaCabecalho: { ABA: n }, ultimaLinha: { ABA: n | null } }. Os valueRanges vem na
+// ordem pedida. ultimaLinha e null na aba lida so pelo cabecalho (nao se sabe onde
+// ela termina).
 function planilhaDoLote(resposta, leituras) {
   var vr = resposta && resposta.valueRanges;
   if (!vr || vr.length !== leituras.length) {
     throw new Error('Leitura em lote: esperava ' + leituras.length + ' abas, veio ' + (vr ? vr.length : 0));
   }
-  var p = { linhas: {}, cabecalhos: {}, linhaCabecalho: {} };
+  var p = { linhas: {}, cabecalhos: {}, linhaCabecalho: {}, ultimaLinha: {} };
   leituras.forEach(function (l, i) {
     var aba = nomeDaLeitura(l);
     var inicio = linhaInicialDoRange(vr[i].range);
@@ -111,6 +124,7 @@ function planilhaDoLote(resposta, leituras) {
     p.linhas[aba] = linhasDaAba(values, inicio);
     p.cabecalhos[aba] = (values[0] || []).map(function (c) { return texto(c); });
     p.linhaCabecalho[aba] = inicio;
+    p.ultimaLinha[aba] = typeof l !== 'string' && l.soCabecalho ? null : ultimaLinhaComDados(values, inicio);
   });
   return p;
 }
@@ -131,14 +145,28 @@ function conferirOperacao(o) {
 }
 
 // operacoes[] + historicos[] -> [{ method, url, body }] na ordem de execucao:
-// 1) cabecalhos novos (campo sem coluna vai para a proxima coluna livre);
-// 2) values:append por aba (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP),
-//    incluindo appendOrUpdate cuja chave nao existe. OVERWRITE: escreve nas
-//    linhas vazias depois da tabela sem deslocar linhas, entao os row_number
-//    lidos seguem valendo para o batchUpdate da mesma acao;
+// 1) cabecalhos novos (campo sem coluna vai para a proxima coluna livre).
+//    Atencao: duas acoes ao mesmo tempo que criem coluna na mesma aba escolhem a
+//    MESMA coluna livre (cada uma so conhece o cabecalho que leu) e uma sobrescreve
+//    a outra. Por isso as colunas novas de cada entrega (concluido_em, origem...)
+//    sao criadas a mao antes do deploy, pelo runbook (n8n/workflows/README.md);
+// 2) values:append por aba (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP,
+//    FALTANTES), incluindo appendOrUpdate cuja chave nao existe. O range comeca
+//    na linha logo depois da ultima linha com dados que foi lida (ultimaLinha):
+//    o append do Google procura a tabela a partir do range, e uma linha toda
+//    vazia no meio da aba encerraria a tabela comecando no cabecalho, fazendo o
+//    append de N linhas sobrescrever N-1 linhas reais abaixo do buraco. Outra
+//    acao que gravou ali depois da leitura vira a tabela daquele ponto e o append
+//    continua depois dela. OVERWRITE: escreve nas linhas vazias sem deslocar
+//    linhas, entao os row_number lidos seguem valendo para o batchUpdate;
 // 3) um values:batchUpdate com todas as atualizacoes (so as colunas presentes
 //    na operacao, sem a coluna de casamento; a linha vem dos dados lidos);
-// 4) values:append no HISTORICO_APP.
+// 4) values:append no HISTORICO_APP. Aba lida so pelo cabecalho (o ramo acao le
+//    so a linha 1 do HISTORICO_APP) nao tem ultimaLinha: o append parte do
+//    cabecalho com INSERT_ROWS, que insere linhas novas em vez de sobrescrever
+//    (vai por ultimo, entao deslocar linhas nao afeta o batchUpdate).
+// Cada requisicao leva repetir: true quando pode ser repetida sem efeito em
+// dobro (batchUpdate grava os mesmos valores nas mesmas celulas); append nao.
 // Varias operacoes na mesma linha se juntam (a ultima vence). Qualquer erro
 // (destino desconhecido, update sem linha, aba nao lida) falha antes de
 // devolver qualquer requisicao.
@@ -156,6 +184,7 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
       aba: aba,
       cab: planilha.cabecalhos[aba].slice(),
       linhaCab: planilha.linhaCabecalho[aba] || 1,
+      ultimaLinha: planilha.ultimaLinha && typeof planilha.ultimaLinha[aba] === 'number' ? planilha.ultimaLinha[aba] : null,
       novos: [],
       anexos: [],
       atualiza: {},
@@ -234,11 +263,13 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
 
   function append(aba, linhas) {
     var e = abas[aba];
+    var conhecida = e.ultimaLinha !== null;
     return {
       method: 'POST',
-      url: base + '/' + encodeURIComponent(rangeDaAba(aba, 'A' + e.linhaCab)) +
-        ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
-      body: { values: linhas.map(function (l) { return linhaNoCabecalho(e, l); }) }
+      url: base + '/' + encodeURIComponent(rangeDaAba(aba, 'A' + (conhecida ? e.ultimaLinha + 1 : e.linhaCab))) +
+        ':append?valueInputOption=RAW&insertDataOption=' + (conhecida ? 'OVERWRITE' : 'INSERT_ROWS'),
+      body: { values: linhas.map(function (l) { return linhaNoCabecalho(e, l); }) },
+      repetir: false
     };
   }
 
@@ -274,7 +305,7 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
     cabecalhos.push({ range: rangeDaAba(aba, r), values: [e.novos.slice()] });
   });
   if (cabecalhos.length) {
-    reqs.push({ method: 'POST', url: base + ':batchUpdate', body: { valueInputOption: 'RAW', data: cabecalhos } });
+    reqs.push({ method: 'POST', url: base + ':batchUpdate', body: { valueInputOption: 'RAW', data: cabecalhos }, repetir: true });
   }
 
   var ordem = ORDEM_APPEND.concat(ordemAbas.filter(function (a) {
@@ -294,7 +325,7 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
     });
   });
   if (dados.length) {
-    reqs.push({ method: 'POST', url: base + ':batchUpdate', body: { valueInputOption: 'RAW', data: dados } });
+    reqs.push({ method: 'POST', url: base + ':batchUpdate', body: { valueInputOption: 'RAW', data: dados }, repetir: true });
   }
 
   if (hist.length) reqs.push(append(ABA_HISTORICO, hist));

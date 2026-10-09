@@ -81,11 +81,13 @@ test('F2 baixa: Processar Acao le do lote; Montar Escritas = batchUpdate em FALT
   assert.ok(ranges.every((r) => r.startsWith("'FALTANTES'!") && /3(:|$)/.test(r)), ranges.join());
   assert.deepEqual(escritas[0].body.data.find((d) => d.range.startsWith("'FALTANTES'!H")).values, [[6]]);
   assert.equal(escritas[1].body.values[0][0], proc.historicos[0].id);
+  // HISTORICO_APP lido so pelo cabecalho: INSERT_ROWS (nunca sobrescreve linha depois de um buraco)
+  assert.ok(escritas[1].url.endsWith('insertDataOption=INSERT_ROWS'), escritas[1].url);
 });
 
 test('F2 coluna da caixa sem linha em CAIXAS_PCP: append antes do historico', () => {
   const { escritas } = acao({ tipo: 'obs_caixa', dealId: '600001', valor: 'oi', versao: '' });
-  assert.deepEqual(escritas.map(alvo), ["'CAIXAS_PCP'!A1", "'HISTORICO_APP'!A1"]);
+  assert.deepEqual(escritas.map(alvo), ["'CAIXAS_PCP'!A2", "'HISTORICO_APP'!A1"]);
 });
 
 test('F3 gerar_pedido: PEDIDOS, PEDIDOS_ITENS e historico, nessa ordem', () => {
@@ -95,7 +97,7 @@ test('F3 gerar_pedido: PEDIDOS, PEDIDOS_ITENS e historico, nessa ordem', () => {
     origem: 'FORNECEDOR', quem: 'TECIDOS BETA', local: 'BRAGANCA', previsao: '2026-10-20', responsavel: 'Gi'
   });
   assert.equal(proc.status, 200, JSON.stringify(proc.body));
-  assert.deepEqual(escritas.map(alvo), ["'PEDIDOS'!A1", "'PEDIDOS_ITENS'!A1", "'HISTORICO_APP'!A1"]);
+  assert.deepEqual(escritas.map(alvo), ["'PEDIDOS'!A2", "'PEDIDOS_ITENS'!A2", "'HISTORICO_APP'!A1"]);
   assert.equal(escritas[1].body.values.length, 2);
 });
 

@@ -118,12 +118,14 @@ test('F2 baixa: um batchUpdate so com as colunas da operacao (sem a chave), depo
   assert.deepEqual(r, [
     {
       method: 'POST', url: BASE + ':batchUpdate',
-      body: { valueInputOption: 'RAW', data: [{ range: "'FALTANTES'!C3:D3", values: [[6, 'T']] }] }
+      body: { valueInputOption: 'RAW', data: [{ range: "'FALTANTES'!C3:D3", values: [[6, 'T']] }] },
+      repetir: true
     },
     {
       method: 'POST',
-      url: BASE + '/' + encodeURIComponent("'HISTORICO_APP'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
-      body: { values: [['h1', 'T', 'Baixa', 'PENDENTE']] }
+      url: BASE + '/' + encodeURIComponent("'HISTORICO_APP'!A2") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
+      body: { values: [['h1', 'T', 'Baixa', 'PENDENTE']] },
+      repetir: false
     }
   ]);
 });
@@ -133,7 +135,8 @@ test('casamento da chave por texto (numero lido x texto da operacao); null vira 
   const r = req([op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', { deal_id: '600001', tratativa: null, atualizado_em: 'T' })]);
   assert.deepEqual(r, [{
     method: 'POST', url: BASE + ':batchUpdate',
-    body: { valueInputOption: 'RAW', data: [{ range: "'CAIXAS_PCP'!D2:E2", values: [['', 'T']] }] }
+    body: { valueInputOption: 'RAW', data: [{ range: "'CAIXAS_PCP'!D2:E2", values: [['', 'T']] }] },
+    repetir: true
   }]);
 });
 
@@ -143,7 +146,7 @@ test('appendOrUpdate sem linha vira append (antes do batchUpdate), na ordem do c
     op('CAIXAS_PCP', 'appendOrUpdate', 'deal_id', { deal_id: '700', os: '7', atualizado_em: 'T' })
   ]);
   assert.equal(r.length, 2);
-  assert.equal(r[0].url, BASE + '/' + encodeURIComponent("'CAIXAS_PCP'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE');
+  assert.equal(r[0].url, BASE + '/' + encodeURIComponent("'CAIXAS_PCP'!A3") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE');
   assert.deepEqual(r[0].body, { values: [['700', '7', '', '', 'T']] });
   assert.equal(r[1].url, BASE + ':batchUpdate');
 });
@@ -158,7 +161,7 @@ test('ordem: PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP (append) -> batch
     op('PEDIDOS', 'update', 'id', { id: 'PED-0001', etapa: 'entregue' })
   ], [{ id: 'h1' }]);
   const abas = r.map((x) => /values\/([^:]+):append/.exec(x.url) ? decodeURIComponent(/values\/([^:]+):append/.exec(x.url)[1]) : 'batchUpdate');
-  assert.deepEqual(abas, ["'PEDIDOS'!A1", "'PEDIDOS_ITENS'!A1", "'ETAPAS_PEDIDO'!A1", "'CAIXAS_PCP'!A1", 'batchUpdate', "'HISTORICO_APP'!A1"]);
+  assert.deepEqual(abas, ["'PEDIDOS'!A3", "'PEDIDOS_ITENS'!A3", "'ETAPAS_PEDIDO'!A4", "'CAIXAS_PCP'!A3", 'batchUpdate', "'HISTORICO_APP'!A2"]);
   assert.deepEqual(r[4].body.data.map((d) => d.range), ["'FALTANTES'!C2", "'PEDIDOS'!B2"]);
 });
 
@@ -200,7 +203,8 @@ test('campo sem coluna: cabecalho novo na proxima coluna livre, gravado antes de
         { range: "'PEDIDOS'!E1:F1", values: [['nova', 'outra']] },
         { range: "'HISTORICO_APP'!E1", values: [['extra']] }
       ]
-    }
+    },
+    repetir: true
   });
   assert.deepEqual(r[1].body.values, [['PED-0009', '', '', '', 'z', 'y']]);
   assert.deepEqual(r[2].body.data, [{ range: "'PEDIDOS'!E2", values: [['x']] }]);
@@ -253,9 +257,9 @@ test('acao real: processarAcao (gerar_pedido) -> requisicoes', () => {
   assert.equal(saida.status, 200, JSON.stringify(saida.body));
   const r = limpo(ctx.requisicoesDeEscrita(saida.operacoes, saida.historicos, p, DOC));
   assert.deepEqual(r.map((x) => decodeURIComponent(x.url.replace(BASE, ''))),
-    ["/'PEDIDOS'!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
-      "/'PEDIDOS_ITENS'!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
-      "/'HISTORICO_APP'!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE"]);
+    ["/'PEDIDOS'!A2:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
+      "/'PEDIDOS_ITENS'!A2:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
+      "/'HISTORICO_APP'!A2:append?valueInputOption=RAW&insertDataOption=OVERWRITE"]);
   assert.equal(r[1].body.values[0][7], 20);
   assert.equal(r[2].body.values.length, saida.historicos.length);
 });
@@ -269,9 +273,51 @@ test('nova_demanda: append na FALTANTES (com a coluna origem nova) antes do hist
     [{ id: 'h1', quando: 'T', texto: 'demanda', ploomes_status: 'PENDENTE' }], p);
   assert.deepEqual(r.map((x) => x.url.replace(BASE, '')), [
     ':batchUpdate',
-    '/' + encodeURIComponent("'FALTANTES'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
-    '/' + encodeURIComponent("'HISTORICO_APP'!A1") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE'
+    '/' + encodeURIComponent("'FALTANTES'!A3") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE',
+    '/' + encodeURIComponent("'HISTORICO_APP'!A2") + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE'
   ]);
   assert.deepEqual(r[0].body.data, [{ range: "'FALTANTES'!F1", values: [['origem']] }]);
   assert.deepEqual(r[1].body.values, [['1|POS_SAIDA|u1', '9', '1', 'BOTÃO', 2, 'POS_SAIDA']]);
+});
+
+// ---------- append depois da ultima linha com dados (linha vazia no meio) ----------
+
+test('planilhaDoLote: ultimaLinha = ultima linha da planilha com algum dado (inclui as que linhasDaAba pula); so cabecalho = linha do cabecalho', () => {
+  const resp = { valueRanges: [
+    { range: "'PEDIDOS'!A1:Z1000", values: [['id', 'etapa'], ['PED-0001', 'a'], [], ['', ''], ['PED-0002', 'b'], ['PED-0003', '']] },
+    { range: "'FALTANTES'!A1:Z1000", values: [['id']] },
+    { range: "'CAIXAS_PCP'!A1:Z1000" },
+    { range: "'ETAPAS_PEDIDO'!A3:Z1000", values: [['id'], ['x']] },
+    { range: "'HISTORICO_APP'!A1:M1", values: [['id', 'quando']] }
+  ] };
+  const p = limpo(ctx.planilhaDoLote(resp, ['PEDIDOS', 'FALTANTES', 'CAIXAS_PCP', 'ETAPAS_PEDIDO', { aba: 'HISTORICO_APP', soCabecalho: true }]));
+  assert.deepEqual(p.ultimaLinha, { PEDIDOS: 6, FALTANTES: 1, CAIXAS_PCP: 1, ETAPAS_PEDIDO: 4, HISTORICO_APP: null });
+});
+
+test('append com linha toda vazia no meio da aba: comeca depois da ultima linha com dados, nunca dentro do buraco', () => {
+  const p = planilha([
+    ['PEDIDOS', [['id', 'etapa'], ['PED-0001', 'a'], [], ['PED-0002', 'b'], ['PED-0003', 'c']]],
+    ['PEDIDOS_ITENS', [['id', 'qtd'], [], [], ['PED-0001|a', 1]]],
+    ['HISTORICO_APP', [['id', 'quando']]]
+  ]);
+  const r = req([
+    op('PEDIDOS', 'append', 'id', { id: 'PED-0004', etapa: 'a' }),
+    op('PEDIDOS', 'append', 'id', { id: 'PED-0005', etapa: 'a' }),
+    op('PEDIDOS_ITENS', 'append', 'id', { id: 'PED-0004|a', qtd: 2 })
+  ], [{ id: 'h1', quando: 'T' }], p);
+  assert.deepEqual(r.map((x) => decodeURIComponent(x.url.replace(BASE, ''))), [
+    "/'PEDIDOS'!A6:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
+    "/'PEDIDOS_ITENS'!A5:append?valueInputOption=RAW&insertDataOption=OVERWRITE",
+    "/'HISTORICO_APP'!A2:append?valueInputOption=RAW&insertDataOption=OVERWRITE"
+  ]);
+});
+
+test('aba lida so pelo cabecalho (HISTORICO_APP no ramo acao): append com INSERT_ROWS a partir do cabecalho (nao sobrescreve nada)', () => {
+  const resp = { valueRanges: [
+    { range: "'FALTANTES'!A1:Z9", values: [['id', 'qtd_baixada'], ['a', 1]] },
+    { range: "'HISTORICO_APP'!A1:M1", values: [['id', 'quando']] }
+  ] };
+  const p = ctx.planilhaDoLote(resp, ['FALTANTES', { aba: 'HISTORICO_APP', soCabecalho: true }]);
+  const r = req([op('FALTANTES', 'update', 'id', { id: 'a', qtd_baixada: 2 })], [{ id: 'h1', quando: 'T' }], p);
+  assert.equal(decodeURIComponent(r[1].url.replace(BASE, '')), "/'HISTORICO_APP'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS");
 });
