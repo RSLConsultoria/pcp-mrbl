@@ -55,10 +55,10 @@ Fonte da verdade: `workflows/pcp-api.sdk.js` (gerado por `npm run build`; posiç
 
 Faça na planilha, à mão, antes de publicar:
 
-- **ETAPAS_PEDIDO**: na linha de id `entregue`, troque `nome` para **Resolvido**. Não mexa em `id` nem em `ordem` (pedidos existentes apontam para `entregue`, e a maior ordem é a etapa que dá baixa). Se a aba estiver vazia, nada a fazer: o padrão do código já usa Resolvido.
+- **ETAPAS_PEDIDO**: na linha de id `entregue`, troque `nome` para **Resolvido** (nome superado em 09/10/2026: veja a seção "Etapas novas" no fim, que renomeia para **Enviado ao destino final**). Não mexa em `id` nem em `ordem` (pedidos existentes apontam para `entregue`, e a maior ordem é a etapa que dá baixa). Se a aba estiver vazia, nada a fazer: o padrão do código já usa Resolvido.
 - **PEDIDOS_ITENS**: inclua o cabeçalho `previsao` logo depois de `fornecedor`.
 - **PEDIDOS**: confira que existe o cabeçalho `pai` (partes de pedido dividido).
-- **CAIXAS_PCP**: confira os cabeçalhos `tratativa` e `tratativa_em`.
+- **CAIXAS_PCP**: nada a conferir. (A coluna `tratativa` deixou de existir no código; as colunas antigas `tratativa`/`tratativa_em` podem ficar na planilha, ninguém lê.)
 
 ### Caminho recomendado: aplicar o SDK inteiro
 
@@ -186,3 +186,46 @@ Aba que não existe derruba o `values:batchGet` inteiro (400) e o board para de 
 O responsável da caixa (No Ploomes) continua vindo da aba USUARIOS.
 
 Deploy: `npm run build` e aplicar o SDK (homolog primeiro, como acima). Rollback: o mesmo da seção anterior; as abas novas podem ficar (a API antiga não as lê).
+
+## Etapas novas, Saídas divididas e demanda pós-saída (09/10/2026)
+
+Desenho: `docs/superpowers/specs/2026-10-09-f3-etapas-saidas-demanda-design.md`. Plano: `docs/superpowers/plans/2026-10-09-f3-etapas-saidas-demanda.md`.
+
+O que muda no servidor: a **penúltima** etapa (pela ordem) dá a baixa e a **última** finaliza o pedido (`concluido_em`); pedido com baixa só vai para a última; `editar_pedido` não muda etapa; `dividir_pedido` só da antepenúltima ("Aguardando entrega") e a parte vai para a penúltima com a baixa; `salvar_etapas` exige 3 etapas e mantém as duas últimas no fim; saem `enviar_oficina`/`oficina_recebeu`; entra `nova_demanda` (append na FALTANTES com ciclo e origem `POS_SAIDA`).
+
+### 0. Planilha de produção: ANTES de aplicar o SDK (ordem obrigatória)
+
+**Atenção:** o código novo trata a penúltima etapa como a da baixa. Com a ETAPAS_PEDIDO antiga (4 linhas, `entregue` por último), a penúltima seria `aguardando` e mover para "Aguardando entrega" daria baixa. Faça os passos abaixo primeiro, nesta ordem, sem repetir o que a planilha já tem (cada item é "confira e, se faltar, faça"):
+
+1. **ETAPAS_PEDIDO**
+   - Linha de id `entregue`: troque `nome` para **Enviado ao destino final** (era "Resolvido"). Não mexa em `id` nem em `ordem` (4).
+   - Linha nova: `id` = `concluido`, `nome` = **Concluído**, `ordem` = **5**.
+   - Etapas personalizadas: `entregue` precisa ficar com a **penúltima** ordem e `concluido` com a **maior** (maior ordem existente + 1). Linhas removidas (nome e ordem vazios) continuam ignoradas.
+   - Aba vazia: nada a fazer (o padrão do código já tem as 5 etapas).
+2. **PEDIDOS**: cabeçalho `concluido_em` na próxima coluna livre da linha 1 (linhas antigas vazias = não concluídas). Confira também `pai`. Pedidos que estavam em "Resolvido" (com `baixado_em`) passam a aparecer em **Enviado ao destino final**, em aberto: o dono arrasta para Concluído quando o destino confirmar.
+3. **PEDIDOS_ITENS**: cabeçalho `previsao` (logo depois de `fornecedor`), se ainda não existir.
+4. **FALTANTES**: cabeçalho `origem` na próxima coluna livre da linha 1 (se faltar, a primeira demanda cria a coluna sozinha, mas é melhor deixar a posição combinada). Confira que existe `atualizado_em_app` (F2).
+5. **Abas novas FORNECEDORES e RESPONSAVEIS** (se ainda não criadas na mudança de 08/10/2026; aba ausente derruba o `batchGet` e o board para): **FORNECEDORES** com `id` | `nome` | `ativo`; **RESPONSAVEIS** com `nome` | `ativo`, semeada com Gi, Fátima, Cesar, Luana, Lucca e Renata, todos `ativo` = SIM. Detalhes na seção "Fornecedor e responsável obrigatórios".
+6. **CAIXAS_PCP**: nada. As colunas antigas `tratativa`/`tratativa_em` podem ficar; o código não lê mais.
+
+### 1. Sync Faltantes e utilitários
+
+- O "Sync Faltantes - Google Sheets" (`s4mbblVXykIvkA8M`) só fecha órfãs com o mesmo `deal_id` **e** o mesmo `ciclo` (`PEDIDO`/`CORTE`) e grava por `id`. As linhas da demanda têm `ciclo` = `POS_SAIDA`, `origem` = `POS_SAIDA` e id `<deal>|POS_SAIDA|<uuid>`: o sync não as apaga nem sobrescreve. Esse workflow vive só no n8n (não está neste repositório): se for alterado, confira de novo esses pontos. (Conferido pelo controlador em 09/10/2026.)
+- **Nunca rode** o "Utilitario - Limpar Planilha Faltantes (manual)": ele apaga a FALTANTES inteira, inclusive as demandas pós-saída, que não voltam pelo sync.
+- O "Faltantes Painel" dos usuários lê a aba FALTANTES: as linhas `POS_SAIDA` vão aparecer lá. A conferência de como o painel as mostra fica com o controlador, antes do deploy.
+
+### 2. n8n (homolog primeiro)
+
+1. `cd n8n && npm test && npm run build` (o build regenera `workflows/*.sdk.js` e `workflows/json`).
+2. Aplique `workflows/pcp-api-homolog.sdk.js` no "PCP MRBL - API (homolog)" (webhooks `pcp-*-h`) e religue a credencial **Google Sheets - MRBL** (`72hvCT9jkADwOOo1`) em Ler USUARIOS, Ler Planilha, Ler Planilha Acao e Gravar Lote. Teste com o site local apontando para os webhooks `-h`, **só na OS de teste** (607479158): mover para Enviado ao destino final (baixa), arrastar para Concluído, dividir em Aguardando entrega, salvar etapas (renomear uma), criar uma Nova demanda na caixa da OS de teste. Confira na planilha: PEDIDOS com `baixado_em`/`concluido_em`, FALTANTES com as linhas `POS_SAIDA` e `origem`, HISTORICO_APP com as linhas novas.
+3. Produção: anote o `activeVersionId` do "PCP MRBL - API" (`WpuXpcSa5oGiEkTm`), aplique `workflows/pcp-api.sdk.js` e religue a credencial nos mesmos nodes. **Atenção:** gravar um workflow ativo pela API pública (PUT) publica na hora; o "Utilitario - Deploy PCP (manual)" também aplica o que está em `workflows/json` de um commit fixado, então só rode depois do passo 0 e do teste no homolog. Fixe o commit que contém o build novo.
+
+### 3. Site
+
+Merge na `main` **depois** do passo 2 (o site novo manda `dividir_pedido` sem etapa e `nova_demanda`, que a API antiga não entende).
+
+### Rollback
+
+- n8n: `restore_workflow_version` para o `activeVersionId` anotado e publish.
+- Site: reverta o merge.
+- Planilha: volte o nome da linha `entregue` para "Resolvido" e apague a linha `concluido` da ETAPAS_PEDIDO (sem pedidos nela; se houver, mova-os antes para `entregue`). As colunas `concluido_em` e `origem` e as linhas `POS_SAIDA` podem ficar: a API antiga ignora `concluido_em`; as linhas pós-saída aparecem como itens comuns da caixa.

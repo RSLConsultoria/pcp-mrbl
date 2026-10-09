@@ -1,6 +1,7 @@
 # F3: etapas novas, saídas divididas e demanda pós-saída
 
 Data: 09/10/2026. Ajustes pedidos pelo usuário depois de testar a F3 no ambiente simulado. Este documento vale por cima do desenho da F3 (2026-10-08-f3-pedidos-e-saidas-design.md) onde houver conflito.
+Plano: docs/superpowers/plans/2026-10-09-f3-etapas-saidas-demanda.md.
 
 ## 1. Etapas dos pedidos
 

@@ -156,9 +156,9 @@ describe('aplicarOtimista: pedidos', () => {
     expect(textoPedidoDoItem(itemDe(b, 'i1'), b.pedidos!, etapas)).toBe('Novo pedido · A pedir');
   });
   it('salvar_etapas: nomes, ordem e id provisório para a etapa nova', () => {
-    const b = aplicar(quadro(), { tipo: 'salvar_etapas', etapas: [{ id: 'a', nome: 'Compras' }, { nome: 'Em trânsito ' }, { id: 'ent', nome: 'Resolvido' }] });
+    const b = aplicar(quadro(), { tipo: 'salvar_etapas', etapas: [{ id: 'a', nome: 'Compras' }, { nome: 'Em trânsito ' }, { id: 'ent', nome: 'Enviado ao destino final' }] });
     expect(b.etapasPedido).toEqual([
-      { id: 'a', nome: 'Compras', ordem: 1 }, { id: 'novo:7.1', nome: 'Em trânsito', ordem: 2 }, { id: 'ent', nome: 'Resolvido', ordem: 3 }
+      { id: 'a', nome: 'Compras', ordem: 1 }, { id: 'novo:7.1', nome: 'Em trânsito', ordem: 2 }, { id: 'ent', nome: 'Enviado ao destino final', ordem: 3 }
     ]);
   });
 });

@@ -100,11 +100,11 @@ describe('historicoDoPedido', () => {
 
   it('a baixa por OS junta as listas depois de "deu baixa:"', () => {
     const r = historicoDoPedido([
-      c1([h('Lucca moveu PED-0044 para Resolvido e deu baixa: 20 MT de VIÉS (resta 0 MT)')]),
-      c4([h('Lucca moveu PED-0044 para Resolvido e deu baixa: 5 UN de ZÍPER (resta 0 UN)')])
+      c1([h('Lucca moveu PED-0044 para Enviado ao destino final e deu baixa: 20 MT de VIÉS (resta 0 MT)')]),
+      c4([h('Lucca moveu PED-0044 para Enviado ao destino final e deu baixa: 5 UN de ZÍPER (resta 0 UN)')])
     ], 'PED-0044');
     expect(r.map((x) => [x.texto, x.os])).toEqual([
-      ['Lucca moveu PED-0044 para Resolvido e deu baixa: 20 MT de VIÉS (resta 0 MT); 5 UN de ZÍPER (resta 0 UN)', ['90001', '90004']]
+      ['Lucca moveu PED-0044 para Enviado ao destino final e deu baixa: 20 MT de VIÉS (resta 0 MT); 5 UN de ZÍPER (resta 0 UN)', ['90001', '90004']]
     ]);
   });
 
