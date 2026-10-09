@@ -212,6 +212,12 @@
   .barra { padding: 10px 16px; }
   .busca { width: auto; flex: 1; }
   .legenda, .navbar__direita .sync { display: none; }
+  /* Guias numa segunda linha da barra escura, dividindo a largura; as que ainda não
+     existem ("Em breve") saem no celular. */
+  .navbar { flex-wrap: wrap; height: auto; padding: 10px 16px 0; row-gap: 6px; justify-content: space-between; }
+  .soc-modnav { order: 3; flex: 1 0 100%; overflow: visible; padding: 0; gap: 4px; }
+  .soc-modnav__item:disabled { display: none; }
+  .soc-modnav__item { flex: 1 1 0; min-width: 0; flex-direction: column; justify-content: center; gap: 3px; padding: 6px 4px 8px; white-space: normal; text-align: center; font-size: 12px; line-height: 1.2; border-radius: 4px 4px 0 0; }
   .quadro__trilho { padding: 0 16px 16px; }
   .painel { position: absolute; inset: 0; flex-basis: auto; }
   .painel__cabecalho, .painel__corpo { padding-left: 16px; padding-right: 16px; }

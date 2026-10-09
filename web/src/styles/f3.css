@@ -178,8 +178,15 @@
   .reserva__alternar { flex-direction: row; justify-content: center; padding: 0 16px; }
   .reserva__vertical { writing-mode: horizontal-tb; transform: none; }
   .janela-fundo { padding: 16px; }
-  .janela--larga .campos, .linha-item__campos { grid-template-columns: 1fr; }
-  .janela--larga .linha-item { display: flex; }
+  .janela--larga .campos, .linha-item__campos,
+  .janela--larga .linha-item__campos--previsao { grid-template-columns: minmax(0, 1fr); }
+  .janela--larga .linha-item { display: flex; align-items: stretch; }
+  .linha-item__campos--previsao .campo--previsao { grid-column: auto; }
+  .linha-item__campos select, .linha-item__campos input { box-sizing: border-box; width: 100%; min-width: 0; }
+  /* o × fica no canto da linha, ao lado do nome do item, e não sozinho embaixo */
+  .linha-item--removivel .linha-item__texto { padding-right: 40px; }
+  .linha-item--removivel .linha-item__remover { position: absolute; top: 8px; right: 0; }
+  .linha-item--removivel:first-child .linha-item__remover { top: -2px; }
   .janela__cabecalho, .janela__corpo, .janela__rodape { padding-left: 16px; padding-right: 16px; }
   .janela__rodape { flex-wrap: wrap; }
 }
