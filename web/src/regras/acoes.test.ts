@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client';
 import {
-  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_FALHA,
+  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_CONFLITO_PEDIDO, MSG_FALHA,
   ordenarHistorico, passoDaData, SELO_PLOOMES, validarBaixa, versaoAtual
 } from './acoes';
 import { item } from './teste-util';
@@ -114,6 +114,17 @@ describe('desfechoDoErro', () => {
     for (const msg of ['Item já está no PED-0003.', 'Item não encontrado.', 'Pedido finalizado não pode ser alterado.', 'A etapa Solicitado tem pedidos abertos.']) {
       expect(desfechoDoErro(new ApiError(409, msg))).toEqual({ tipo: 'conflito', texto: msg });
     }
+  });
+  it('o aviso de versão vencida fala do alvo da ação: pedido ou caixa', () => {
+    const mover = { tipo: 'mover_pedido', pedidoId: 'PED-0001', versao: 'v1', etapa: 'solicitado' } as const;
+    const baixa = { tipo: 'baixa', dealId: '700001', itemId: 'a2', valor: 1, versao: 'v1' } as const;
+    expect(MSG_CONFLITO_PEDIDO).toBe('Alguém alterou este pedido agora há pouco. Recarreguei os dados.');
+    for (const msg of ['Alguém alterou esta caixa agora há pouco.', 'Alguém alterou este pedido agora há pouco.', 'Erro 409']) {
+      expect(desfechoDoErro(new ApiError(409, msg), mover)).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO_PEDIDO });
+      expect(desfechoDoErro(new ApiError(409, msg), baixa)).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO });
+    }
+    expect(desfechoDoErro(new ApiError(409, 'Pedido finalizado não pode ser alterado.'), mover))
+      .toEqual({ tipo: 'conflito', texto: 'Pedido finalizado não pode ser alterado.' });
   });
 });
 

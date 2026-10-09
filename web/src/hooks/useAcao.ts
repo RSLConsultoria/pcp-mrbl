@@ -34,8 +34,8 @@ export function useAcao({ fila, token, board, marco, recarregar, aoExpirar, avis
 
   useState(() => fila.configurar({
     enviar: (acao) => enviarAcao(atual.current.token, acao),
-    aoFalhar: (e) => {
-      const d = desfechoDoErro(e);
+    aoFalhar: (e, acao) => {
+      const d = desfechoDoErro(e, acao);
       if (d.tipo === 'expirou') {
         atual.current.aoExpirar();
         return 'parar';

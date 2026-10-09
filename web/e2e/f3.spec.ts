@@ -645,3 +645,13 @@ test('previsão do item vazia mostra, em texto visível, que segue a do pedido',
   await previsao.fill('2026-10-25');
   await expect(dica).toHaveCount(0);
 });
+
+test('conflito ao mover um pedido fala do pedido, não da caixa', async ({ page }) => {
+  await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'a_pedir', PED_TAG)] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; },
+    resposta: () => ({ status: 409, json: { erro: 'Alguém alterou este pedido agora há pouco.' } })
+  });
+  await page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' }).dragTo(page.getByRole('region', { name: 'Solicitado' }));
+  await expect(aviso(page, 'Alguém alterou este pedido agora há pouco. Recarreguei os dados.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' })).toBeVisible();
+});

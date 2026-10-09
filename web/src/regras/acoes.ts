@@ -91,8 +91,10 @@ export function mensagemSucesso(
 }
 
 export const MSG_CONFLITO = 'Alguém alterou esta caixa agora há pouco. Recarreguei os dados.';
-// Texto que o servidor manda no 409 de versão vencida (n8n/src/pedidos.js ERRO_VERSAO).
-export const MSG_VERSAO_SERVIDOR = 'Alguém alterou esta caixa agora há pouco.';
+export const MSG_CONFLITO_PEDIDO = 'Alguém alterou este pedido agora há pouco. Recarreguei os dados.';
+// Começo do texto que o servidor manda no 409 de versão vencida (n8n/src/pedidos.js
+// ERRO_VERSAO e ERRO_VERSAO_PEDIDO): "Alguém alterou esta caixa/este pedido agora há pouco."
+export const MSG_VERSAO_SERVIDOR = 'Alguém alterou ';
 export const MSG_FALHA = 'Não foi possível salvar. Tente de novo.';
 
 export type DesfechoErro =
@@ -101,14 +103,17 @@ export type DesfechoErro =
   | { tipo: 'aviso'; texto: string };
 
 // O que a tela faz quando o servidor recusa uma ação. Todo 409 recarrega o board; só o de
-// versão vencida vira o texto padrão, os outros (item já em pedido, pedido finalizado,
-// etapa com pedido aberto) mostram a mensagem do servidor.
-export function desfechoDoErro(e: unknown): DesfechoErro {
+// versão vencida vira o texto padrão (que fala do pedido ou da caixa, conforme o alvo da
+// ação), os outros (item já em pedido, pedido finalizado, etapa com pedido aberto) mostram a
+// mensagem do servidor.
+export function desfechoDoErro(e: unknown, acao?: Acao): DesfechoErro {
   if (e instanceof ApiError) {
     if (e.status === 401) return { tipo: 'expirou' };
     if (e.status === 409) {
       const msg = e.message.trim();
-      return { tipo: 'conflito', texto: msg === '' || msg === 'Erro 409' || msg.startsWith(MSG_VERSAO_SERVIDOR) ? MSG_CONFLITO : msg };
+      const versao = msg === '' || msg === 'Erro 409' || msg.startsWith(MSG_VERSAO_SERVIDOR);
+      const padrao = acao && 'pedidoId' in acao ? MSG_CONFLITO_PEDIDO : MSG_CONFLITO;
+      return { tipo: 'conflito', texto: versao ? padrao : msg };
     }
     if ((e.status === 400 || e.status === 403 || e.status === 404) && e.message) return { tipo: 'aviso', texto: e.message };
   }
