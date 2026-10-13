@@ -114,7 +114,7 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     .filter(function (u) { return u && !!VALORES_ATIVO[semAcento(u.ativo)] && texto(u.nome) !== ''; })
     .map(function (u) { return texto(u.nome); })
     .sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
-  var ped = montarPedidos(extras, new Date(agora).getFullYear());
+  var ped = montarPedidos(extras, new Date(agora).getFullYear(), faltantes || []);
   var fornecedores = nomesAtivos(extras.fornecedores);
   var responsaveis = nomesAtivos(extras.responsaveis);
   var corpo = {

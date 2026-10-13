@@ -113,8 +113,70 @@ function lerEtapasDaAba(linhas) {
   return lidas.map(function (e, i) { return { id: e.id, nome: e.nome, ordem: e.ordem === Infinity ? i + 1 : e.ordem }; });
 }
 
-// [{ linha, id, itens: [linhas de PEDIDOS_ITENS] }], sem sementes.
-function lerPedidos(pedidos, itens) {
+// ---------- "pedido acompanha o corte" ----------
+// Id do item na FALTANTES: <deal_id>|<CICLO>|<cod_item>|<cor>|<tamanho>. A conferencia
+// pos-corte (Sync Faltantes) grava as linhas CORTE e marca SUBSTITUIDO as do PEDIDO que
+// reaparecem no corte. O pedido feito antes continua com o item_id do PEDIDO na
+// PEDIDOS_ITENS; a leitura troca pelo item do CORTE (mesmo id, CICLO = CORTE). A planilha
+// nao e reescrita. Sem item correspondente (o material saiu no corte) fica o item antigo,
+// marcado item_mudou: nao recebe baixa (a linha SUBSTITUIDO nao esta aberta) e o board avisa.
+
+function indexarFaltantes(faltantes) {
+  var m = {};
+  (faltantes || []).forEach(function (l) {
+    var id = texto(l && l.id);
+    if (id && !m[id]) m[id] = l;
+  });
+  return m;
+}
+
+function idNoCorte(itemId) {
+  var partes = texto(itemId).split('|');
+  if (partes.length < 3 || partes[1].toUpperCase() !== 'PEDIDO') return '';
+  partes[1] = 'CORTE';
+  return partes.join('|');
+}
+
+function linhaSubstituida(l) {
+  return !!l && semAcento(l.status) === 'SUBSTITUIDO';
+}
+
+// Linha da PEDIDOS_ITENS como vale agora: item_id do CORTE (com nome e unidade da linha
+// do CORTE) ou item_mudou. item_id_gravado guarda o id que esta na planilha.
+function itemDoPedidoAtual(it, faltantesPorId) {
+  var id = texto(it.item_id);
+  var atual = faltantesPorId[id];
+  if (atual && !linhaSubstituida(atual)) return it;
+  var corte = faltantesPorId[idNoCorte(id)];
+  if (corte && !linhaSubstituida(corte)) {
+    return Object.assign({}, it, {
+      item_id: texto(corte.id), item_id_gravado: id,
+      nome: texto(corte.descricao_item) || texto(it.nome), un: texto(corte.unidade) || texto(it.un)
+    });
+  }
+  if (linhaSubstituida(atual)) return Object.assign({}, it, { item_mudou: true });
+  return it;
+}
+
+// Id que a PEDIDOS_ITENS grava para este item (o do CORTE resolvido nao e gravado).
+function idGravado(it) {
+  return texto(it.item_id_gravado) || texto(it.item_id);
+}
+
+// O item do pedido pelo id que o site mandou: o atual ou (site aberto antes do corte) o gravado.
+function itemDoPedidoPorId(itens, itemId) {
+  return itens.filter(function (x) { return texto(x.item_id) === itemId; })[0] ||
+    itens.filter(function (x) { return idGravado(x) === itemId; })[0];
+}
+
+function textoItemMudou(nome) {
+  return nome + ' mudou no corte e não tem correspondente';
+}
+
+// [{ linha, id, itens: [linhas de PEDIDOS_ITENS] }], sem sementes. Com faltantes, os
+// itens ja vem resolvidos para o ciclo atual (itemDoPedidoAtual).
+function lerPedidos(pedidos, itens, faltantes) {
+  var faltantesPorId = faltantes ? indexarFaltantes(faltantes) : null;
   var porId = {};
   var lista = [];
   (pedidos || []).forEach(function (p) {
@@ -130,7 +192,7 @@ function lerPedidos(pedidos, itens) {
     if (!porId[pid] || texto(it.item_id) === '' || texto(it.deal_id) === '' || texto(it.deal_id) === '0') return;
     // qtd 0 = item que foi todo para uma parte do pedido (dividir_pedido).
     if (numero(it.qtd) === 0) return;
-    porId[pid].itens.push(it);
+    porId[pid].itens.push(faltantesPorId ? itemDoPedidoAtual(it, faltantesPorId) : it);
   });
   return lista;
 }
@@ -164,6 +226,14 @@ function avisosPedidos(pedidos, itens, lista) {
     if (porItem[k].n > 1) {
       avisos.push('Item ' + texto(porItem[k].it.nome) + ' (OS ' + texto(porItem[k].it.os) + ') está em mais de um pedido aberto.');
     }
+  });
+  lista.forEach(function (p) {
+    if (!pedidoAberto(p)) return;
+    p.itens.forEach(function (it) {
+      if (it.item_mudou) {
+        avisos.push(p.id + ': ' + textoItemMudou(texto(it.nome) + ' (OS ' + texto(it.os) + ')') + ': confira o pedido.');
+      }
+    });
   });
   return avisos;
 }
@@ -246,10 +316,11 @@ function previsaoDoItem(it, linhaPedido, ano) {
 }
 
 // Board: pedidos, etapasPedido e o mapa item -> pedido aberto.
-function montarPedidos(extras, ano) {
+// faltantes: linhas da FALTANTES, para os itens seguirem o corte (itemDoPedidoAtual).
+function montarPedidos(extras, ano, faltantes) {
   extras = extras || {};
   var etapas = lerEtapas(extras.etapas);
-  var lista = lerPedidos(extras.pedidos, extras.pedidosItens);
+  var lista = lerPedidos(extras.pedidos, extras.pedidosItens, faltantes);
   var pedidos = lista.slice().sort(function (a, b) { return compararPedidos(a.id, b.id); })
     .map(function (p) {
       var l = p.linha;
@@ -260,7 +331,7 @@ function montarPedidos(extras, ano) {
       var previsao = dataISO(l.previsao, ano);
       var itens = p.itens.map(function (it) {
         var q = numero(it.qtd);
-        return {
+        var item = {
           itemId: texto(it.item_id),
           dealId: texto(it.deal_id),
           os: texto(it.os),
@@ -271,6 +342,9 @@ function montarPedidos(extras, ano) {
           // previsao efetiva: a do item ou, vazia, a do pedido
           previsao: dataISO(it.previsao, ano) || previsao
         };
+        // o item saiu no corte e nao tem correspondente: fica sem baixa
+        if (it.item_mudou) item.itemMudou = true;
+        return item;
       });
       var datas = previsoesDistintas(itens.map(function (i) { return i.previsao; }));
       return {
@@ -579,12 +653,10 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   linhas = linhas || {};
   var u = ctx.usuario;
   var agora = ctx.agora;
-  var faltantesPorId = {};
-  (linhas.faltantes || []).forEach(function (l) {
-    if (l && texto(l.id) && !faltantesPorId[texto(l.id)]) faltantesPorId[texto(l.id)] = l;
-  });
+  var faltantesPorId = indexarFaltantes(linhas.faltantes);
   var etapas = lerEtapas(linhas.etapas);
-  var lista = lerPedidos(linhas.pedidos, linhas.pedidosItens);
+  // itens ja no ciclo atual: o pedido feito antes do corte da baixa no item do CORTE
+  var lista = lerPedidos(linhas.pedidos, linhas.pedidosItens, linhas.faltantes || []);
   var abertos = pedidoAbertoPorItem(lista);
   var tipo = acao.tipo;
 
@@ -676,7 +748,8 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
       ok: true,
       operacoes: bxM.operacoes.concat([op('PEDIDOS', 'update', 'id', linhaMov)]),
       historicos: grupos.map(function (g) {
-        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' moveu ' + p.id + ' para ' + nomeEtapa + textoBaixa(bxM.partes[g.dealId]));
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' moveu ' + p.id + ' para ' + nomeEtapa +
+          textoBaixa(bxM.partes[g.dealId], (bxM.mudados || {})[g.dealId]));
       }),
       versao: agora,
       pedidoId: p.id
@@ -691,8 +764,9 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
     return {
       ok: true,
       operacoes: bx.operacoes.concat([op('PEDIDOS', 'update', 'id', { id: p.id, baixado_em: agora, atualizado_em: agora })]),
-      historicos: grupos.filter(function (g) { return bx.partes[g.dealId]; }).map(function (g) {
-        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' deu baixa do ' + p.id + ': ' + bx.partes[g.dealId].join('; '));
+      historicos: grupos.filter(function (g) { return bx.partes[g.dealId] || bx.mudados[g.dealId]; }).map(function (g) {
+        var feitas = bx.partes[g.dealId] ? bx.partes[g.dealId].join('; ') : 'nenhum item';
+        return linhaHistorico(ctx, g.dealId, g.os, '', tipo, u + ' deu baixa do ' + p.id + ': ' + feitas + textoSemBaixa(bx.mudados[g.dealId]));
       }),
       versao: agora,
       pedidoId: p.id
@@ -724,14 +798,16 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
   var resumoItens = {};
   for (var j = 0; j < acao.itens.length; j++) {
     var mi = acao.itens[j];
-    var linhaPi = p.itens.filter(function (x) { return texto(x.item_id) === mi.itemId; })[0];
+    var linhaPi = itemDoPedidoPorId(p.itens, mi.itemId);
     if (!linhaPi) return erroAcao(400, 'Item não está no pedido.');
     var nomeItem = texto(linhaPi.nome);
     var mud = {};
     var res = [];
     var qAntes = numero(linhaPi.qtd);
     if (mi.qtd !== undefined && mi.qtd !== qAntes) {
-      var lfe = faltantesPorId[mi.itemId];
+      // sem item atual nao ha resta para conferir
+      if (linhaPi.item_mudou) return erroAcao(409, textoItemMudou(nomeItem) + ': a quantidade não pode mudar.');
+      var lfe = faltantesPorId[texto(linhaPi.item_id)];
       if (!lfe) return erroAcao(409, 'Item não encontrado.');
       var re = restaDaLinha(lfe);
       if (re === null) return erroAcao(400, 'Item sem quantidade faltante registrada.');
@@ -754,7 +830,7 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
       }
     }
     if (!res.length) continue;
-    opsItens.push(op('PEDIDOS_ITENS', 'update', 'id', Object.assign({ id: texto(linhaPi.id) || p.id + '|' + mi.itemId }, mud)));
+    opsItens.push(op('PEDIDOS_ITENS', 'update', 'id', Object.assign({ id: texto(linhaPi.id) || p.id + '|' + idGravado(linhaPi) }, mud)));
     var dd = texto(linhaPi.deal_id);
     resumoItens[dd] = (resumoItens[dd] || []).concat(res);
   }
@@ -773,13 +849,21 @@ function aplicarAcaoPedido(acao, linhas, ctx) {
 
 // Baixa dos itens de um pedido na FALTANTES: soma min(qtd, resta) em qtd_baixada
 // (pula SUBSTITUIDO e quem nao tem falta registrada). itens = linhas da
-// PEDIDOS_ITENS (ou { item_id, deal_id, qtd }). Devolve { ok, operacoes,
-// partes: { dealId: ['20 MT de VIÉS (resta 80 MT)'] } } ou o erro.
+// PEDIDOS_ITENS ja no ciclo atual (lerPedidos com faltantes). Devolve { ok, operacoes,
+// partes: { dealId: ['20 MT de VIÉS (resta 80 MT)'] }, mudados: { dealId: ['LINHA'] } }
+// ou o erro. mudados = itens que sairam no corte sem correspondente: ficam sem baixa
+// (a linha antiga SUBSTITUIDO nao recebe nada) e o historico diz isso.
 function baixaDosItens(itens, faltantesPorId, agora) {
   var operacoes = [];
   var partes = {};
+  var mudados = {};
   for (var k = 0; k < itens.length; k++) {
     var pi = itens[k];
+    if (pi.item_mudou) {
+      var dm = texto(pi.deal_id);
+      (mudados[dm] = mudados[dm] || []).push(texto(pi.nome));
+      continue;
+    }
     var lf = faltantesPorId[texto(pi.item_id)];
     if (!lf || !STATUS_ABERTOS[semAcento(lf.status)]) continue;
     var falta = numero(lf.qtd_falta);
@@ -798,12 +882,17 @@ function baixaDosItens(itens, faltantesPorId, agora) {
     (partes[d] = partes[d] || []).push(formatarQtd(dar) + ' ' + un + ' de ' + texto(lf.descricao_item) +
       ' (resta ' + formatarQtd(arredondar(r0 - dar)) + ' ' + un + ')');
   }
-  return { ok: true, operacoes: operacoes, partes: partes };
+  return { ok: true, operacoes: operacoes, partes: partes, mudados: mudados };
 }
 
-// " e deu baixa: 20 MT de VIÉS (resta 80 MT)" ou '' quando a OS nao teve baixa.
-function textoBaixa(partes) {
-  return partes && partes.length ? ' e deu baixa: ' + partes.join('; ') : '';
+// " e deu baixa: 20 MT de VIÉS (resta 80 MT)" ou '' quando a OS nao teve baixa; mais
+// " · sem baixa: LINHA mudou no corte e não tem correspondente" com item que mudou.
+function textoBaixa(partes, mudados) {
+  return (partes && partes.length ? ' e deu baixa: ' + partes.join('; ') : '') + textoSemBaixa(mudados);
+}
+
+function textoSemBaixa(mudados) {
+  return mudados && mudados.length ? ' · sem baixa: ' + mudados.map(textoItemMudou).join('; ') : '';
 }
 
 // Linha da parte nova na PEDIDOS, copiando os dados do pedido.
@@ -842,7 +931,7 @@ function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
   var movidos = [];
   for (var i = 0; i < acao.itens.length; i++) {
     var mi = acao.itens[i];
-    var li = porItem[mi.itemId];
+    var li = porItem[mi.itemId] || itemDoPedidoPorId(p.itens, mi.itemId);
     if (!li) return erroAcao(400, 'Item não está no pedido.');
     var q = numero(li.qtd);
     if (q === null || isNaN(q)) return erroAcao(400, 'Item sem quantidade no pedido.');
@@ -863,7 +952,7 @@ function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
   var operacoes = [linhaParte(p, filho, raiz, baixa.id, valorAtualCampo(p.linha, 'previsao', ano), agora, u, true)];
   movidos.forEach(function (m) { operacoes.push(linhaItemParte(m.linha, filho, m.qtd, ano)); });
   movidos.forEach(function (m) {
-    operacoes.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(m.linha.id) || p.id + '|' + texto(m.linha.item_id), qtd: m.resta }));
+    operacoes.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(m.linha.id) || p.id + '|' + idGravado(m.linha), qtd: m.resta }));
   });
   operacoes.push(op('PEDIDOS', 'update', 'id', { id: p.id, atualizado_em: agora }));
   operacoes = operacoes.concat(bx.operacoes);
@@ -871,7 +960,8 @@ function aplicarDivisao(acao, linhas, ctx, p, etapas, faltantesPorId) {
     .map(function (g) {
       var partes = g.itens.map(function (m) { return formatarQtd(m.qtd) + ' ' + texto(m.linha.un) + ' de ' + texto(m.linha.nome); });
       return linhaHistorico(ctx, g.dealId, g.os, '', acao.tipo,
-        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + baixa.nome + ')' + textoBaixa(bx.partes[g.dealId]));
+        u + ' dividiu ' + p.id + ': ' + partes.join('; ') + ' foram para ' + filho + ' (' + baixa.nome + ')' +
+          textoBaixa(bx.partes[g.dealId], bx.mudados[g.dealId]));
     });
   return { ok: true, operacoes: operacoes, historicos: historicos, versao: agora, pedidoId: filho };
 }
@@ -901,7 +991,7 @@ function aplicarDivisaoPorPrevisao(acao, linhas, ctx, p) {
       var q = numero(x.qtd);
       q = q === null || isNaN(q) ? 0 : q;
       operacoes.push(linhaItemParte(x, filho, q, ano));
-      zerar.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(x.id) || p.id + '|' + texto(x.item_id), qtd: 0 }));
+      zerar.push(op('PEDIDOS_ITENS', 'update', 'id', { id: texto(x.id) || p.id + '|' + idGravado(x), qtd: 0 }));
       movidos.push({ linha: x, qtd: q, filho: filho, data: d });
     });
   });

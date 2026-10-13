@@ -137,8 +137,8 @@ function montarCaixas(faltantes, ganhas, hoje, extras) {
     if (id) cpPorDeal[id] = c;
   });
   var ano = hoje.getFullYear();
-  // F3: item -> pedido aberto que o contem.
-  var abertosPorItem = pedidosAbertosPorItem(lerPedidos(extras.pedidos, extras.pedidosItens));
+  // F3: item -> pedido aberto que o contem (o pedido feito antes do corte segue o item do CORTE).
+  var abertosPorItem = pedidosAbertosPorItem(lerPedidos(extras.pedidos, extras.pedidosItens, faltantes || []));
   var avisos = [];
   var grupos = {};
   var ordem = [];

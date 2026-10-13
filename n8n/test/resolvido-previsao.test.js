@@ -70,7 +70,7 @@ test('mover_pedido para a etapa da baixa da a baixa', () => {
   ]);
 });
 
-test('mover_pedido para a ultima etapa: SUBSTITUIDO e item ja resolvido ficam sem baixa', () => {
+test('mover_pedido para a ultima etapa: SUBSTITUIDO (avisado) e item ja resolvido ficam sem baixa', () => {
   const lin = linhas({
     faltantes: [falt({ id: 'a' }), falt({ id: 'd', status: 'SUBSTITUIDO' }), falt({ id: 'c', os: '90002', deal_id: '600002', qtd_falta: 5, qtd_baixada: 5 })],
     pedidosItens: [pit({}), pit({ id: 'PED-0044|d', item_id: 'd', nome: 'LINHA' }), pit({ id: 'PED-0044|c', item_id: 'c', deal_id: '600002', os: '90002', nome: 'BOTÃO', qtd: 3 })]
@@ -78,7 +78,7 @@ test('mover_pedido para a ultima etapa: SUBSTITUIDO e item ja resolvido ficam se
   const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0044', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, lin);
   assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'a'], ['PEDIDOS', 'PED-0044']]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
-    ['600001', 'Lucca moveu PED-0044 para Enviado ao destino final e deu baixa: 20 MT de VIÉS (resta 80 MT)'],
+    ['600001', 'Lucca moveu PED-0044 para Enviado ao destino final e deu baixa: 20 MT de VIÉS (resta 80 MT) · sem baixa: LINHA mudou no corte e não tem correspondente'],
     ['600002', 'Lucca moveu PED-0044 para Enviado ao destino final']
   ]);
 });

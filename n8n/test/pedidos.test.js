@@ -351,7 +351,7 @@ test('pedido sem itens validos: editar/mover/baixar -> 409', () => {
   }
 });
 
-test('baixar_pedido: pula SUBSTITUIDO e omite itens com dar 0 do historico', () => {
+test('baixar_pedido: SUBSTITUIDO fica sem baixa (avisado no historico) e omite itens com dar 0', () => {
   const lin = linhas({
     faltantes: [falt({ id: 'a' }), falt({ id: 'd', status: 'SUBSTITUIDO' }), falt({ id: 'c', os: '90002', deal_id: '600002', qtd_falta: 5, qtd_baixada: 5 })],
     pedidos: [ped({ etapa: 'entregue' })],
@@ -362,7 +362,7 @@ test('baixar_pedido: pula SUBSTITUIDO e omite itens com dar 0 do historico', () 
   assert.equal(r.status, 200);
   assert.deepEqual(r.operacoes.map((o) => [o.aba, o.linha.id]), [['FALTANTES', 'a'], ['PEDIDOS', 'PED-0043']]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
-    ['600001', 'Lucca deu baixa do PED-0043: 20 MT de VIÉS (resta 80 MT)']
+    ['600001', 'Lucca deu baixa do PED-0043: 20 MT de VIÉS (resta 80 MT) · sem baixa: LINHA mudou no corte e não tem correspondente']
   ]);
 });
 
