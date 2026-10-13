@@ -2121,7 +2121,7 @@ var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
-var DEALS_EDITAVEIS = ['607479158'];  // vazio = todos. Até o go-live, só a OS de teste.
+var DEALS_EDITAVEIS = ['607479158', '607493886', '607493902'];  // vazio = todos. Até o go-live, só os cards de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
 
@@ -2377,7 +2377,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 // ===== adaptador: Selecionar Envio =====
 // Um item por grupo (deal) pronto para virar um registro compilado:
 // { grupo: { deal_id, os, linhas } }. Buscar Contato roda uma vez por grupo.
-var DEALS_PERMITIDOS = ['607479158'];  // TESTE: so o card de teste ate o go-live
+var DEALS_PERMITIDOS = ['607479158', '607493886', '607493902'];  // TESTE: so os cards de teste ate o go-live
 var rows = $input.all().map(function (i) { return i.json; });
 if (DEALS_PERMITIDOS.length) {
   rows = rows.filter(function (l) { return l && DEALS_PERMITIDOS.indexOf(texto(l.deal_id)) >= 0; });

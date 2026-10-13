@@ -129,7 +129,7 @@ test('edicao restrita: 403 em preValidarAcao e processarAcao para caixa fora da 
 test('edicao restrita: board leva dealsEditaveis e o padrao de producao e a OS de teste', () => {
   assert.deepEqual(limpo(c.montarRespostaBoard({}, [], [], T0).body.dealsEditaveis), []);
   const real = carregar({ real: true });
-  assert.deepEqual(limpo(real.montarRespostaBoard({}, [], [], T0).body.dealsEditaveis), ['607479158']);
+  assert.deepEqual(limpo(real.montarRespostaBoard({}, [], [], T0).body.dealsEditaveis), ['607479158', '607493886', '607493902']);
   assert.equal(real.dealEditavel('607479158'), true);
   assert.equal(real.dealEditavel('1'), false);
 });
