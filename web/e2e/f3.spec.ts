@@ -220,14 +220,15 @@ test('painel: mudar a previsão de um item manda só ela no editar_pedido', asyn
 });
 
 const VIES = { itemId: 'c1', dealId: '700003', os: '90003', nome: 'VIES LINEAR 6 CM', un: 'MT', qtd: 450 };
-const nomesDasColunas = (page: Page) => page.locator('.coluna__nome').allInnerTexts();
+// Espera as colunas aparecerem (toHaveText repete até bater), sem ler a tela antes da hora.
+const nomesDasColunas = (page: Page) => page.locator('.coluna__nome');
 
 const COLUNAS_SAIDA = ['A pedir', 'Solicitado', 'Aguardando entrega', 'Enviado ao destino final', 'Concluído'];
 
 test('Saídas: colunas são Sem pedido e as etapas de Solicitações', async ({ page }) => {
   await preparar(page, '#saidas');
   await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toBeVisible();
-  expect(await nomesDasColunas(page)).toEqual(['Sem pedido', ...COLUNAS_SAIDA]);
+  await expect(nomesDasColunas(page)).toHaveText(['Sem pedido', ...COLUNAS_SAIDA]);
 });
 
 test('Saídas: a caixa se divide por etapa, cada parte só com os itens dela', async ({ page }) => {
@@ -238,7 +239,7 @@ test('Saídas: a caixa se divide por etapa, cada parte só com os itens dela', a
       b.pedidos = [pedido('PED-0043', 'solicitado', [{ ...VIES, itemId: 'c2', nome: 'LINHA 120', un: 'cones', qtd: 4 }])] as never;
     }
   });
-  expect(await nomesDasColunas(page)).toEqual(['Sem pedido', ...COLUNAS_SAIDA]);
+  await expect(nomesDasColunas(page)).toHaveText(['Sem pedido', ...COLUNAS_SAIDA]);
   const sem = page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003 · 1 de 2', exact: true });
   await expect(sem).toContainText('VIES LINEAR 6 CM');
   await expect(sem).not.toContainText('LINHA 120');
@@ -261,7 +262,7 @@ test('Saídas: pedido com baixa leva a parte para Enviado ao destino final; conc
       b.pedidos = [pedido('PED-0042', 'entregue', [VIES], { baixadoEm: '2026-10-06' })] as never;
     }
   });
-  expect(await nomesDasColunas(page)).toEqual(COLUNAS_SAIDA);
+  await expect(nomesDasColunas(page)).toHaveText(COLUNAS_SAIDA);
   await expect(page.getByRole('region', { name: 'Enviado ao destino final' }).getByRole('button', { name: 'OS 90003' })).toContainText('PED-0042');
 });
 
