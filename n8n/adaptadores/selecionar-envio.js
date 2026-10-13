@@ -1,7 +1,7 @@
 // ===== adaptador: Selecionar Envio =====
 // Um item por grupo (deal) pronto para virar um registro compilado:
 // { grupo: { deal_id, os, linhas } }. Buscar Contato roda uma vez por grupo.
-var DEALS_PERMITIDOS = ['607479158', '607493886', '607493902'];  // TESTE: so os cards de teste ate o go-live
+var DEALS_PERMITIDOS = ['607479158', '607493886', '607493902', '607520448'];  // TESTE: so os cards de teste ate o go-live
 var rows = $input.all().map(function (i) { return i.json; });
 if (DEALS_PERMITIDOS.length) {
   rows = rows.filter(function (l) { return l && DEALS_PERMITIDOS.indexOf(texto(l.deal_id)) >= 0; });
