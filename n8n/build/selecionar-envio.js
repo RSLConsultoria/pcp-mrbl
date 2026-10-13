@@ -645,9 +645,61 @@ function lerEtapasDaAba(linhas) {
 // Id do item na FALTANTES: <deal_id>|<CICLO>|<cod_item>|<cor>|<tamanho>. A conferencia
 // pos-corte (Sync Faltantes) grava as linhas CORTE e marca SUBSTITUIDO as do PEDIDO que
 // reaparecem no corte. O pedido feito antes continua com o item_id do PEDIDO na
-// PEDIDOS_ITENS; a leitura troca pelo item do CORTE (mesmo id, CICLO = CORTE). A planilha
-// nao e reescrita. Sem item correspondente (o material saiu no corte) fica o item antigo,
-// marcado item_mudou: nao recebe baixa (a linha SUBSTITUIDO nao esta aberta) e o board avisa.
+// PEDIDOS_ITENS; a leitura troca pelo item do CORTE correspondente. A planilha nao e
+// reescrita. O id do CORTE nao segue o do PEDIDO (o sync grava descricao|cor|n), entao o
+// item correspondente e achado pelos campos (correspondenteNoCorte). Sem correspondente (o
+// material saiu no corte) fica o item antigo, marcado item_mudou: nao recebe baixa (a linha
+// SUBSTITUIDO nao esta aberta) e o board avisa.
+
+// { porId, cortePorDeal: { deal: [linhas CORTE atuais] } }
+function indexarCorte(faltantes) {
+  var cortePorDeal = {};
+  (faltantes || []).forEach(function (l) {
+    if (!l || texto(l.ciclo).toUpperCase() !== 'CORTE' || linhaSubstituida(l)) return;
+    var d = texto(l.deal_id);
+    (cortePorDeal[d] = cortePorDeal[d] || []).push(l);
+  });
+  return { porId: indexarFaltantes(faltantes), cortePorDeal: cortePorDeal };
+}
+
+function textoComparavel(v) {
+  return semAcento(v).replace(/\s+/g, ' ');
+}
+
+// Codigo da cor como numero sem zeros a esquerda: '5', '00005 fundo preto' -> '5'; '' sem codigo.
+function codigoCor(v) {
+  var t = texto(v).split(/\s+/)[0];
+  return /^\d+$/.test(t) ? String(Number(t)) : '';
+}
+
+// Nome da cor: o texto da cor sem o codigo ('00005 fundo preto' -> 'FUNDO PRETO').
+function nomeDaCor(v) {
+  var t = texto(v);
+  return textoComparavel(codigoCor(t) ? t.replace(/^\S+\s*/, '') : t);
+}
+
+// Linha CORTE atual do mesmo deal com a mesma descricao (sem acento, caixa e espacos extras)
+// e o mesmo codigo de cor quando os dois lados tem. Mais de uma: prefere o codigo de cor igual
+// e depois o nome da cor (nome_cor do PEDIDO). Ainda ambiguo ou nenhuma: null.
+function correspondenteNoCorte(antiga, idx) {
+  var desc = textoComparavel(antiga.descricao_item);
+  var cor = codigoCor(antiga.cor);
+  var cands = (idx.cortePorDeal[texto(antiga.deal_id)] || []).filter(function (l) {
+    if (textoComparavel(l.descricao_item) !== desc) return false;
+    var c = codigoCor(l.cor);
+    return !(cor && c && c !== cor);
+  });
+  if (cands.length > 1 && cor) {
+    var mesmaCor = cands.filter(function (l) { return codigoCor(l.cor) === cor; });
+    if (mesmaCor.length) cands = mesmaCor;
+  }
+  var nomeCor = textoComparavel(antiga.nome_cor);
+  if (cands.length > 1 && nomeCor) {
+    var mesmoNome = cands.filter(function (l) { return nomeDaCor(l.cor) === nomeCor; });
+    if (mesmoNome.length) cands = mesmoNome;
+  }
+  return cands.length === 1 ? cands[0] : null;
+}
 
 function indexarFaltantes(faltantes) {
   var m = {};
@@ -671,12 +723,15 @@ function linhaSubstituida(l) {
 
 // Linha da PEDIDOS_ITENS como vale agora: item_id do CORTE (com nome e unidade da linha
 // do CORTE) ou item_mudou. item_id_gravado guarda o id que esta na planilha.
-function itemDoPedidoAtual(it, faltantesPorId) {
+// idx = indexarCorte(faltantes). Primeiro o id com CICLO = CORTE (se existir igual), depois
+// os campos (correspondenteNoCorte).
+function itemDoPedidoAtual(it, idx) {
   var id = texto(it.item_id);
-  var atual = faltantesPorId[id];
+  var atual = idx.porId[id];
   if (atual && !linhaSubstituida(atual)) return it;
-  var corte = faltantesPorId[idNoCorte(id)];
-  if (corte && !linhaSubstituida(corte)) {
+  var corte = idx.porId[idNoCorte(id)];
+  if (!corte || linhaSubstituida(corte)) corte = atual ? correspondenteNoCorte(atual, idx) : null;
+  if (corte) {
     return Object.assign({}, it, {
       item_id: texto(corte.id), item_id_gravado: id,
       nome: texto(corte.descricao_item) || texto(it.nome), un: texto(corte.unidade) || texto(it.un)
@@ -704,7 +759,7 @@ function textoItemMudou(nome) {
 // [{ linha, id, itens: [linhas de PEDIDOS_ITENS] }], sem sementes. Com faltantes, os
 // itens ja vem resolvidos para o ciclo atual (itemDoPedidoAtual).
 function lerPedidos(pedidos, itens, faltantes) {
-  var faltantesPorId = faltantes ? indexarFaltantes(faltantes) : null;
+  var idxCorte = faltantes ? indexarCorte(faltantes) : null;
   var porId = {};
   var lista = [];
   (pedidos || []).forEach(function (p) {
@@ -720,7 +775,7 @@ function lerPedidos(pedidos, itens, faltantes) {
     if (!porId[pid] || texto(it.item_id) === '' || texto(it.deal_id) === '' || texto(it.deal_id) === '0') return;
     // qtd 0 = item que foi todo para uma parte do pedido (dividir_pedido).
     if (numero(it.qtd) === 0) return;
-    porId[pid].itens.push(faltantesPorId ? itemDoPedidoAtual(it, faltantesPorId) : it);
+    porId[pid].itens.push(idxCorte ? itemDoPedidoAtual(it, idxCorte) : it);
   });
   return lista;
 }

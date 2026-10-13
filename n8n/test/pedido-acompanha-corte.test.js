@@ -179,3 +179,67 @@ test('editar_pedido: quantidade do item que mudou no corte nao muda (nao ha rest
   // fornecedor e previsao continuam editaveis
   assert.equal(acao({ tipo: 'editar_pedido', pedidoId: 'PED-0043', versao: 'P1', itens: [{ itemId: P_LIN, fornecedor: 'X' }] }).status, 200);
 });
+
+// ---------- ids reais: o CORTE nao segue <deal>|CORTE|cod|cor|tam ----------
+// Casa pelos campos: mesmo deal, linha CORTE atual, descricao_item igual (sem acento, caixa e
+// espacos extras) e codigo da cor igual quando os dois lados tem (5 = 00005, 018 = 18).
+const D = '607000001';
+function fr(o) {
+  return Object.assign({ os: '91001', deal_id: D, secao: 'ACABAMENTO', unidade: 'UN', qtd_baixada: '', data_separacao: '2026-10-01 09:00', atualizado_em_app: '' }, o);
+}
+const REAL = [
+  fr({ id: D + '|PEDIDO|12190180B|00005|UNICO', ciclo: 'PEDIDO', status: 'SUBSTITUIDO', cod_item: '12190180B', descricao_item: 'KIT INST. - TAG ALFA MARCA TESTE', cor: '5', nome_cor: 'FUNDO PRETO C/ HOT C', tamanho: 'UNICO', qtd_falta: 0 }),
+  fr({ id: D + '|PEDIDO|12120001|0002|34', ciclo: 'PEDIDO', status: 'SUBSTITUIDO', cod_item: '12120001', descricao_item: 'ETIQ COD DE BARRAS MARCA TESTE 2749 68X50MM (34)', cor: '2', nome_cor: 'BRANCO', tamanho: '34', qtd_falta: 0 }),
+  fr({ id: D + '|PEDIDO|12120001|0002|36', ciclo: 'PEDIDO', status: 'SUBSTITUIDO', cod_item: '12120001', descricao_item: 'ETIQ COD DE BARRAS MARCA TESTE 2749 68X50MM (36)', cor: '2', nome_cor: 'BRANCO', tamanho: '36', qtd_falta: 0 }),
+  fr({ id: D + '|PEDIDO|09141353|018|UNICO', ciclo: 'PEDIDO', status: 'SUBSTITUIDO', cod_item: '9141353', descricao_item: 'PONT CHANFRADA MARCA TESTE C/FURO T5X20CM', cor: '18', nome_cor: 'DOURADO', tamanho: 'UNICO', qtd_falta: 0 }),
+  fr({ id: D + '|PEDIDO|5550001|0001|UNICO', ciclo: 'PEDIDO', status: 'SUBSTITUIDO', cod_item: '5550001', descricao_item: 'FITA QUE SAIU NO CORTE', cor: '1', nome_cor: 'PRETO', tamanho: 'UNICO', qtd_falta: 0 }),
+  fr({ id: D + '|CORTE|KIT INST. - TAG ALFA MARCA TESTE|00005 fundo preto c/ hot c|93', ciclo: 'CORTE', status: 'PARCIAL', cod_item: '', descricao_item: 'Kit Inst.  - Tag Alfa Marca Teste', cor: '00005 fundo preto c/ hot c', qtd_falta: 91 }),
+  fr({ id: D + '|CORTE|ETIQ COD DE BARRAS MARCA TESTE 2749 68X50MM (36)|0002 branco|4', ciclo: 'CORTE', status: 'PARCIAL', cod_item: '', descricao_item: 'ETIQ COD DE BARRAS MARCA TESTE 2749 68X50MM (36)', cor: '0002 branco', qtd_falta: 2 }),
+  fr({ id: D + '|CORTE|ETIQ COD DE BARRAS MARCA TESTE 2749 68X50MM (34)|0002 branco|3', ciclo: 'CORTE', status: 'PARCIAL', cod_item: '', descricao_item: 'ETIQ COD DE BARRAS MARCA TESTE 2749 68X50MM (34)', cor: '0002 branco', qtd_falta: 1 }),
+  fr({ id: D + '|CORTE|PONT CHANFRADA MARCA TESTE C/FURO T5X20CM|018 dourado|186', ciclo: 'CORTE', status: 'PARCIAL', cod_item: '', descricao_item: 'PONT CHANFRADA MARCA TESTE C/FURO T5X20CM', cor: '018 dourado', qtd_falta: 6 })
+];
+function pr(item, qtd) {
+  return { id: 'PED-0050|' + item, pedido_id: 'PED-0050', item_id: item, deal_id: D, os: '91001', nome: 'velho', un: 'UN', qtd: qtd, fornecedor: '', previsao: '' };
+}
+const ITENS_REAIS = REAL.filter((l) => l.ciclo === 'PEDIDO').map((l) => pr(l.id, 1));
+function boardReal(faltantes, itens) {
+  return limpo(ctx.montarRespostaBoard({}, faltantes || REAL, [], T0, { pedidos: [ped({ id: 'PED-0050' })], pedidosItens: itens || ITENS_REAIS })).body;
+}
+
+test('ids reais: casa pelos campos (descricao normalizada + codigo da cor), cada etiqueta no proprio tamanho', () => {
+  const p = boardReal().pedidos[0];
+  assert.deepEqual(p.itens.map((i) => [i.itemId, !!i.itemMudou]), [
+    [REAL[5].id, false],
+    [REAL[7].id, false], // (34) -> (34)
+    [REAL[6].id, false], // (36) -> (36)
+    [REAL[8].id, false], // 18 = 018
+    [REAL[4].id, true] // saiu no corte
+  ]);
+  assert.equal(p.itens[0].nome, 'Kit Inst.  - Tag Alfa Marca Teste');
+});
+
+test('ids reais: cor diferente nao casa; CORTE sem codigo de cor casa; dois candidatos -> prefere a cor igual', () => {
+  const kitPedido = REAL[0];
+  const outraCor = fr({ id: D + '|CORTE|KIT|00007 azul|1', ciclo: 'CORTE', status: 'ABERTO', descricao_item: 'KIT INST. - TAG ALFA MARCA TESTE', cor: '00007 azul', qtd_falta: 5 });
+  const semCodigo = fr({ id: D + '|CORTE|KIT|preto|2', ciclo: 'CORTE', status: 'ABERTO', descricao_item: 'KIT INST. - TAG ALFA MARCA TESTE', cor: 'preto', qtd_falta: 5 });
+  const it = [pr(kitPedido.id, 1)];
+  assert.equal(boardReal([kitPedido, outraCor], it).pedidos[0].itens[0].itemMudou, true);
+  assert.equal(boardReal([kitPedido, outraCor, semCodigo], it).pedidos[0].itens[0].itemId, semCodigo.id);
+  assert.equal(boardReal([kitPedido, semCodigo, REAL[5]], it).pedidos[0].itens[0].itemId, REAL[5].id);
+  // dois sem codigo e sem dica pelo nome da cor: ambiguo -> mudou
+  const semCodigo2 = Object.assign({}, semCodigo, { id: D + '|CORTE|KIT|azul|3', cor: 'azul' });
+  const amb = boardReal([kitPedido, semCodigo2, Object.assign({}, semCodigo, { cor: 'verde' })], it).pedidos[0].itens[0];
+  assert.equal(amb.itemMudou, true);
+  // nome_cor da linha do PEDIDO desempata
+  const dica = boardReal([kitPedido, semCodigo2, Object.assign({}, semCodigo, { cor: 'fundo preto c/ hot c' })], it).pedidos[0].itens[0];
+  assert.equal(dica.itemId, semCodigo.id);
+  // outro deal nao conta
+  assert.equal(boardReal([kitPedido, Object.assign({}, REAL[5], { deal_id: '999' })], it).pedidos[0].itens[0].itemMudou, true);
+});
+
+test('ids reais: mover para a baixa grava na linha do CORTE casada pelos campos', () => {
+  const lin = { faltantes: REAL, caixasPcp: [], ganhas: [], pedidos: [ped({ id: 'PED-0050' })], pedidosItens: [pr(REAL[1].id, 1)], etapas: [] };
+  const r = acao({ tipo: 'mover_pedido', pedidoId: 'PED-0050', versao: 'P1', etapa: 'entregue', confirmouBaixa: true }, lin);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.operacoes[0].linha, { id: REAL[7].id, qtd_baixada: 1, atualizado_em_app: ISO });
+});
