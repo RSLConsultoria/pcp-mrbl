@@ -1,7 +1,7 @@
 import type { CSSProperties, DragEvent } from 'react';
 import type { Pedido } from '../../api/tipos';
 import { ddmm } from '../../regras/datas';
-import { nomeLocal, nomeOrigem, quemDoPedido, rotuloDoPedido } from '../../regras/pedidos';
+import { MSG_ITEM_MUDOU, nomeLocal, nomeOrigem, quemDoPedido, rotuloDoPedido, temItemMudou } from '../../regras/pedidos';
 import { previsaoMaisProxima, previsoesDiferentes, qtdOsDoPedido, textoFamilia } from '../../regras/pedidosQuadro';
 import { qtdComUn } from '../../regras/quantidade';
 
@@ -29,6 +29,7 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir
   const previsao = previsaoMaisProxima(p);
   const diferentes = previsoesDiferentes(p);
   const rotulo = rotuloDoPedido(p.id);
+  const mudou = temItemMudou(p);
   return (
     <article aria-label={`Pedido ${rotulo}`} aria-busy={p.provisorio ? true : undefined}
       className={['card card--pedido', selecionado && 'card--selecionado', p.provisorio && 'card--salvando'].filter(Boolean).join(' ')}
@@ -58,9 +59,14 @@ export function CardPedido({ pedido: p, partes, selecionado, arrastavel, onAbrir
         ))}
         {ocultos > 0 && <li className="card__mais">+ {ocultos} {ocultos > 1 ? 'itens' : 'item'}</li>}
       </ul>
-      {diferentes && (
+      {(diferentes || mudou) && (
         <div className="card__selos">
-          <span className="selo-dias" title="Os itens deste pedido têm previsões de entrega diferentes">previsões diferentes</span>
+          {diferentes && <span className="selo-dias" title="Os itens deste pedido têm previsões de entrega diferentes">previsões diferentes</span>}
+          {mudou && (
+            <span className="selo-dias selo-dias--atrasado" title="Um item deste pedido saiu na conferência pós-corte e não tem correspondente: ele não recebe baixa">
+              {MSG_ITEM_MUDOU}
+            </span>
+          )}
         </div>
       )}
       <div className="card__rodape">

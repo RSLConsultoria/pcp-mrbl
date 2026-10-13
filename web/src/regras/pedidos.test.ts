@@ -3,7 +3,7 @@ import type { Acao, Board, DadosPedido, EtapaPedido, Pedido } from '../api/tipos
 import { mensagemSucesso } from './acoes';
 import {
   clientesDasCaixas, erroDadosPedido, erroEdicaoPedido, faltasSemPedido, filtrarPedidos, nomeLocal, opcoesComAtual, quemAoTrocarOrigem, quemDoPedido, resumoAlteracoes, etapaFinal,
-  validarGerarPedido, type EstadoEditavel
+  validarGerarPedido, temItemMudou, ERRO_QTD_ITEM_MUDOU, type EstadoEditavel
 } from './pedidos';
 import { caixa, item } from './teste-util';
 
@@ -79,6 +79,21 @@ describe('validarGerarPedido', () => {
     });
     expect(validarGerarPedido(sel, { a: '25,5', b: '' }).a).toBe('Falta só 20 MT');
     expect(validarGerarPedido([sel[0]], { a: '20' })).toEqual({});
+  });
+  it('item que mudou no corte sem correspondente: a quantidade não muda (o servidor recusa)', () => {
+    expect(validarGerarPedido([{ itemId: 'a', un: 'UN', resta: null, mudou: true }], { a: '2' })).toEqual({ a: ERRO_QTD_ITEM_MUDOU });
+  });
+});
+
+describe('temItemMudou', () => {
+  const mudou = { ...itemPed(''), itemMudou: true };
+  it('pedido aberto, sem baixa, com item que mudou no corte', () => {
+    expect(temItemMudou(ped({ itens: [itemPed(''), mudou] }))).toBe(true);
+    expect(temItemMudou(ped({ itens: [itemPed('')] }))).toBe(false);
+  });
+  it('com a baixa dada (ou finalizado) não avisa mais', () => {
+    expect(temItemMudou(ped({ itens: [mudou], baixadoEm: '2026-10-05' }))).toBe(false);
+    expect(temItemMudou(ped({ itens: [mudou], finalizado: true }))).toBe(false);
   });
 });
 

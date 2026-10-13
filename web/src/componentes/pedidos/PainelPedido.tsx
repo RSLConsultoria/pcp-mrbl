@@ -6,7 +6,7 @@ import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import {
-  clientesDasCaixas, erroEdicaoPedido, etapaFinal, nomeLocal, nomeOrigem, opcoesDeQuem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel
+  MSG_ITEM_MUDOU, clientesDasCaixas, erroEdicaoPedido, etapaFinal, nomeLocal, nomeOrigem, opcoesDeQuem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel
 } from '../../regras/pedidos';
 import {
   acaoEditarPedido, camposAlterados, comAlterados, estadoDoPedido, etapaNoQuadro, historicoDoPedido, partesDoPedido, pedidoEditavel, textoFamilia
@@ -60,7 +60,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
   const restaDe = (dealId: string, itemId: string) =>
     board.caixas.find((c) => c.dealId === dealId)?.itens.find((i) => i.id === itemId)?.resta ?? Number.POSITIVE_INFINITY;
   const mexidos = pedido.itens.filter((i) => textos[i.itemId].qtd !== textosIniciais[i.itemId].qtd);
-  const erros = validarGerarPedido(mexidos.map((i) => ({ itemId: i.itemId, un: i.un, resta: restaDe(i.dealId, i.itemId) })),
+  const erros = validarGerarPedido(mexidos.map((i) => ({ itemId: i.itemId, un: i.un, resta: restaDe(i.dealId, i.itemId), mudou: i.itemMudou })),
     Object.fromEntries(mexidos.map((i) => [i.itemId, textos[i.itemId].qtd])));
   const depois: EstadoEditavel = {
     // no painel origem e local sempre vêm do pedido (nunca "Selecionar")
@@ -91,6 +91,8 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
   const nomeEtapa = etapas.find((e) => e.id === etapaNoQuadro(pedido, etapas))?.nome ?? pedido.etapa;
   const todos = board.pedidos ?? [];
   const familia = textoFamilia(pedido, partesDoPedido(todos, pedido.id).length);
+  // item que saiu no corte sem correspondente: avisa enquanto o pedido não deu a baixa
+  const avisoDe = (i: Pedido['itens'][number]) => (i.itemMudou && !pedido.baixadoEm && !pedido.finalizado ? MSG_ITEM_MUDOU : undefined);
   const nota = pedido.finalizado
     ? `Pedido finalizado${pedido.concluidoEm ? ` em ${ddmm(pedido.concluidoEm)}` : ''}: o destino confirmou o recebimento.`
     : pedido.baixadoEm
@@ -120,7 +122,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                   const resta = restaDe(i.dealId, i.itemId);
                   return (
                     <LinhaItemPedido key={i.itemId} os={i.os} nome={i.nome} un={i.un}
-                      detalhe={Number.isFinite(resta) ? `resta ${qtdComUn(resta, i.un)} na caixa` : ''}
+                      detalhe={Number.isFinite(resta) ? `resta ${qtdComUn(resta, i.un)} na caixa` : ''} aviso={avisoDe(i)}
                       valor={textos[i.itemId]} erro={erros[i.itemId]} fornecedores={opcoesDeQuem(form.origem, fornecedores, clientes)}
                       onMudar={(v) => setTextosAlterados((t) => ({ ...t, [i.itemId]: camposAlterados(textosIniciais[i.itemId], v) }))} />
                   );
@@ -154,6 +156,7 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
                     <span className="item__conta">
                       {[formatarQtd(i.qtd, i.un, null), i.fornecedor, i.previsao && `previsão ${ddmm(i.previsao)}`].filter(Boolean).join(' · ')}
                     </span>
+                    {avisoDe(i) && <span className="selo-dias selo-dias--atrasado aviso-corte">{avisoDe(i)}</span>}
                   </li>
                 ))}
               </ul>

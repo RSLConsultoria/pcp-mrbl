@@ -716,3 +716,19 @@ test('No Ploomes não mostra a demanda pós-saída; Saídas mostra a caixa que s
   await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Saídas com falta' }).click();
   await expect(page.getByRole('region', { name: 'Sem pedido' }).getByRole('button', { name: 'OS 90003' })).toContainText('BOTÃO 12MM');
 });
+
+test('pedido com item que mudou no corte avisa no card e no painel e não deixa mudar a quantidade dele', async ({ page }) => {
+  const mudou = { itemId: '700001|PEDIDO|L2|AZUL|U', dealId: '700001', os: '90001', nome: 'LINHA AZUL', un: 'UN', qtd: 3, itemMudou: true };
+  const mock = await preparar(page, '#pedidos', {
+    ajustar: (b) => { b.pedidos = [pedido('PED-0042', 'aguardando', [...PED_TAG, mudou])] as never; b.caixas[0].itens[1].pedidoId = 'PED-0042'; }
+  });
+  const card = page.getByRole('article', { name: 'Pedido PED-0042' });
+  await expect(card.getByText('Item mudou no corte: confira')).toBeVisible();
+  await page.getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
+  await expect(painel.getByText('Item mudou no corte: confira')).toHaveCount(1);
+  await painel.getByLabel('Quantidade (UN) de LINHA AZUL').fill('2');
+  await expect(painel.getByText('Mudou no corte e não tem correspondente: a quantidade não pode mudar.')).toBeVisible();
+  await expect(painel.getByRole('button', { name: /Salvar alterações|Nada alterado/ })).toBeDisabled();
+  expect(mock.bodies).toEqual([]);
+});

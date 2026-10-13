@@ -99,6 +99,7 @@
 .linha-item__nome { font-size: 14px; font-weight: 600; line-height: 1.35; }
 .linha-item__os { color: var(--navy); font-variant-numeric: tabular-nums; }
 .linha-item__detalhe { font-size: 12.5px; color: var(--suave); font-variant-numeric: tabular-nums; }
+.aviso-corte { align-self: flex-start; justify-self: start; }
 .linha-item__campos { display: grid; grid-template-columns: 160px 1fr; gap: 12px; }
 .janela--larga .linha-item { display: grid; grid-template-columns: minmax(0, 1fr) 400px; align-items: end; column-gap: 20px; }
 .janela--larga .linha-item .campo__erro { grid-column: 2; }

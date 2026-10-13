@@ -118,6 +118,11 @@ const aberto = (it) => it.status !== 'RESOLVIDO' && resta(it) > 0;
 const caixaDe = (dealId) => estado.caixas.find((c) => c.dealId === dealId);
 const editavel = (dealId) => estado.dealsEditaveis.includes(dealId);
 const itemDe = (dealId, itemId) => caixaDe(dealId)?.itens.find((i) => i.id === itemId);
+// "Pedido acompanha o corte" (n8n/src/pedidos.js): no servidor o item do pedido já vem como o do
+// CORTE. Item do pedido que não está mais na caixa = saiu no corte sem correspondente (itemMudou):
+// usa o nome/unidade guardados no pedido, não recebe baixa e a quantidade dele não muda.
+const itemDoPedido = (pi) => itemDe(pi.dealId, pi.itemId) ?? { nome: pi.nome ?? '', un: pi.un ?? '', mudou: true };
+const textoItemMudou = (nome) => `${nome} mudou no corte e não tem correspondente`;
 // Pedido PED-nnnn ou parte PED-nnnn.k (dividir pedido); itens com qtd 0 foram todos para uma parte.
 const numPedido = (id) => parseInt(id.slice(4), 10);
 const raizDoPedido = (id) => id.split('.')[0];
@@ -188,8 +193,8 @@ function montarBoard() {
       previsaoMaisProxima: previsoesDistintas(p)[0] || p.previsao,
       previsoesDiferentes: previsoesDistintas(p).length > 1,
       itens: itensValidos(p).map((i) => {
-        const it = itemDe(i.dealId, i.itemId);
-        return { ...i, previsao: previsaoDoItem(p, i), os: caixaDe(i.dealId).os, nome: it.nome, un: it.un };
+        const it = itemDoPedido(i);
+        return { ...i, previsao: previsaoDoItem(p, i), os: caixaDe(i.dealId).os, nome: it.nome, un: it.un, ...(it.mudou ? { itemMudou: true } : {}) };
       })
     })),
     caixas: estado.caixas.map((c) => ({
@@ -345,9 +350,10 @@ function editarPedido(c, usuario) {
   for (const m of c.itens ?? []) {
     const pi = p.itens.find((i) => i.itemId === m.itemId);
     if (!pi) throw bad('Item não está no pedido.');
-    const it = itemDe(pi.dealId, pi.itemId);
+    const it = itemDoPedido(pi);
     if (m.qtd !== undefined) {
       if (!num(m.qtd) || m.qtd <= 0) throw bad('Informe uma quantidade maior que zero');
+      if (it.mudou && m.qtd !== pi.qtd) throw new Erro(409, `${textoItemMudou(it.nome)}: a quantidade não pode mudar.`);
       if (m.qtd > resta(it)) throw bad(`Falta só ${fmtNum(resta(it))} ${it.un} de ${it.nome}`);
       if (m.qtd !== pi.qtd) { add(pi.dealId, `qtd de ${it.nome}: ${pi.qtd == null ? '—' : fmtNum(pi.qtd)} → ${fmtNum(m.qtd)}`); novosItens.push([pi, 'qtd', m.qtd]); }
     }
@@ -397,19 +403,22 @@ function moverPedido(c, usuario) {
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
 
-// Baixa de cada item (min(qtd, resta)); devolve dealId -> ['20 MT de VIÉS (resta 80 MT)'].
+// Baixa de cada item (min(qtd, resta)); devolve dealId -> { feitas: ['20 MT de VIÉS (resta 80 MT)'], mudados: ['LINHA'] }.
 function baixarItens(itens) {
   const partes = new Map();
+  const de = (d) => partes.get(d) ?? partes.set(d, { feitas: [], mudados: [] }).get(d);
   for (const pi of itens) {
-    const it = itemDe(pi.dealId, pi.itemId);
+    const it = itemDoPedido(pi);
+    if (it.mudou) { de(pi.dealId).mudados.push(it.nome); continue; }
     const q = Math.min(pi.qtd ?? 0, resta(it));
     if (q <= 0) continue;
     darBaixa(it, q);
-    partes.set(pi.dealId, [...(partes.get(pi.dealId) ?? []), `${fmtNum(q)} ${it.un} de ${it.nome} (resta ${fmtNum(resta(it))} ${it.un})`]);
+    de(pi.dealId).feitas.push(`${fmtNum(q)} ${it.un} de ${it.nome} (resta ${fmtNum(resta(it))} ${it.un})`);
   }
   return partes;
 }
-const textoBaixa = (partes) => (partes?.length ? ` e deu baixa: ${partes.join('; ')}` : '');
+const textoSemBaixa = (b) => (b?.mudados.length ? ` · sem baixa: ${b.mudados.map(textoItemMudou).join('; ')}` : '');
+const textoBaixa = (b) => (b?.feitas.length ? ` e deu baixa: ${b.feitas.join('; ')}` : '') + textoSemBaixa(b);
 
 // Mantido por compatibilidade (o app dá a baixa movendo para a última etapa).
 function baixarPedido(c, usuario) {
@@ -421,7 +430,10 @@ function baixarPedido(c, usuario) {
   const partes = baixarItens(itensValidos(p));
   p.baixadoEm = diaIso(); p.versao = agoraIso();
   const historicos = [];
-  for (const d of dealsDe(p)) registrar(d, usuario, `${usuario} deu baixa do ${p.id}: ${(partes.get(d) ?? ['sem itens abertos']).join('; ')}`, historicos);
+  for (const d of dealsDe(p)) {
+    const b = partes.get(d);
+    registrar(d, usuario, `${usuario} deu baixa do ${p.id}: ${b?.feitas.length ? b.feitas.join('; ') : 'sem itens abertos'}${textoSemBaixa(b)}`, historicos);
+  }
   return resposta(p.versao, historicos, { pedidoId: p.id });
 }
 
@@ -443,7 +455,7 @@ function dividirPedido(c, usuario) {
     if (!num(m.qtd) || m.qtd <= 0) throw bad('Informe uma quantidade maior que zero');
     const pi = itensValidos(p).find((i) => i.itemId === m.itemId);
     if (!pi) throw bad('Item não está no pedido.');
-    const it = itemDe(pi.dealId, pi.itemId);
+    const it = itemDoPedido(pi);
     if (m.qtd > pi.qtd) throw bad(`O pedido tem só ${fmtNum(pi.qtd)} ${it.un} de ${it.nome}.`);
     movidos.push({ pi, it, qtd: m.qtd });
   }
@@ -459,7 +471,7 @@ function dividirPedido(c, usuario) {
   const parte = {
     id, pai: raiz, etapa: etapa.id, origem: p.origem, quem: p.quem, local: p.local, previsao: p.previsao, responsavel: p.responsavel,
     criadoEm: diaIso(), baixadoEm: '', versao,
-    itens: movidos.map((m) => ({ itemId: m.pi.itemId, dealId: m.pi.dealId, qtd: m.qtd, fornecedor: m.pi.fornecedor, previsao: m.pi.previsao ?? '' }))
+    itens: movidos.map((m) => ({ itemId: m.pi.itemId, dealId: m.pi.dealId, qtd: m.qtd, fornecedor: m.pi.fornecedor, previsao: m.pi.previsao ?? '', nome: m.pi.nome, un: m.pi.un }))
   };
   estado.pedidos.push(parte);
   for (const m of movidos) m.pi.qtd = Math.round((m.pi.qtd - m.qtd) * 1000) / 1000;
@@ -495,7 +507,7 @@ function dividirPorPrevisao(c, usuario) {
       criadoEm: diaIso(), baixadoEm: '', versao, itens: vao.map((i) => ({ ...i }))
     });
     for (const i of vao) {
-      const it = itemDe(i.dealId, i.itemId);
+      const it = itemDoPedido(i);
       porDeal.set(i.dealId, [...(porDeal.get(i.dealId) ?? []), `${fmtNum(i.qtd)} ${it.un} de ${it.nome} foram para ${id} (${data ? `previsão ${ddmm(data)}` : 'sem previsão'})`]);
       i.qtd = 0;
     }

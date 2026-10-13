@@ -214,6 +214,18 @@ export interface SelecaoPedido {
   itemId: string;
   un: string;
   resta: number | null;
+  mudou?: boolean; // item do pedido que mudou no corte sem correspondente (ItemPedido.itemMudou)
+}
+
+// "Pedido acompanha o corte" (n8n/src/pedidos.js): o servidor troca o item do pedido feito
+// antes da conferência pós-corte pelo item do CORTE. Sem correspondente, o item fica marcado
+// itemMudou: não recebe baixa e a quantidade dele não muda.
+export const MSG_ITEM_MUDOU = 'Item mudou no corte: confira';
+export const ERRO_QTD_ITEM_MUDOU = 'Mudou no corte e não tem correspondente: a quantidade não pode mudar.';
+
+// Aviso no card e no painel: só enquanto o pedido não deu a baixa (depois não muda mais nada).
+export function temItemMudou(p: Pick<Pedido, 'itens' | 'baixadoEm' | 'finalizado'>): boolean {
+  return !p.baixadoEm && !p.finalizado && p.itens.some((i) => i.itemMudou);
 }
 
 // Mesmas mensagens do validarBaixa. Devolve a mensagem por itemId (só de quem tem erro).
@@ -221,7 +233,8 @@ export function validarGerarPedido(selecao: SelecaoPedido[], quantidades: Record
   const erros: Record<string, string> = {};
   for (const s of selecao) {
     const qtd = lerQuantidade(quantidades[s.itemId] ?? '');
-    if (qtd === null || arredondar3(qtd) <= 0) erros[s.itemId] = 'Informe uma quantidade maior que zero';
+    if (s.mudou) erros[s.itemId] = ERRO_QTD_ITEM_MUDOU;
+    else if (qtd === null || arredondar3(qtd) <= 0) erros[s.itemId] = 'Informe uma quantidade maior que zero';
     else if (s.resta === null) erros[s.itemId] = 'Item sem quantidade faltante registrada.';
     else if (arredondar3(qtd) > arredondar3(s.resta)) erros[s.itemId] = `Falta só ${qtdComUn(arredondar3(s.resta), s.un)}`;
   }

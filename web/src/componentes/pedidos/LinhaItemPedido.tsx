@@ -11,6 +11,7 @@ interface Props {
   cor?: string;
   un: string;
   detalhe: string; // ex.: "resta 26 UN"
+  aviso?: string; // ex.: "Item mudou no corte: confira"
   valor: TextoItem;
   erro?: string;
   fornecedores: string[]; // opções do fornecedor do item (as mesmas do pedido)
@@ -19,7 +20,7 @@ interface Props {
 }
 
 // Uma linha de item com quantidade, fornecedor e previsão editáveis (janela Gerar pedido e painel do pedido).
-export function LinhaItemPedido({ os, nome, cor, un, detalhe, valor, erro, fornecedores, onMudar, onRemover }: Props) {
+export function LinhaItemPedido({ os, nome, cor, un, detalhe, aviso, valor, erro, fornecedores, onMudar, onRemover }: Props) {
   const id = useId();
   const comPrevisao = valor.previsao !== undefined;
   return (
@@ -27,6 +28,7 @@ export function LinhaItemPedido({ os, nome, cor, un, detalhe, valor, erro, forne
       <div className="linha-item__texto">
         <span className="linha-item__nome"><span className="linha-item__os">OS {os}</span> · {nome}{cor && <span className="card__item-cor"> {cor}</span>}</span>
         <span className="linha-item__detalhe">{detalhe}</span>
+        {aviso && <span className="selo-dias selo-dias--atrasado aviso-corte">{aviso}</span>}
       </div>
       <div className={comPrevisao ? 'linha-item__campos linha-item__campos--previsao' : 'linha-item__campos'}>
         <div className="campo">

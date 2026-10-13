@@ -65,6 +65,9 @@ export interface ItemPedido {
   qtd: number | null;
   fornecedor: string;
   previsao?: string; // previsão efetiva do item ('aaaa-mm-dd' ou ''): a dele ou, vazia, a do pedido
+  // O pedido segue o corte: itemId já é o do item atual (CORTE). true = o item saiu no corte e
+  // não tem correspondente; o servidor não dá baixa dele (n8n/src/pedidos.js).
+  itemMudou?: boolean;
 }
 
 export interface Pedido {
