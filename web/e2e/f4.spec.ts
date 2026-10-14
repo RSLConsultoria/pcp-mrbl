@@ -46,6 +46,8 @@ test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ p
   await expect(painel).toContainText('Sugestões do intérprete');
   await expect(painel).toContainText('Nova data: 13/10');
   await expect(painel).toContainText('Entregamos dia 13.');
+  await expect(painel.getByLabel('Mensagem')).toHaveValue(/\*OS 90002\*/);
+  await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toBeVisible();
   await expect(painel.getByRole('button', { name: /responder|enviar/i })).toHaveCount(0);
 });
 

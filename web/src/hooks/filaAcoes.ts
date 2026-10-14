@@ -72,6 +72,7 @@ export function criarFila(relogio_ms: () => number = Date.now): Fila {
         if (r.pedidoId !== undefined) resposta.pedidoId = r.pedidoId;
         if (r.partes !== undefined) resposta.partes = r.partes;
         if (r.itemIds !== undefined) resposta.itemIds = r.itemIds;
+        if (r.mensagemId !== undefined) resposta.mensagemId = r.mensagemId;
         mudar(p.id, {
           estado: 'confirmada', confirmadaEm: relogio, versaoNova: r.versao, confirmadaAs: relogio_ms(), recargasDepois: 0, resposta,
           ...(antigas ? { versoesAntigas: antigas } : {})

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { filtrarProducoes, indicadoresProducao, janelaGantt, prazoProducao, statusProducao, validarMudancaProducao } from './producao';
+import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, statusProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -53,4 +53,11 @@ it('mudanca de data exige motivo; mudar somente oficina nao', () => {
   expect(validarMudancaProducao(prod(), { oficinaId: 'of-1', dataCombinada: '2026-10-22', motivo: '' })).toBe('Informe o motivo da alteração da data combinada.');
   expect(validarMudancaProducao(prod(), { oficinaId: 'of-2', dataCombinada: '2026-10-20', motivo: '' })).toBeNull();
   expect(validarMudancaProducao(prod(), { oficinaId: 'of-1', dataCombinada: '2026-10-20', motivo: '' })).toBe('Nada alterado.');
+});
+
+it('modelos de mensagem sempre identificam a OS e podem ser editados antes da fila', () => {
+  expect(modeloMensagemProducao('COBRANCA_PRAZO', prod(), '2026-10-21')).toContain('*OS 90001*');
+  expect(modeloMensagemProducao('COBRANCA_PRAZO', prod(), '2026-10-21')).toContain('estava prevista para 20/10');
+  expect(modeloMensagemProducao('CONFIRMAR_DATA', prod(), '2026-10-13')).toContain('120 peças');
+  expect(modeloMensagemProducao('MATERIAL_ENVIADO', prod(), '2026-10-13')).toContain('material que faltava');
 });

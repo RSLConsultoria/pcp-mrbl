@@ -159,6 +159,14 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comProducao(board, acao.dealId, (p) => ({
         ...p, sugestoes: p.sugestoes.map((s) => (s.id === acao.sugestaoId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' as const } : s))
       }));
+    case 'enviar_whatsapp':
+      return comProducao(board, acao.dealId, (p) => ({
+        ...p,
+        mensagens: [{
+          id: `novo:whatsapp:${ctx.n}`, quando: `${ctx.hoje}T12:00:00.000Z`, participanteNome: 'PCP', direcao: 'ENVIADA' as const,
+          texto: acao.texto, associacao: 'MANUAL' as const, statusEnvio: 'PENDENTE' as const, tipoConteudo: 'TEXTO' as const
+        }, ...p.mensagens]
+      }));
     case 'nova_demanda': {
       // Itens novos na caixa que saiu, com id provisório: ficam fora de Faltas sem pedido
       // (editavel false) até a recarga trazer o id gravado.
@@ -264,7 +272,7 @@ export interface Pendente {
   confirmadaEm: number; // marco da confirmação (0 enquanto não confirmou)
   versaoNova?: string; // versão que o servidor devolveu
   versoesAntigas?: string[]; // versões do alvo antes da ação: a que a tela viu e as trocas seguidas até a enviada
-  resposta?: Pick<RespostaAcao, 'pedidoId' | 'partes' | 'itemIds'>; // o que a resposta traz para achar a ação no board
+  resposta?: Pick<RespostaAcao, 'pedidoId' | 'partes' | 'itemIds' | 'mensagemId'>; // o que a resposta traz para achar a ação no board
   confirmadaAs?: number; // relógio (ms) da confirmação
   recargasDepois?: number; // boards pedidos depois da confirmação que ainda não mostravam a ação
 }
@@ -279,7 +287,7 @@ export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
   if ('itemId' in acao) return board.caixas.find((c) => c.dealId === acao.dealId)?.itens.find((i) => i.id === acao.itemId)?.versao;
   if ('pedidoId' in acao) return pedidoDe(board, acao.pedidoId)?.versao;
   if ('dealId' in acao) {
-    if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp') {
+    if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp' || acao.tipo === 'enviar_whatsapp') {
       return board.producao?.find((p) => p.dealId === acao.dealId)?.versao;
     }
     return board.caixas.find((c) => c.dealId === acao.dealId)?.versao;
@@ -302,6 +310,8 @@ export function acaoNoBoard(board: Board, p: Pendente): boolean {
       return board.producao?.find((x) => x.dealId === a.dealId)?.sugestoes.find((s) => s.id === a.sugestaoId)?.status === 'ACEITA';
     case 'ignorar_sugestao_whatsapp':
       return board.producao?.find((x) => x.dealId === a.dealId)?.sugestoes.find((s) => s.id === a.sugestaoId)?.status === 'IGNORADA';
+    case 'enviar_whatsapp':
+      return !!r.mensagemId && !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === r.mensagemId);
     case 'gerar_pedido':
       return temPedido(board, r.pedidoId);
     case 'dividir_pedido':

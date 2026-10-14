@@ -195,6 +195,7 @@ export type Acao =
   | { tipo: 'alterar_producao'; dealId: string; versao: string; oficinaId: string; dataCombinada: string; motivo: string }
   | { tipo: 'aceitar_sugestao_whatsapp'; dealId: string; sugestaoId: string; versao: string; motivo: string }
   | { tipo: 'ignorar_sugestao_whatsapp'; dealId: string; sugestaoId: string; versao: string }
+  | { tipo: 'enviar_whatsapp'; dealId: string; versao: string; modelo: 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO'; texto: string }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
 
 export interface DadosPedido {
@@ -212,6 +213,7 @@ export interface RespostaAcao {
   pedidoId?: string;
   partes?: string[]; // dividir_por_previsao: ids das partes criadas
   itemIds?: string[]; // nova_demanda: ids dos itens gravados na FALTANTES
+  mensagemId?: string; // enviar_whatsapp: id da linha enfileirada
 }
 
 export interface Sessao {

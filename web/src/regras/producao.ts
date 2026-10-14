@@ -3,6 +3,7 @@ import type { Producao } from '../api/tipos';
 export type OrigemPrazo = 'COMBINADA' | 'LEAD_TIME' | 'SEM_PRAZO';
 export type StatusPrazoProducao = 'ATRASADO' | 'HOJE' | 'PROXIMO' | 'NO_PRAZO' | 'SEM_PRAZO';
 export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean }
+export type ModeloMensagemProducao = 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO';
 
 export function prazoProducao(p: Pick<Producao, 'dataCombinada' | 'leadTime'>): { data: string; origem: OrigemPrazo } {
   if (p.dataCombinada) return { data: p.dataCombinada, origem: 'COMBINADA' };
@@ -67,4 +68,20 @@ export function validarMudancaProducao(
   if (mudouData && !nova.motivo.trim()) return 'Informe o motivo da alteração da data combinada.';
   if (!mudouData && !mudouOficina) return 'Nada alterado.';
   return null;
+}
+
+function dataCurta(iso: string): string { return iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : 'sem data'; }
+
+export function modeloMensagemProducao(tipo: ModeloMensagemProducao, p: Producao, hoje: string): string {
+  const cabecalho = `*OS ${p.os}*`;
+  const detalhe = `${p.peca || 'peça'}${p.pecas ? `, ${p.pecas} peças` : ''}`;
+  const prazo = prazoProducao(p);
+  if (tipo === 'CONFIRMAR_DATA') {
+    return `${cabecalho}\nBom dia. Confirmando a entrega de ${detalhe} para ${dataCurta(p.dataCombinada || prazo.data)}. Segue combinado?`;
+  }
+  if (tipo === 'MATERIAL_ENVIADO') return `${cabecalho}\nBom dia. O material que faltava na caixa de costura foi enviado hoje.`;
+  const status = statusProducao(p, hoje);
+  if (status.status === 'ATRASADO') return `${cabecalho}\nBom dia. A entrega de ${detalhe} estava prevista para ${dataCurta(prazo.data)}. Qual a nova data de entrega?`;
+  if (!prazo.data) return `${cabecalho}\nBom dia. Qual a previsão de entrega de ${detalhe}?`;
+  return `${cabecalho}\nBom dia. A entrega de ${detalhe} está prevista para ${dataCurta(prazo.data)}. Segue dentro do prazo?`;
 }

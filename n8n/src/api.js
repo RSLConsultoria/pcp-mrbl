@@ -217,9 +217,12 @@ function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var ctx = { usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId };
   var r = corpo.tipo === 'alterar_producao'
     ? processarAlteracaoProducao(corpo, linhas || {}, ctx, DEALS_PRODUCAO_EDITAVEIS)
-    : processarDecisaoSugestao(corpo, linhas || {}, ctx);
+    : corpo.tipo === 'enviar_whatsapp'
+      ? processarEnvioWhatsapp(corpo, linhas || {}, ctx)
+      : processarDecisaoSugestao(corpo, linhas || {}, ctx);
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
-  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos);
+  var extras = r.mensagemId ? { mensagemId: r.mensagemId } : undefined;
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
   saida.ploomes = r.ploomes;
   saida.gravacao = null;
   saida.historico = null;

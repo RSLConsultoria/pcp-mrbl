@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Board, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
-import { filtrarProducoes, indicadoresProducao, janelaGantt, prazoProducao, statusProducao, validarMudancaProducao } from '../regras/producao';
+import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -13,14 +13,18 @@ function diasEntre(inicio: string, quantidade: number): string[] {
   return Array.from({ length: quantidade }, (_, i) => new Date(msDia(inicio) + i * 86_400_000).toISOString().slice(0, 10));
 }
 
-function PainelProducao({ item, board, executar, onFechar }: { item: ProducaoItem; board: Board; executar: Executar; onFechar: () => void }) {
+function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: ProducaoItem; board: Board; hojeIso: string; executar: Executar; onFechar: () => void }) {
   const prazo = prazoProducao(item);
   const [oficinaId, setOficinaId] = useState(item.oficinaId);
   const [dataCombinada, setDataCombinada] = useState(item.dataCombinada);
   const [motivo, setMotivo] = useState('');
   const [motivoSugestao, setMotivoSugestao] = useState('');
   const [erro, setErro] = useState('');
+  const [erroMensagem, setErroMensagem] = useState('');
+  const [modelo, setModelo] = useState<ModeloMensagemProducao>('COBRANCA_PRAZO');
+  const [mensagem, setMensagem] = useState(() => modeloMensagemProducao('COBRANCA_PRAZO', item, hojeIso));
   const editavel = !board.dealsProducaoEditaveis?.length || board.dealsProducaoEditaveis.includes(item.dealId);
+  const oficina = board.oficinas?.find((o) => o.ploomesId === item.oficinaId);
   const salvar = () => {
     const e = validarMudancaProducao(item, { oficinaId, dataCombinada, motivo });
     if (e) return setErro(e);
@@ -33,6 +37,16 @@ function PainelProducao({ item, board, executar, onFechar }: { item: ProducaoIte
     void executar(aceitar
       ? { tipo: 'aceitar_sugestao_whatsapp', dealId: item.dealId, sugestaoId: id, versao: item.versao, motivo: motivoSugestao }
       : { tipo: 'ignorar_sugestao_whatsapp', dealId: item.dealId, sugestaoId: id, versao: item.versao }, aceitar ? 'Sugestão aceita' : 'Sugestão ignorada');
+  };
+  const trocarModelo = (novo: ModeloMensagemProducao) => {
+    setModelo(novo);
+    setMensagem(modeloMensagemProducao(novo, item, hojeIso));
+  };
+  const enfileirarMensagem = () => {
+    const texto = mensagem.trim();
+    if (!texto || texto.length > 1500) return setErroMensagem('Escreva uma mensagem com até 1500 caracteres.');
+    setErroMensagem('');
+    void executar({ tipo: 'enviar_whatsapp', dealId: item.dealId, versao: item.versao, modelo, texto }, 'Mensagem colocada na fila do WhatsApp');
   };
   return (
     <aside className="producao-painel" aria-label={`Detalhes da OS ${item.os}`}>
@@ -69,6 +83,20 @@ function PainelProducao({ item, board, executar, onFechar }: { item: ProducaoIte
           <h3>Faltas da costura <span>{item.faltasCostura.length}</span></h3>
           {item.faltasCostura.length === 0 ? <p className="producao-vazio">Nenhuma falta aberta na caixa de costura.</p>
             : <ul className="producao-lista">{item.faltasCostura.map((f) => <li key={f.id}><strong>{f.nome}</strong><span>{f.resta ?? '—'} {f.un}</span></li>)}</ul>}
+        </section>
+        <section className="producao-secao producao-envio">
+          <h3>Mensagem para a oficina</h3>
+          {!item.oficinaId ? <p className="producao-vazio">Aloque uma oficina antes de preparar a mensagem.</p>
+            : !oficina?.grupoConfigurado ? <p className="producao-vazio">Configure o grupo desta oficina na aba OFICINAS.</p>
+            : <>
+              <label>Modelo<select value={modelo} disabled={!editavel} onChange={(e) => trocarModelo(e.target.value as ModeloMensagemProducao)}>
+                <option value="COBRANCA_PRAZO">Cobrança de prazo</option><option value="CONFIRMAR_DATA">Confirmar data</option><option value="MATERIAL_ENVIADO">Material enviado</option>
+              </select></label>
+              <label>Mensagem<textarea rows={5} maxLength={1500} value={mensagem} disabled={!editavel} onChange={(e) => setMensagem(e.target.value)} /></label>
+              <small>Será enviada para {oficina.grupoNome || oficina.nome}. O texto pode ser revisado antes de entrar na fila.</small>
+              {erroMensagem && <p className="campo__erro" role="alert">{erroMensagem}</p>}
+              {editavel && <button type="button" className="botao botao--signal" onClick={enfileirarMensagem}>Colocar na fila</button>}
+            </>}
         </section>
         <section className="producao-secao">
           <h3>Sugestões do intérprete <span>{item.sugestoes.filter((s) => s.status === 'PENDENTE').length}</span></h3>
@@ -163,6 +191,6 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
         {filtradas.length === 0 && <p className="gantt__vazio">Nenhuma OS encontrada com estes filtros.</p>}
       </div>
     </div>
-    {selecionada && <PainelProducao key={selecionada.dealId} item={selecionada} board={board} executar={executar} onFechar={() => setAberta(null)} />}
+    {selecionada && <PainelProducao key={selecionada.dealId} item={selecionada} board={board} hojeIso={hojeIso} executar={executar} onFechar={() => setAberta(null)} />}
   </div>;
 }

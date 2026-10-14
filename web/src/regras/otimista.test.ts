@@ -56,6 +56,13 @@ describe('aplicarOtimista: producao e sugestoes', () => {
     expect(b.producao?.[0].dataCombinada).toBe('2026-10-18');
     expect(b.producao?.[0].sugestoes[0].status).toBe('IGNORADA');
   });
+
+  it('mostra imediatamente a mensagem enfileirada como pendente', () => {
+    const b = aplicar(quadro({ producao: [prod()] }), {
+      tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nQual a previsão?'
+    });
+    expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: '*OS 90001*\nQual a previsão?', statusEnvio: 'PENDENTE' });
+  });
 });
 
 describe('aplicarOtimista: campos da F2', () => {

@@ -661,6 +661,23 @@ function decidirSugestao(c, usuario, aceitar) {
   return { ok: true, versao: p.versao, historico: h, historicos: [h] };
 }
 
+function enviarWhatsapp(c, usuario) {
+  const p = estado.producao.find((x) => x.dealId === c.dealId);
+  if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  conferirVersao(p.versao, c.versao, 'esta OS');
+  const oficina = estado.oficinas.find((o) => o.ploomesId === p.oficinaId);
+  if (!oficina?.grupoConfigurado) throw new Erro(409, 'Configure o grupo desta oficina na aba OFICINAS.');
+  if (!['COBRANCA_PRAZO', 'CONFIRMAR_DATA', 'MATERIAL_ENVIADO'].includes(c.modelo)) throw bad('Modelo de mensagem inválido.');
+  const texto = String(c.texto ?? '').trim();
+  if (!texto || texto.length > 1500) throw bad('Mensagem com até 1500 caracteres.');
+  if (!new RegExp(`(^|\\D)${p.os}(\\D|$)`).test(texto)) throw bad(`A mensagem precisa identificar a OS ${p.os}.`);
+  const mensagemId = `MSG-FILA-${Date.now()}`;
+  p.mensagens.unshift({ id: mensagemId, quando: agoraIso(), participanteNome: usuario, direcao: 'ENVIADA', texto, associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO' });
+  const h = historicoProducao(p, usuario, `${usuario} enfileirou uma mensagem no WhatsApp para ${oficina.grupoNome || oficina.nome}.`);
+  return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };
+}
+
 function processar(corpo, usuario) {
   switch (corpo?.tipo) {
     case 'baixa': case 'previsao_item': case 'obs_item':
@@ -675,6 +692,7 @@ function processar(corpo, usuario) {
     case 'alterar_producao': return alterarProducao(corpo, usuario);
     case 'aceitar_sugestao_whatsapp': return decidirSugestao(corpo, usuario, true);
     case 'ignorar_sugestao_whatsapp': return decidirSugestao(corpo, usuario, false);
+    case 'enviar_whatsapp': return enviarWhatsapp(corpo, usuario);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);

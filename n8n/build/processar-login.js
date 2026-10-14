@@ -1703,7 +1703,8 @@ function aplicarNovaDemanda(acao, linhas, ctx) {
 
 var STATUS_ITEM_ABERTO_PRODUCAO = { ABERTO: 1, PARCIAL: 1 };
 var VALORES_ATIVO_PRODUCAO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
-var TIPOS_PRODUCAO = ['alterar_producao', 'aceitar_sugestao_whatsapp', 'ignorar_sugestao_whatsapp'];
+var TIPOS_PRODUCAO = ['alterar_producao', 'aceitar_sugestao_whatsapp', 'ignorar_sugestao_whatsapp', 'enviar_whatsapp'];
+var MODELOS_WHATSAPP = { COBRANCA_PRAZO: 1, CONFIRMAR_DATA: 1, MATERIAL_ENVIADO: 1 };
 var CAMPO_OFICINA_PLOOMES = 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4';
 
 function linhaProducao(p, sincronizadoEm) {
@@ -1828,10 +1829,46 @@ function validarAcaoProducaoBasica(corpo, permitidos) {
   if (corpo.tipo === 'alterar_producao') {
     if (texto(corpo.dataCombinada) && !dataValida(texto(corpo.dataCombinada))) return erroAcao(400, 'Data combinada inválida.');
     if (texto(corpo.motivo).length > 500) return erroAcao(400, 'Motivo com no máximo 500 caracteres.');
+  } else if (corpo.tipo === 'enviar_whatsapp') {
+    if (!MODELOS_WHATSAPP[semAcento(corpo.modelo)]) return erroAcao(400, 'Modelo de mensagem inválido.');
+    var mensagem = typeof corpo.texto === 'string' ? corpo.texto.trim() : '';
+    if (!mensagem || mensagem.length > 1500) return erroAcao(400, 'Mensagem com até 1500 caracteres.');
   } else if (!texto(corpo.sugestaoId)) {
     return erroAcao(400, 'Informe a sugestão.');
   }
   return { ok: true };
+}
+
+function processarEnvioWhatsapp(corpo, linhas, ctx) {
+  var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
+  if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
+  var oficinaId = texto(producao.oficina_id);
+  if (!oficinaId) return erroAcao(409, 'Aloque uma oficina antes de enviar a mensagem.');
+  var oficina = (linhas.oficinas || []).filter(function (o) {
+    return o && texto(o.ploomes_id) === oficinaId && linhaAtivaProducao(o.ativo);
+  })[0];
+  if (!oficina || !texto(oficina.grupo_jid)) return erroAcao(409, 'Configure o grupo desta oficina na aba OFICINAS.');
+  var os = texto(producao.os);
+  var osRegex = new RegExp('(^|\\D)' + os.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\D|$)');
+  var mensagem = corpo.texto.trim();
+  if (!osRegex.test(mensagem)) return erroAcao(400, 'A mensagem precisa identificar a OS ' + os + '.');
+  var agora = ctx.agora;
+  var id = ctx.gerarId();
+  var modelo = semAcento(corpo.modelo);
+  var linha = {
+    id: id, evolution_id: '', quando: agora, grupo_jid: texto(oficina.grupo_jid), grupo_nome: texto(oficina.grupo_nome),
+    participante_jid: '', participante_nome: ctx.usuario, direcao: 'ENVIADA', tipo: modelo, tipo_conteudo: 'TEXTO',
+    texto: mensagem, resposta_a_evolution_id: '', deal_id: texto(producao.deal_id), os: os, oficina_id: oficinaId,
+    associacao: 'MANUAL', status_envio: 'PENDENTE', erro: '', criado_em: agora
+  };
+  var descricao = ctx.usuario + ' enfileirou ' + (modelo === 'COBRANCA_PRAZO' ? 'uma cobrança de prazo' : 'uma mensagem') +
+    ' no WhatsApp para ' + (texto(oficina.grupo_nome) || texto(oficina.nome)) + '.';
+  return {
+    ok: true, versao: texto(producao.atualizado_em_ploomes), mensagemId: id, ploomes: null,
+    operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linha }],
+    historicos: [historicoProducao(ctx, texto(producao.deal_id), os, 'WHATSAPP_ENFILEIRAR', descricao)]
+  };
 }
 
 function historicoProducao(ctx, dealId, os, acao, descricao) {
@@ -3139,9 +3176,12 @@ function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var ctx = { usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId };
   var r = corpo.tipo === 'alterar_producao'
     ? processarAlteracaoProducao(corpo, linhas || {}, ctx, DEALS_PRODUCAO_EDITAVEIS)
-    : processarDecisaoSugestao(corpo, linhas || {}, ctx);
+    : corpo.tipo === 'enviar_whatsapp'
+      ? processarEnvioWhatsapp(corpo, linhas || {}, ctx)
+      : processarDecisaoSugestao(corpo, linhas || {}, ctx);
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
-  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos);
+  var extras = r.mensagemId ? { mensagemId: r.mensagemId } : undefined;
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
   saida.ploomes = r.ploomes;
   saida.gravacao = null;
   saida.historico = null;

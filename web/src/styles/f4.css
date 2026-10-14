@@ -69,6 +69,13 @@
 .producao-edicao__campos label, .producao-sugestao__acoes label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 650; color: var(--suave); }
 .producao-edicao__campos label:last-child { grid-column: 1 / -1; }
 .producao-edicao select, .producao-edicao input, .producao-edicao textarea, .producao-sugestao__acoes input { box-sizing: border-box; width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid var(--borda); border-radius: 4px; background: #fff; color: var(--texto); font: 13px var(--font-sans); }
+.producao-envio { display: flex; flex-direction: column; gap: 9px; }
+.producao-envio h3 { margin-bottom: 1px; }
+.producao-envio label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 650; color: var(--suave); }
+.producao-envio select, .producao-envio textarea { box-sizing: border-box; width: 100%; padding: 7px 9px; border: 1px solid var(--borda); border-radius: 4px; background: #fff; color: var(--texto); font: 13px var(--font-sans); }
+.producao-envio textarea { resize: vertical; line-height: 1.45; }
+.producao-envio small { color: var(--leve); line-height: 1.4; }
+.producao-envio .botao { align-self: flex-start; }
 .producao-edicao textarea { resize: vertical; }
 .producao-edicao .botao { margin-top: 10px; }
 .producao-edicao .campo__erro { margin: 8px 0 0; }

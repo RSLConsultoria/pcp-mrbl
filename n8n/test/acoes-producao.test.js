@@ -15,7 +15,7 @@ function contexto() {
 
 const linhas = () => ({
   producao: [{ deal_id: '700001', os: '90001', oficina_id: 'of-1', oficina_nome: 'OFICINA A', data_combinada: '2026-10-18', atualizado_em_ploomes: 'v1' }],
-  oficinas: [{ ploomes_id: 'of-1', nome: 'OFICINA A', ativo: 'SIM' }, { ploomes_id: 'of-2', nome: 'OFICINA B', ativo: 'SIM' }],
+  oficinas: [{ ploomes_id: 'of-1', nome: 'OFICINA A', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE', ativo: 'SIM' }, { ploomes_id: 'of-2', nome: 'OFICINA B', ativo: 'SIM' }],
   whatsappMensagens: [{ id: 'MSG-1', deal_id: '700001', oficina_id: 'of-1' }],
   whatsappSugestoes: [{ id: 'SUG-1', mensagem_id: 'MSG-1', deal_id: '700001', os: '90001', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-20', resumo: 'Entrega dia 20.', status: 'PENDENTE', versao: 'v1' }]
 });
@@ -56,4 +56,33 @@ test('ignorar sugestao registra decisao sem tocar no Ploomes', () => {
   assert.equal(r.status, 200);
   assert.equal(r.ploomes, null);
   assert.deepEqual(r.operacoes.map((o) => o.aba), ['WHATSAPP_SUGESTOES']);
+});
+
+test('enviar whatsapp apenas enfileira o texto para o grupo cadastrado', () => {
+  const { ctx, estado, cab } = contexto();
+  let seq = 0;
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nBom dia. Qual a previsão de entrega?' };
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'ID-' + (++seq)));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.ploomes, null);
+  assert.equal(r.body.mensagemId, 'ID-1');
+  assert.deepEqual(r.operacoes, [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: {
+    id: 'ID-1', evolution_id: '', quando: '2026-10-13T14:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
+    participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
+    texto: '*OS 90001*\nBom dia. Qual a previsão de entrega?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001',
+    oficina_id: 'of-1', associacao: 'MANUAL', status_envio: 'PENDENTE', erro: '', criado_em: '2026-10-13T14:00:00.000Z'
+  } }]);
+  assert.equal(r.historicos[0].acao, 'WHATSAPP_ENFILEIRAR');
+  assert.equal('resposta' in r || 'envio' in r, false);
+});
+
+test('enviar whatsapp exige grupo, modelo valido, OS no texto e versao atual', () => {
+  const { ctx, estado, cab } = contexto();
+  const base = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nCobrança de teste.' };
+  const semGrupo = linhas();
+  semGrupo.oficinas[0].grupo_jid = '';
+  assert.equal(ctx.processarAcao(estado, cab, base, semGrupo, T0, () => 'X').status, 409);
+  assert.equal(ctx.processarAcao(estado, cab, { ...base, modelo: 'INVENTADO' }, linhas(), T0, () => 'X').status, 400);
+  assert.equal(ctx.processarAcao(estado, cab, { ...base, texto: 'Sem identificação.' }, linhas(), T0, () => 'X').status, 400);
+  assert.equal(ctx.processarAcao(estado, cab, { ...base, versao: 'antiga' }, linhas(), T0, () => 'X').status, 409);
 });
