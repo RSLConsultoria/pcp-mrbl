@@ -91,8 +91,12 @@ export function mensagemSucesso(
       return 'Sugestão aceita';
     case 'ignorar_sugestao_whatsapp':
       return 'Sugestão ignorada';
+    case 'associar_whatsapp':
+      return 'Mensagem associada à OS';
     case 'enviar_whatsapp':
       return 'Mensagem colocada na fila do WhatsApp';
+    case 'reenviar_whatsapp':
+      return 'Reenvio colocado na fila do WhatsApp';
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
   }
@@ -150,7 +154,9 @@ export function chaveDaAcao(acao: Acao): string {
   // alvo faz a fila encadear essa versão com uma edição feita logo antes.
   if (acao.tipo === 'aceitar_sugestao_whatsapp') return `producao:${acao.dealId}`;
   if (acao.tipo === 'ignorar_sugestao_whatsapp') return `sugestao:${acao.sugestaoId}`;
+  if (acao.tipo === 'associar_whatsapp') return `whatsapp:${acao.mensagemId}`;
   if (acao.tipo === 'enviar_whatsapp') return `whatsapp:${acao.dealId}`;
+  if (acao.tipo === 'reenviar_whatsapp') return `whatsapp:${acao.dealId}`;
   if (acao.tipo === 'alterar_producao') return `producao:${acao.dealId}`;
   if ('itemId' in acao) return `item:${acao.dealId}:${acao.itemId}`;
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;

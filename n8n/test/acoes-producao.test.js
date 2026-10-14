@@ -14,10 +14,41 @@ function contexto() {
 }
 
 const linhas = () => ({
-  producao: [{ deal_id: '700001', os: '90001', oficina_id: 'of-1', oficina_nome: 'OFICINA A', data_combinada: '2026-10-18', atualizado_em_ploomes: 'v1' }],
+  producao: [
+    { deal_id: '700001', os: '90001', oficina_id: 'of-1', oficina_nome: 'OFICINA A', data_combinada: '2026-10-18', atualizado_em_ploomes: 'v1' },
+    { deal_id: '700002', os: '90002', oficina_id: 'of-2', oficina_nome: 'OFICINA B', data_combinada: '2026-10-19', atualizado_em_ploomes: 'v2' }
+  ],
   oficinas: [{ ploomes_id: 'of-1', nome: 'OFICINA A', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE', ativo: 'SIM' }, { ploomes_id: 'of-2', nome: 'OFICINA B', ativo: 'SIM' }],
   whatsappMensagens: [{ id: 'MSG-1', deal_id: '700001', oficina_id: 'of-1' }],
   whatsappSugestoes: [{ id: 'SUG-1', mensagem_id: 'MSG-1', deal_id: '700001', os: '90001', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-20', resumo: 'Entrega dia 20.', status: 'PENDENTE', versao: 'v1' }]
+});
+
+test('associar whatsapp liga mensagem pendente somente a uma OS do mesmo grupo', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  dados.whatsappMensagens = [{
+    id: 'MSG-SEM-OS', quando: '2026-10-13T13:00:00.000Z', direcao: 'RECEBIDA', associacao: 'SEM_ASSOCIACAO',
+    deal_id: '', os: '', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE'
+  }];
+  const corpo = { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-SEM-OS', versao: 'v1' };
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'HIST-ASSOC'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.operacoes, [{
+    aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id',
+    linha: { id: 'MSG-SEM-OS', deal_id: '700001', os: '90001', oficina_id: 'of-1', associacao: 'MANUAL' }
+  }]);
+  assert.equal(r.historicos[0].acao, 'WHATSAPP_ASSOCIAR');
+  assert.equal(r.ploomes, null);
+
+  ctx.DEALS_PRODUCAO_EDITAVEIS = ['700001', '700002'];
+  const outroGrupo = { ...corpo, dealId: '700002', versao: 'v2' };
+  assert.equal(ctx.processarAcao(estado, cab, outroGrupo, dados, T0, () => 'X').status, 409);
+  dados.oficinas[0].grupo_jid = 'outro-grupo@g.us';
+  assert.equal(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'X').status, 409);
+  dados.oficinas[0].grupo_jid = 'grupo-teste@g.us';
+  dados.whatsappMensagens[0].deal_id = '700001';
+  dados.whatsappMensagens[0].associacao = 'MANUAL';
+  assert.equal(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'X').status, 409);
 });
 
 test('alterar_producao valida allowlist, versao e motivo e prepara planilha/Ploomes/historico', () => {
@@ -85,4 +116,30 @@ test('enviar whatsapp exige grupo, modelo valido, OS no texto e versao atual', (
   assert.equal(ctx.processarAcao(estado, cab, { ...base, modelo: 'INVENTADO' }, linhas(), T0, () => 'X').status, 400);
   assert.equal(ctx.processarAcao(estado, cab, { ...base, texto: 'Sem identificação.' }, linhas(), T0, () => 'X').status, 400);
   assert.equal(ctx.processarAcao(estado, cab, { ...base, versao: 'antiga' }, linhas(), T0, () => 'X').status, 409);
+});
+
+test('reenviar whatsapp exige confirmação e cria nova tentativa sem apagar o erro', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  dados.whatsappMensagens = [{
+    id: 'MSG-ERRO', evolution_id: '', quando: '2026-10-13T12:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
+    participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
+    texto: '*OS 90001*\nQual a previsão?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
+    associacao: 'MANUAL', status_envio: 'ERRO', erro: 'Falha simulada', criado_em: '2026-10-13T12:00:00.000Z'
+  }];
+  const corpo = { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true };
+  let seq = 0;
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'ID-R-' + (++seq)));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.mensagemId, 'ID-R-1');
+  assert.equal(r.operacoes.length, 1);
+  assert.equal(r.operacoes[0].operacao, 'append');
+  assert.equal(r.operacoes[0].linha.status_envio, 'PENDENTE');
+  assert.equal(r.operacoes[0].linha.texto, dados.whatsappMensagens[0].texto);
+  assert.equal(r.historicos[0].acao, 'WHATSAPP_REENFILEIRAR');
+  assert.equal(dados.whatsappMensagens[0].status_envio, 'ERRO');
+
+  assert.equal(ctx.processarAcao(estado, cab, { ...corpo, confirmou: false }, dados, T0, () => 'X').status, 400);
+  dados.whatsappMensagens[0].status_envio = 'ENVIADA';
+  assert.equal(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'X').status, 409);
 });

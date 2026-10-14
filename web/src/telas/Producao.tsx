@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Board, Producao as ProducaoItem } from '../api/tipos';
+import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
@@ -11,6 +11,28 @@ const indiceDia = (iso: string, inicio: string) => Math.round((msDia(iso) - msDi
 
 function diasEntre(inicio: string, quantidade: number): string[] {
   return Array.from({ length: quantidade }, (_, i) => new Date(msDia(inicio) + i * 86_400_000).toISOString().slice(0, 10));
+}
+
+function MensagemPendente({ mensagem, producao, editaveis, executar }: {
+  mensagem: MensagemWhatsappSemAssociacao;
+  producao: ProducaoItem[];
+  editaveis: string[] | undefined;
+  executar: Executar;
+}) {
+  const opcoes = producao.filter((p) => p.oficinaId === mensagem.oficinaId && (!editaveis?.length || editaveis.includes(p.dealId)));
+  const [dealId, setDealId] = useState(opcoes.length === 1 ? opcoes[0].dealId : '');
+  const escolhida = opcoes.find((p) => p.dealId === dealId);
+  return <li>
+    <span>{mensagem.grupoNome || mensagem.oficina || 'Oficina'} · {mensagem.participanteNome || 'Participante'} · {dataHora(mensagem.quando)}</span>
+    <p>{mensagem.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : mensagem.texto}</p>
+    {opcoes.length > 0 ? <div className="producao-pendentes__associar">
+      <label>Associar à OS<select value={dealId} onChange={(e) => setDealId(e.target.value)}>
+        <option value="">Selecione</option>{opcoes.map((p) => <option key={p.dealId} value={p.dealId}>OS {p.os} · {p.peca || p.referencia}</option>)}
+      </select></label>
+      <button type="button" className="botao botao--contorno" disabled={!escolhida}
+        onClick={() => escolhida && void executar({ tipo: 'associar_whatsapp', dealId: escolhida.dealId, mensagemId: mensagem.id, versao: escolhida.versao }, 'Mensagem associada à OS')}>Associar</button>
+    </div> : <small>Nenhuma OS editável deste grupo está disponível.</small>}
+  </li>;
 }
 
 function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: ProducaoItem; board: Board; hojeIso: string; executar: Executar; onFechar: () => void }) {
@@ -47,6 +69,10 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
     if (!texto || texto.length > 1500) return setErroMensagem('Escreva uma mensagem com até 1500 caracteres.');
     setErroMensagem('');
     void executar({ tipo: 'enviar_whatsapp', dealId: item.dealId, versao: item.versao, modelo, texto }, 'Mensagem colocada na fila do WhatsApp');
+  };
+  const reenviarMensagem = (mensagemId: string, texto: string) => {
+    if (!window.confirm(`Reenviar esta mensagem?\n\n${texto}`)) return;
+    void executar({ tipo: 'reenviar_whatsapp', dealId: item.dealId, mensagemId, versao: item.versao, confirmou: true }, 'Reenvio colocado na fila do WhatsApp');
   };
   return (
     <aside className="producao-painel" aria-label={`Detalhes da OS ${item.os}`}>
@@ -118,6 +144,8 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               <span>{m.direcao === 'ENVIADA' ? 'PCP' : m.participanteNome || 'Oficina'} · {dataHora(m.quando)}</span>
               <p>{m.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : m.texto}</p>
               {m.associacao === 'SEM_ASSOCIACAO' && <small>Mensagem ainda sem associação</small>}
+              {m.statusEnvio === 'ERRO' && <small>Falha no envio.</small>}
+              {m.statusEnvio === 'ERRO' && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>}
             </li>)}</ol>}
         </section>
         <section className="producao-secao"><h3>Histórico</h3>{item.historico.length === 0 ? <p className="producao-vazio">Sem alterações registradas.</p>
@@ -158,10 +186,8 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
     </div>
     {semAssociacao.length > 0 && <details className="producao-pendentes">
       <summary>{semAssociacao.length} {semAssociacao.length === 1 ? 'mensagem aguardando associação' : 'mensagens aguardando associação'}</summary>
-      <ul>{semAssociacao.map((m) => <li key={m.id}>
-        <span>{m.grupoNome || m.oficina || 'Oficina'} · {m.participanteNome || 'Participante'} · {dataHora(m.quando)}</span>
-        <p>{m.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : m.texto}</p>
-      </li>)}</ul>
+      <ul>{semAssociacao.map((m) => <MensagemPendente key={m.id} mensagem={m} producao={producao}
+        editaveis={board.dealsProducaoEditaveis} executar={executar} />)}</ul>
     </details>}
     <div className="gantt__rolagem">
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>

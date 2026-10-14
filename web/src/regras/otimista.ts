@@ -159,6 +159,14 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comProducao(board, acao.dealId, (p) => ({
         ...p, sugestoes: p.sugestoes.map((s) => (s.id === acao.sugestaoId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' as const } : s))
       }));
+    case 'associar_whatsapp': {
+      const mensagem = board.mensagensWhatsappSemAssociacao?.find((m) => m.id === acao.mensagemId);
+      if (!mensagem) return board;
+      const associado = { ...mensagem, associacao: 'MANUAL' as const };
+      const semAssociacao = board.mensagensWhatsappSemAssociacao?.filter((m) => m.id !== acao.mensagemId);
+      const atualizado = comProducao(board, acao.dealId, (p) => ({ ...p, mensagens: [associado, ...p.mensagens] }));
+      return { ...atualizado, mensagensWhatsappSemAssociacao: semAssociacao };
+    }
     case 'enviar_whatsapp':
       return comProducao(board, acao.dealId, (p) => ({
         ...p,
@@ -167,6 +175,15 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
           texto: acao.texto, associacao: 'MANUAL' as const, statusEnvio: 'PENDENTE' as const, tipoConteudo: 'TEXTO' as const
         }, ...p.mensagens]
       }));
+    case 'reenviar_whatsapp':
+      return comProducao(board, acao.dealId, (p) => {
+        const original = p.mensagens.find((m) => m.id === acao.mensagemId && m.statusEnvio === 'ERRO');
+        if (!original) return p;
+        return {
+          ...p,
+          mensagens: [{ ...original, id: `novo:whatsapp:${ctx.n}`, quando: `${ctx.hoje}T12:00:00.000Z`, statusEnvio: 'PENDENTE' as const }, ...p.mensagens]
+        };
+      });
     case 'nova_demanda': {
       // Itens novos na caixa que saiu, com id provisório: ficam fora de Faltas sem pedido
       // (editavel false) até a recarga trazer o id gravado.
@@ -287,7 +304,7 @@ export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
   if ('itemId' in acao) return board.caixas.find((c) => c.dealId === acao.dealId)?.itens.find((i) => i.id === acao.itemId)?.versao;
   if ('pedidoId' in acao) return pedidoDe(board, acao.pedidoId)?.versao;
   if ('dealId' in acao) {
-    if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp' || acao.tipo === 'enviar_whatsapp') {
+    if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp' || acao.tipo === 'associar_whatsapp' || acao.tipo === 'enviar_whatsapp' || acao.tipo === 'reenviar_whatsapp') {
       return board.producao?.find((p) => p.dealId === acao.dealId)?.versao;
     }
     return board.caixas.find((c) => c.dealId === acao.dealId)?.versao;
@@ -310,7 +327,11 @@ export function acaoNoBoard(board: Board, p: Pendente): boolean {
       return board.producao?.find((x) => x.dealId === a.dealId)?.sugestoes.find((s) => s.id === a.sugestaoId)?.status === 'ACEITA';
     case 'ignorar_sugestao_whatsapp':
       return board.producao?.find((x) => x.dealId === a.dealId)?.sugestoes.find((s) => s.id === a.sugestaoId)?.status === 'IGNORADA';
+    case 'associar_whatsapp':
+      return !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === a.mensagemId && m.associacao === 'MANUAL');
     case 'enviar_whatsapp':
+      return !!r.mensagemId && !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === r.mensagemId);
+    case 'reenviar_whatsapp':
       return !!r.mensagemId && !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === r.mensagemId);
     case 'gerar_pedido':
       return temPedido(board, r.pedidoId);

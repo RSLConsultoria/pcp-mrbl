@@ -1703,7 +1703,7 @@ function aplicarNovaDemanda(acao, linhas, ctx) {
 
 var STATUS_ITEM_ABERTO_PRODUCAO = { ABERTO: 1, PARCIAL: 1 };
 var VALORES_ATIVO_PRODUCAO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
-var TIPOS_PRODUCAO = ['alterar_producao', 'aceitar_sugestao_whatsapp', 'ignorar_sugestao_whatsapp', 'enviar_whatsapp'];
+var TIPOS_PRODUCAO = ['alterar_producao', 'associar_whatsapp', 'aceitar_sugestao_whatsapp', 'ignorar_sugestao_whatsapp', 'enviar_whatsapp', 'reenviar_whatsapp'];
 var MODELOS_WHATSAPP = { COBRANCA_PRAZO: 1, CONFIRMAR_DATA: 1, MATERIAL_ENVIADO: 1 };
 var CAMPO_OFICINA_PLOOMES = 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4';
 
@@ -1833,10 +1833,77 @@ function validarAcaoProducaoBasica(corpo, permitidos) {
     if (!MODELOS_WHATSAPP[semAcento(corpo.modelo)]) return erroAcao(400, 'Modelo de mensagem inválido.');
     var mensagem = typeof corpo.texto === 'string' ? corpo.texto.trim() : '';
     if (!mensagem || mensagem.length > 1500) return erroAcao(400, 'Mensagem com até 1500 caracteres.');
+  } else if (corpo.tipo === 'associar_whatsapp') {
+    if (!texto(corpo.mensagemId)) return erroAcao(400, 'Informe a mensagem do WhatsApp.');
+  } else if (corpo.tipo === 'reenviar_whatsapp') {
+    if (!texto(corpo.mensagemId)) return erroAcao(400, 'Informe a mensagem do WhatsApp.');
+    if (corpo.confirmou !== true) return erroAcao(400, 'Confirme o reenvio da mensagem.');
   } else if (!texto(corpo.sugestaoId)) {
     return erroAcao(400, 'Informe a sugestão.');
   }
   return { ok: true };
+}
+
+function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
+  var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
+  if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
+  var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(corpo.mensagemId); })[0];
+  if (!mensagem) return erroAcao(404, 'Mensagem do WhatsApp não encontrada.');
+  if (semAcento(mensagem.direcao) !== 'RECEBIDA' || texto(mensagem.deal_id) || semAcento(mensagem.associacao) !== 'SEM_ASSOCIACAO') {
+    return erroAcao(409, 'Esta mensagem já foi associada ou não pode ser associada.');
+  }
+  if (!texto(producao.oficina_id) || texto(mensagem.oficina_id) !== texto(producao.oficina_id)) {
+    return erroAcao(409, 'A mensagem e a OS precisam pertencer ao mesmo grupo.');
+  }
+  var oficina = (linhas.oficinas || []).filter(function (o) {
+    return o && texto(o.ploomes_id) === texto(producao.oficina_id) && linhaAtivaProducao(o.ativo);
+  })[0];
+  if (!oficina || !texto(oficina.grupo_jid) || texto(oficina.grupo_jid) !== texto(mensagem.grupo_jid)) {
+    return erroAcao(409, 'O grupo da oficina mudou. Confira a configuração antes de associar.');
+  }
+  var linha = {
+    id: texto(mensagem.id), deal_id: texto(producao.deal_id), os: texto(producao.os),
+    oficina_id: texto(producao.oficina_id), associacao: 'MANUAL'
+  };
+  return {
+    ok: true, versao: texto(producao.atualizado_em_ploomes), ploomes: null,
+    operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }],
+    historicos: [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), 'WHATSAPP_ASSOCIAR',
+      ctx.usuario + ' associou manualmente uma mensagem do WhatsApp à OS ' + texto(producao.os) + '.')]
+  };
+}
+
+function processarReenvioWhatsapp(corpo, linhas, ctx) {
+  var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
+  if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
+  var original = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(corpo.mensagemId); })[0];
+  if (!original || texto(original.deal_id) !== texto(producao.deal_id)) return erroAcao(404, 'Mensagem do WhatsApp não encontrada para esta OS.');
+  if (semAcento(original.direcao) !== 'ENVIADA' || semAcento(original.status_envio) !== 'ERRO') {
+    return erroAcao(409, 'Somente uma tentativa com erro pode ser reenviada.');
+  }
+  if (texto(original.oficina_id) !== texto(producao.oficina_id)) return erroAcao(409, 'A oficina da OS mudou. Prepare uma nova mensagem.');
+  var oficina = (linhas.oficinas || []).filter(function (o) {
+    return o && texto(o.ploomes_id) === texto(producao.oficina_id) && linhaAtivaProducao(o.ativo);
+  })[0];
+  if (!oficina || !texto(oficina.grupo_jid) || texto(oficina.grupo_jid) !== texto(original.grupo_jid)) {
+    return erroAcao(409, 'O grupo da oficina mudou. Prepare uma nova mensagem.');
+  }
+  var id = ctx.gerarId();
+  var linha = {
+    id: id, evolution_id: '', quando: ctx.agora, grupo_jid: texto(original.grupo_jid), grupo_nome: texto(original.grupo_nome),
+    participante_jid: '', participante_nome: ctx.usuario, direcao: 'ENVIADA', tipo: semAcento(original.tipo),
+    tipo_conteudo: texto(original.tipo_conteudo) || 'TEXTO', texto: typeof original.texto === 'string' ? original.texto : texto(original.texto),
+    resposta_a_evolution_id: texto(original.resposta_a_evolution_id), deal_id: texto(producao.deal_id), os: texto(producao.os),
+    oficina_id: texto(producao.oficina_id), associacao: 'MANUAL', status_envio: 'PENDENTE', erro: '', criado_em: ctx.agora
+  };
+  return {
+    ok: true, versao: texto(producao.atualizado_em_ploomes), mensagemId: id, ploomes: null,
+    operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linha }],
+    historicos: [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), 'WHATSAPP_REENFILEIRAR',
+      ctx.usuario + ' confirmou o reenvio de uma mensagem do WhatsApp.')]
+  };
 }
 
 function processarEnvioWhatsapp(corpo, linhas, ctx) {
@@ -3176,9 +3243,13 @@ function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var ctx = { usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId };
   var r = corpo.tipo === 'alterar_producao'
     ? processarAlteracaoProducao(corpo, linhas || {}, ctx, DEALS_PRODUCAO_EDITAVEIS)
-    : corpo.tipo === 'enviar_whatsapp'
-      ? processarEnvioWhatsapp(corpo, linhas || {}, ctx)
-      : processarDecisaoSugestao(corpo, linhas || {}, ctx);
+    : corpo.tipo === 'associar_whatsapp'
+      ? processarAssociacaoWhatsapp(corpo, linhas || {}, ctx)
+      : corpo.tipo === 'enviar_whatsapp'
+        ? processarEnvioWhatsapp(corpo, linhas || {}, ctx)
+        : corpo.tipo === 'reenviar_whatsapp'
+          ? processarReenvioWhatsapp(corpo, linhas || {}, ctx)
+          : processarDecisaoSugestao(corpo, linhas || {}, ctx);
   if (!r.ok) return { status: r.status, body: { erro: r.erro } };
   var extras = r.mensagemId ? { mensagemId: r.mensagemId } : undefined;
   var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);

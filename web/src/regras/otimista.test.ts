@@ -63,6 +63,26 @@ describe('aplicarOtimista: producao e sugestoes', () => {
     });
     expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: '*OS 90001*\nQual a previsão?', statusEnvio: 'PENDENTE' });
   });
+
+  it('associa mensagem pendente e a move para a conversa da OS', () => {
+    const mensagem = { id: 'MSG-2', quando: '2026-10-08T10:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA' as const,
+      texto: 'As duas ficam prontas amanhã.', associacao: 'SEM_ASSOCIACAO' as const, statusEnvio: '' as const, tipoConteudo: 'TEXTO' as const,
+      oficinaId: 'of-1', oficina: 'OFICINA A', grupoNome: 'GRUPO A' };
+    const b = aplicar(quadro({ producao: [prod()], mensagensWhatsappSemAssociacao: [mensagem] }),
+      { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-2', versao: 'v1' });
+    expect(b.mensagensWhatsappSemAssociacao).toEqual([]);
+    expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'MSG-2', associacao: 'MANUAL' });
+  });
+
+  it('mostra o reenvio como nova tentativa pendente e mantém a tentativa com erro', () => {
+    const p = prod();
+    p.mensagens = [{ id: 'MSG-ERRO', quando: '', participanteNome: 'PCP', direcao: 'ENVIADA', texto: '*OS 90001* teste', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' }];
+    const b = aplicar(quadro({ producao: [p] }),
+      { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true });
+    expect(b.producao?.[0].mensagens).toHaveLength(2);
+    expect(b.producao?.[0].mensagens[0]).toMatchObject({ statusEnvio: 'PENDENTE', texto: '*OS 90001* teste' });
+    expect(b.producao?.[0].mensagens[1].statusEnvio).toBe('ERRO');
+  });
 });
 
 describe('aplicarOtimista: campos da F2', () => {

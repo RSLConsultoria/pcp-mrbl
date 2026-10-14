@@ -112,6 +112,7 @@ const estado = {
     {
       dealId: '710002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
       mensagens: [
+        { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Pode confirmar a data de entrega?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
         { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Bom dia. A entrega segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
         { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
       ],
@@ -661,6 +662,21 @@ function decidirSugestao(c, usuario, aceitar) {
   return { ok: true, versao: p.versao, historico: h, historicos: [h] };
 }
 
+function associarWhatsapp(c, usuario) {
+  const p = estado.producao.find((x) => x.dealId === c.dealId);
+  if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  conferirVersao(p.versao, c.versao, 'esta OS');
+  const indice = estado.mensagensWhatsappSemAssociacao.findIndex((x) => x.id === c.mensagemId);
+  if (indice < 0) throw new Erro(404, 'Mensagem do WhatsApp não encontrada.');
+  const mensagem = estado.mensagensWhatsappSemAssociacao[indice];
+  if (mensagem.oficinaId !== p.oficinaId) throw new Erro(409, 'A mensagem e a OS precisam pertencer ao mesmo grupo.');
+  estado.mensagensWhatsappSemAssociacao.splice(indice, 1);
+  p.mensagens.unshift({ ...mensagem, associacao: 'MANUAL' });
+  const h = historicoProducao(p, usuario, `${usuario} associou manualmente uma mensagem do WhatsApp à OS ${p.os}.`);
+  return { ok: true, versao: p.versao, historico: h, historicos: [h] };
+}
+
 function enviarWhatsapp(c, usuario) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
@@ -678,6 +694,23 @@ function enviarWhatsapp(c, usuario) {
   return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };
 }
 
+function reenviarWhatsapp(c, usuario) {
+  if (c.confirmou !== true) throw bad('Confirme o reenvio da mensagem.');
+  const p = estado.producao.find((x) => x.dealId === c.dealId);
+  if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  conferirVersao(p.versao, c.versao, 'esta OS');
+  const original = p.mensagens.find((x) => x.id === c.mensagemId);
+  if (!original) throw new Erro(404, 'Mensagem do WhatsApp não encontrada para esta OS.');
+  if (original.direcao !== 'ENVIADA' || original.statusEnvio !== 'ERRO') throw new Erro(409, 'Somente uma tentativa com erro pode ser reenviada.');
+  const oficina = estado.oficinas.find((o) => o.ploomesId === p.oficinaId);
+  if (!oficina?.grupoConfigurado) throw new Erro(409, 'Configure o grupo desta oficina na aba OFICINAS.');
+  const mensagemId = `MSG-FILA-${Date.now()}`;
+  p.mensagens.unshift({ ...original, id: mensagemId, quando: agoraIso(), participanteNome: usuario, statusEnvio: 'PENDENTE' });
+  const h = historicoProducao(p, usuario, `${usuario} confirmou o reenvio de uma mensagem do WhatsApp.`);
+  return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };
+}
+
 function processar(corpo, usuario) {
   switch (corpo?.tipo) {
     case 'baixa': case 'previsao_item': case 'obs_item':
@@ -692,7 +725,9 @@ function processar(corpo, usuario) {
     case 'alterar_producao': return alterarProducao(corpo, usuario);
     case 'aceitar_sugestao_whatsapp': return decidirSugestao(corpo, usuario, true);
     case 'ignorar_sugestao_whatsapp': return decidirSugestao(corpo, usuario, false);
+    case 'associar_whatsapp': return associarWhatsapp(corpo, usuario);
     case 'enviar_whatsapp': return enviarWhatsapp(corpo, usuario);
+    case 'reenviar_whatsapp': return reenviarWhatsapp(corpo, usuario);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);
