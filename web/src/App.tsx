@@ -18,6 +18,7 @@ import { Login } from './telas/Login';
 import { NoPloomes } from './telas/NoPloomes';
 import { Pedidos, type JanelaPedidos } from './telas/Pedidos';
 import { Saidas } from './telas/Saidas';
+import { Producao } from './telas/Producao';
 
 // Guia atual guardada no hash (#saidas, #pedidos) para o recarregar voltar nela.
 function useTela(): [Tela, (t: Tela) => void] {
@@ -41,7 +42,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   const avisar = useAviso();
   const { board, executar, salvando } = useAcao({ fila, token: sessao.token, board: doServidor, marco, recarregar, aoExpirar, avisar });
   const [tela, irPara] = useTela();
-  const [buscas, setBuscas] = useState<Record<Tela, string>>({ ploomes: '', saidas: '', pedidos: '' });
+  const [buscas, setBuscas] = useState<Record<Tela, string>>({ ploomes: '', saidas: '', pedidos: '', producao: '' });
   const [filtro, setFiltro] = useState<FiltroPedidos>('aberto');
   const [janela, setJanela] = useState<JanelaPedidos>(null);
   const [selecao, setSelecao] = useState<Set<string>>(() => new Set());
@@ -73,6 +74,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
           : tela === 'saidas' ? <Saidas board={board} q={q} hoje={hoje} onSelecionarParaPedido={selecionarParaPedido} />
           : tela === 'pedidos' ? <Pedidos board={board} q={q} filtro={filtro} janela={janela} selecao={selecao} executar={executar}
               onJanela={setJanela} onSelecao={setSelecao} />
+          : tela === 'producao' ? <Producao board={board} q={q} hoje={hoje} executar={executar} />
           : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} />}
       </main>
     </div>

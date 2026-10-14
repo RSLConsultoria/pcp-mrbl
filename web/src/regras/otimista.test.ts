@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Acao, Board, EtapaPedido, ItemPedido, Pedido } from '../api/tipos';
+import type { Acao, Board, EtapaPedido, ItemPedido, Pedido, Producao } from '../api/tipos';
 import { aplicarOtimista, aplicarPendentes, pendentesVivos, versaoNoBoard, type Pendente } from './otimista';
 import { faltasSemPedido } from './pedidos';
 import { textoPedidoDoItem } from './saidas';
@@ -31,6 +31,32 @@ function quadro(o: Partial<Board> = {}): Board {
 const aplicar = (b: Board, a: Acao) => aplicarOtimista(b, a, ctx);
 const itemDe = (b: Board, id: string) => b.caixas[0].itens.find((i) => i.id === id)!;
 const pedidoDe = (b: Board, id: string) => (b.pedidos ?? []).find((p) => p.id === id);
+
+const prod = (): Producao => ({
+  dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA A', inicioCostura: '2026-10-01',
+  dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 100, cliente: 'CLIENTE TESTE', peca: 'PECA TESTE',
+  referencia: 'REF', versao: 'v1', faltasCostura: [], mensagens: [],
+  sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-22', resumo: 'Nova data', evidencia: 'dia 22', confianca: .9, status: 'PENDENTE', criadoEm: '', versao: 'v1' }],
+  historico: []
+});
+
+describe('aplicarOtimista: producao e sugestoes', () => {
+  it('altera oficina/data e decide sugestao sem criar mensagem', () => {
+    let b = quadro({ producao: [prod()], oficinas: [{ ploomesId: 'of-2', nome: 'OFICINA B', grupoConfigurado: true, grupoNome: 'GRUPO B' }] });
+    b = aplicar(b, { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-2', dataCombinada: '2026-10-21', motivo: 'Combinado' });
+    expect(b.producao?.[0]).toMatchObject({ oficinaId: 'of-2', oficina: 'OFICINA B', dataCombinada: '2026-10-21' });
+    b = aplicar(b, { tipo: 'aceitar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Confirmado' });
+    expect(b.producao?.[0]).toMatchObject({ dataCombinada: '2026-10-22' });
+    expect(b.producao?.[0].sugestoes[0].status).toBe('ACEITA');
+    expect(b.producao?.[0].mensagens).toEqual([]);
+  });
+
+  it('ignora sem alterar a data', () => {
+    const b = aplicar(quadro({ producao: [prod()] }), { tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1' });
+    expect(b.producao?.[0].dataCombinada).toBe('2026-10-18');
+    expect(b.producao?.[0].sugestoes[0].status).toBe('IGNORADA');
+  });
+});
 
 describe('aplicarOtimista: campos da F2', () => {
   it('baixa soma na baixada e refaz o resta', () => {

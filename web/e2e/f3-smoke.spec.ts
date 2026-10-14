@@ -30,7 +30,7 @@ test('guias trocam de tela e o hash mantém a guia ao recarregar', async ({ page
   await expect(sem.getByRole('button', { name: 'OS 90003' })).toContainText('sem pedido');
   await page.reload();
   await expect(guias(page).getByRole('button', { name: 'Saídas com falta' })).toHaveAttribute('aria-current', 'page');
-  await expect(guias(page).getByRole('button', { name: 'Controle de produção' })).toBeDisabled();
+  await expect(guias(page).getByRole('button', { name: 'Controle de produção' })).toBeEnabled();
 });
 
 test('Selecionar para pedido abre Solicitações com o item marcado e a janela fecha com Esc', async ({ page }) => {

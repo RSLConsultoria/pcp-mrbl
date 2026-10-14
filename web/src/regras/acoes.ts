@@ -85,6 +85,12 @@ export function mensagemSucesso(
       const n = acao.itens.length;
       return `Demanda pós-saída criada · ${n} ${n === 1 ? 'item' : 'itens'} na OS ${acao.os}`;
     }
+    case 'alterar_producao':
+      return `Combinado da OS atualizado`;
+    case 'aceitar_sugestao_whatsapp':
+      return 'Sugestão aceita';
+    case 'ignorar_sugestao_whatsapp':
+      return 'Sugestão ignorada';
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
   }
@@ -138,6 +144,11 @@ export function ordenarHistorico<T extends EntradaHistorico>(h: T[]): T[] {
 
 // Alvo da versão de uma ação: o item (linha da FALTANTES) ou a caixa (linha da CAIXAS_PCP).
 export function chaveDaAcao(acao: Acao): string {
+  // Aceitar uma nova data também altera a versão da produção. Usar o mesmo
+  // alvo faz a fila encadear essa versão com uma edição feita logo antes.
+  if (acao.tipo === 'aceitar_sugestao_whatsapp') return `producao:${acao.dealId}`;
+  if (acao.tipo === 'ignorar_sugestao_whatsapp') return `sugestao:${acao.sugestaoId}`;
+  if (acao.tipo === 'alterar_producao') return `producao:${acao.dealId}`;
   if ('itemId' in acao) return `item:${acao.dealId}:${acao.itemId}`;
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
   if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';

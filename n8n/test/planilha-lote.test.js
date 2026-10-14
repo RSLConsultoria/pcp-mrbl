@@ -52,9 +52,11 @@ test('urlLeitura: batchGet com todas as abas, UNFORMATTED_VALUE e datas formatad
 
 test('leituras do board e da acao', () => {
   assert.deepEqual(limpo(ctx.LEITURAS_BOARD), ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
-    'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS']);
+    'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
+    'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES']);
   assert.deepEqual(limpo(ctx.LEITURAS_ACAO), ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS',
-    'ETAPAS_PEDIDO', { aba: 'HISTORICO_APP', soCabecalho: true }]);
+    'ETAPAS_PEDIDO', 'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
+    { aba: 'HISTORICO_APP', soCabecalho: true }]);
 });
 
 test('planilhaDoLote: casa valueRanges pela ordem pedida; linhas e cabecalhos por aba', () => {
@@ -320,4 +322,30 @@ test('aba lida so pelo cabecalho (HISTORICO_APP no ramo acao): append com INSERT
   const p = ctx.planilhaDoLote(resp, ['FALTANTES', { aba: 'HISTORICO_APP', soCabecalho: true }]);
   const r = req([op('FALTANTES', 'update', 'id', { id: 'a', qtd_baixada: 2 })], [{ id: 'h1', quando: 'T' }], p);
   assert.equal(decodeURIComponent(r[1].url.replace(BASE, '')), "/'HISTORICO_APP'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS");
+});
+
+test('F4: upserts preservam colunas humanas e sugestoes atualizam por id', () => {
+  const p = planilha([
+    ['PRODUCAO', [['deal_id', 'os', 'data_combinada', 'em_costura'], ['700001', '90001', '2026-10-18', 'SIM']]],
+    ['OFICINAS', [['ploomes_id', 'nome', 'grupo_jid', 'grupo_nome', 'ativo', 'atualizado_em'], ['of-1', 'OFICINA A', 'grupo@g.us', 'GRUPO A', 'SIM', 'T0']]],
+    ['WHATSAPP_MENSAGENS', [['id', 'evolution_id', 'deal_id', 'status_envio'], ['MSG-1', '', '700001', 'PENDENTE']]],
+    ['WHATSAPP_SUGESTOES', [['id', 'deal_id', 'status', 'decidido_em', 'decidido_por'], ['SUG-1', '700001', 'PENDENTE', '', '']]],
+    ['HISTORICO_APP', [['id']]]
+  ]);
+  const r = req([
+    op('PRODUCAO', 'update', 'deal_id', { deal_id: '700001', data_combinada: '2026-10-20' }),
+    op('OFICINAS', 'appendOrUpdate', 'ploomes_id', { ploomes_id: 'of-1', nome: 'OFICINA NOVA', atualizado_em: 'T1' }),
+    op('WHATSAPP_SUGESTOES', 'update', 'id', { id: 'SUG-1', status: 'ACEITA', decidido_em: 'T1', decidido_por: 'Pessoa PCP' })
+  ], [], p);
+  assert.deepEqual(r[0].body.data, [
+    { range: "'PRODUCAO'!C2", values: [['2026-10-20']] },
+    { range: "'OFICINAS'!B2", values: [['OFICINA NOVA']] },
+    { range: "'OFICINAS'!F2", values: [['T1']] },
+    { range: "'WHATSAPP_SUGESTOES'!C2:E2", values: [['ACEITA', 'T1', 'Pessoa PCP']] }
+  ]);
+});
+
+test('F4: cabecalho obrigatorio ausente falha antes de gerar qualquer requisicao', () => {
+  const p = planilha([['PRODUCAO', [['deal_id', 'os'], ['700001', '90001']]], ['HISTORICO_APP', [['id']]]]);
+  assert.throws(() => req([op('PRODUCAO', 'update', 'deal_id', { deal_id: '700001', data_combinada: '2026-10-20' })], [], p), /Cabeçalho obrigatório.*PRODUCAO.*data_combinada/);
 });

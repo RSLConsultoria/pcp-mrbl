@@ -8,6 +8,7 @@ var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
+var DEALS_PRODUCAO_EDITAVEIS = ['0'];  // Bloqueado ate haver um card de teste do funil Producao; vazio = todos.
 var DEALS_EDITAVEIS = ['607479158', '607493886', '607493902', '607520448'];  // vazio = todos. Até o go-live, só os cards de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
@@ -117,10 +118,15 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   var ped = montarPedidos(extras, new Date(agora).getFullYear(), faltantes || []);
   var fornecedores = nomesAtivos(extras.fornecedores);
   var responsaveis = nomesAtivos(extras.responsaveis);
+  var producao = producoesBoard(extras, r.caixas);
+  var oficinas = oficinasProducaoBoard(extras.oficinas);
+  var mensagensWhatsappSemAssociacao = mensagensSemAssociacaoProducaoBoard(extras.whatsappMensagens, extras.oficinas);
   var corpo = {
     geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos.concat(ped.avisos), usuarios: usuarios,
     dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido,
-    fornecedores: fornecedores, responsaveis: responsaveis
+    fornecedores: fornecedores, responsaveis: responsaveis,
+    producao: producao, oficinas: oficinas, mensagensWhatsappSemAssociacao: mensagensWhatsappSemAssociacao,
+    dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice()
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
@@ -131,6 +137,10 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
 // sucesso = { ok: true }. O processarAcao repete as checagens.
 function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (sessao && corpo && TIPOS_PRODUCAO.indexOf(corpo.tipo) >= 0) {
+    var vProd = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
+    return vProd.ok ? { ok: true } : { ok: false, status: vProd.status, body: { erro: vProd.erro } };
+  }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     if (!ACOES_F3_ATIVAS) return { ok: false, status: 400, body: { erro: ERRO_F3_DESLIGADA } };
@@ -201,12 +211,30 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   return saida;
 }
 
+function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
+  var v = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var ctx = { usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId };
+  var r = corpo.tipo === 'alterar_producao'
+    ? processarAlteracaoProducao(corpo, linhas || {}, ctx, DEALS_PRODUCAO_EDITAVEIS)
+    : processarDecisaoSugestao(corpo, linhas || {}, ctx);
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos);
+  saida.ploomes = r.ploomes;
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
+}
+
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
 // pedidosItens?, etapas? } (linhas da planilha).
 // Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
 // historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (sessao && corpo && TIPOS_PRODUCAO.indexOf(corpo.tipo) >= 0) {
+    return processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId);
+  }
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);

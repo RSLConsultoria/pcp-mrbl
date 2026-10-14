@@ -148,6 +148,8 @@ describe('fila de ações', () => {
   it('chave por item ou por caixa', () => {
     expect(chaveDaAcao({ tipo: 'baixa', dealId: '7', itemId: 'a1', valor: 1, versao: '' })).toBe('item:7:a1');
     expect(chaveDaAcao({ tipo: 'obs_caixa', dealId: '7', valor: '', versao: '' })).toBe('caixa:7');
+    expect(chaveDaAcao({ tipo: 'aceitar_sugestao_whatsapp', sugestaoId: 's1', dealId: '7', versao: 'v1', motivo: 'Prazo informado pela oficina.' })).toBe('producao:7');
+    expect(chaveDaAcao({ tipo: 'ignorar_sugestao_whatsapp', sugestaoId: 's1', dealId: '7', versao: 'v1' })).toBe('sugestao:s1');
   });
   it('segue as trocas de versão feitas pelas nossas ações', () => {
     const t = new Map([['', 'v1'], ['v1', 'v2']]);

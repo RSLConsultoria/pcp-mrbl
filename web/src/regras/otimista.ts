@@ -25,6 +25,12 @@ function comCaixa(board: Board, dealId: string, f: (c: Caixa) => Caixa): Board {
   return { ...board, caixas: board.caixas.map((c) => (c.dealId === dealId ? f(c) : c)) };
 }
 
+function comProducao(board: Board, dealId: string, f: (p: NonNullable<Board['producao']>[number]) => NonNullable<Board['producao']>[number]): Board {
+  const lista = board.producao ?? [];
+  if (!lista.some((p) => p.dealId === dealId)) return board;
+  return { ...board, producao: lista.map((p) => (p.dealId === dealId ? f(p) : p)) };
+}
+
 function comItem(board: Board, dealId: string, itemId: string, f: (i: Item) => Item): Board {
   return comCaixa(board, dealId, (c) => ({ ...c, itens: c.itens.map((i) => (i.id === itemId ? f(i) : i)) }));
 }
@@ -133,6 +139,26 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comCaixa(board, acao.dealId, (c) => ({ ...c, previsao: acao.valor }));
     case 'obs_caixa':
       return comCaixa(board, acao.dealId, (c) => ({ ...c, observacao: normalizarTexto(acao.valor) }));
+    case 'alterar_producao': {
+      const nome = acao.oficinaId ? board.oficinas?.find((o) => o.ploomesId === acao.oficinaId)?.nome : 'ALOCAR';
+      return comProducao(board, acao.dealId, (p) => ({
+        ...p, oficinaId: acao.oficinaId, oficina: nome ?? p.oficina, dataCombinada: acao.dataCombinada
+      }));
+    }
+    case 'aceitar_sugestao_whatsapp':
+      return comProducao(board, acao.dealId, (p) => {
+        const sugestao = p.sugestoes.find((s) => s.id === acao.sugestaoId);
+        if (!sugestao || sugestao.status !== 'PENDENTE') return p;
+        return {
+          ...p,
+          dataCombinada: sugestao.tipo === 'NOVA_DATA_COMBINADA' ? sugestao.valor : p.dataCombinada,
+          sugestoes: p.sugestoes.map((s) => (s.id === acao.sugestaoId ? { ...s, status: 'ACEITA' as const } : s))
+        };
+      });
+    case 'ignorar_sugestao_whatsapp':
+      return comProducao(board, acao.dealId, (p) => ({
+        ...p, sugestoes: p.sugestoes.map((s) => (s.id === acao.sugestaoId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' as const } : s))
+      }));
     case 'nova_demanda': {
       // Itens novos na caixa que saiu, com id provisório: ficam fora de Faltas sem pedido
       // (editavel false) até a recarga trazer o id gravado.
@@ -252,7 +278,12 @@ export const LIMITE_CONFIRMADA_MS = 120_000;
 export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
   if ('itemId' in acao) return board.caixas.find((c) => c.dealId === acao.dealId)?.itens.find((i) => i.id === acao.itemId)?.versao;
   if ('pedidoId' in acao) return pedidoDe(board, acao.pedidoId)?.versao;
-  if ('dealId' in acao) return board.caixas.find((c) => c.dealId === acao.dealId)?.versao;
+  if ('dealId' in acao) {
+    if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp') {
+      return board.producao?.find((p) => p.dealId === acao.dealId)?.versao;
+    }
+    return board.caixas.find((c) => c.dealId === acao.dealId)?.versao;
+  }
   return undefined;
 }
 
@@ -267,6 +298,10 @@ export function acaoNoBoard(board: Board, p: Pendente): boolean {
   const a = p.acao;
   const r = p.resposta ?? {};
   switch (a.tipo) {
+    case 'aceitar_sugestao_whatsapp':
+      return board.producao?.find((x) => x.dealId === a.dealId)?.sugestoes.find((s) => s.id === a.sugestaoId)?.status === 'ACEITA';
+    case 'ignorar_sugestao_whatsapp':
+      return board.producao?.find((x) => x.dealId === a.dealId)?.sugestoes.find((s) => s.id === a.sugestaoId)?.status === 'IGNORADA';
     case 'gerar_pedido':
       return temPedido(board, r.pedidoId);
     case 'dividir_pedido':

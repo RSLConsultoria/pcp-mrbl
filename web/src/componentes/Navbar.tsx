@@ -9,7 +9,7 @@ const GUIAS: { nome: string; icone: NomeIcone; tela?: Tela }[] = [
   { nome: 'No Ploomes', icone: 'produtos', tela: 'ploomes' },
   { nome: 'Saídas com falta', icone: 'bell', tela: 'saidas' },
   { nome: 'Solicitações de faltas', icone: 'propostas', tela: 'pedidos' },
-  { nome: 'Controle de produção', icone: 'funil' },
+  { nome: 'Controle de produção', icone: 'funil', tela: 'producao' },
   { nome: 'Visão das peças', icone: 'doc' }
 ];
 

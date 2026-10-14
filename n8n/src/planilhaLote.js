@@ -14,8 +14,10 @@ var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha d
 // FORNECEDORES e RESPONSAVEIS (opcoes do pedido) precisam existir na planilha:
 // aba que nao existe derruba o batchGet inteiro (400). Aba vazia tudo bem.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
-  'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS'];
+  'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
@@ -29,10 +31,19 @@ var DESTINOS_ESCRITA = [
   { aba: 'ETAPAS_PEDIDO', operacao: 'update', chave: 'id' },
   { aba: 'FALTANTES', operacao: 'update', chave: 'id' },
   { aba: 'FALTANTES', operacao: 'append', chave: 'id' },  // nova demanda pos-saida
-  { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id' }
+  { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id' },
+  { aba: 'PRODUCAO', operacao: 'appendOrUpdate', chave: 'deal_id' },
+  { aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id' },
+  { aba: 'OFICINAS', operacao: 'appendOrUpdate', chave: 'ploomes_id' },
+  { aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id' },
+  { aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id' },
+  { aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id' },
+  { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
-var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES'];
+var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1 };
 var ABA_HISTORICO = 'HISTORICO_APP';
 // Falha numa gravacao (depois das tentativas): uma linha na aba ERROS_APP (colunas
 // quando, usuario, tipo, deal_id, passo, url, erro) e 500 com este aviso para o site.
@@ -187,6 +198,17 @@ function conferirOperacao(o) {
   }
 }
 
+// Nas abas novas da F4, nunca cria coluna durante uma acao. Todos os campos
+// precisam ter sido preparados no checklist antes de qualquer requisicao.
+function conferirCabecalhoF4(o, planilha) {
+  if (!ABAS_F4[o.aba]) return;
+  var cab = planilha && planilha.cabecalhos && planilha.cabecalhos[o.aba];
+  if (!cab) throw new Error('Cabeçalho obrigatório ausente: aba ' + o.aba);
+  Object.keys(o.linha || {}).forEach(function (campo) {
+    if (cab.indexOf(campo) < 0) throw new Error('Cabeçalho obrigatório ausente: ' + o.aba + '.' + campo);
+  });
+}
+
 // operacoes[] + historicos[] -> [{ method, url, body }] na ordem de execucao:
 // 1) cabecalhos novos (campo sem coluna vai para a proxima coluna livre).
 //    Atencao: duas acoes ao mesmo tempo que criem coluna na mesma aba escolhem a
@@ -264,6 +286,7 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
   }
 
   (operacoes || []).forEach(conferirOperacao);
+  (operacoes || []).forEach(function (o) { conferirCabecalhoF4(o, planilha); });
   (operacoes || []).forEach(function (o) {
     var e = estadoDa(o.aba);
     garantirColunas(e, o.linha);

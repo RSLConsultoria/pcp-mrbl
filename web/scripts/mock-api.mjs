@@ -96,7 +96,31 @@ const estado = {
     { id: 'PED-0005', etapa: 'conferencia', origem: 'FORNECEDOR', quem: 'AVIAMENTOS DELTA', local: 'BRAGANCA', previsao: diaIso(4), responsavel: 'Renata', criadoEm: diaIso(-15), baixadoEm: '', versao: '2026-01-01T00:00:00.000Z', itens: [{ itemId: 'd2', dealId: '700004', qtd: 120, fornecedor: '' }] }
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
-  dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008']
+  dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008'],
+  dealsProducaoEditaveis: ['710001', '710002', '710003'],
+  oficinas: [
+    { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL' },
+    { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '' }
+  ],
+  mensagensWhatsappSemAssociacao: [{
+    id: 'MSG-SEM-1', quando: new Date(Date.now() - 900_000).toISOString(), participanteNome: 'Pessoa da oficina',
+    direcao: 'RECEBIDA', texto: 'As duas ordens ficam prontas na sexta.', associacao: 'SEM_ASSOCIACAO',
+    statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
+  }],
+  producao: [
+    { dealId: '710001', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    {
+      dealId: '710002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
+      mensagens: [
+        { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Bom dia. A entrega segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
+      ],
+      sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
+      historico: [{ quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'PCP Teste', texto: 'Data combinada ajustada após contato com a oficina.', ploomes: 'ENVIADO' }]
+    },
+    { dealId: '710003', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '710004', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1', mensagens: [], sugestoes: [], historico: [] }
+  ]
 };
 
 // ---------- utilidades ----------
@@ -182,6 +206,17 @@ function montarBoard() {
     avisos: [],
     usuarios: USUARIOS,
     dealsEditaveis: estado.dealsEditaveis,
+    dealsProducaoEditaveis: estado.dealsProducaoEditaveis,
+    oficinas: estado.oficinas,
+    mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
+    producao: estado.producao.map((p) => ({
+      ...p,
+      faltasCostura: estado.caixas.filter((c) => c.os === p.os && c.tipo === 'COSTURA')
+        .flatMap((c) => c.itens.filter((i) => aberto(i)).map((i) => ({
+          ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
+          editavel: true, pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((x) => x.id), pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
+        })))
+    })),
     etapasPedido: etapas().map((e, i) => ({ ...e, ordem: i + 1 })),
     fornecedores: ativos(FORNECEDORES),
     responsaveis: ativos(RESPONSAVEIS),
@@ -584,6 +619,48 @@ function novaDemanda(c, usuario) {
   return resposta(agoraIso(), historicos, { itemIds });
 }
 
+function historicoProducao(p, usuario, texto) {
+  const h = { quando: agoraIso(), usuario, texto, ploomes: 'PENDENTE' };
+  p.historico.unshift(h);
+  return h;
+}
+
+function alterarProducao(c, usuario) {
+  const p = estado.producao.find((x) => x.dealId === c.dealId);
+  if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  conferirVersao(p.versao, c.versao, 'esta OS');
+  validarData(c.dataCombinada);
+  const mudouData = c.dataCombinada !== p.dataCombinada;
+  const mudouOficina = c.oficinaId !== p.oficinaId;
+  if (mudouData && !String(c.motivo ?? '').trim()) throw bad('Informe o motivo da alteração da data combinada.');
+  if (!mudouData && !mudouOficina) throw bad('Nada alterado.');
+  const oficina = c.oficinaId ? estado.oficinas.find((o) => o.ploomesId === c.oficinaId) : null;
+  if (c.oficinaId && !oficina) throw bad('Oficina inválida.');
+  p.oficinaId = c.oficinaId; p.oficina = oficina?.nome ?? 'ALOCAR'; p.dataCombinada = c.dataCombinada; p.versao = agoraIso();
+  const h = historicoProducao(p, usuario, `${usuario} alterou o combinado${c.motivo ? ` · ${c.motivo}` : ''}`);
+  return { ok: true, versao: p.versao, historico: h, historicos: [h] };
+}
+
+function decidirSugestao(c, usuario, aceitar) {
+  const p = estado.producao.find((x) => x.dealId === c.dealId);
+  if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  conferirVersao(p.versao, c.versao, 'esta OS');
+  const s = p.sugestoes.find((x) => x.id === c.sugestaoId);
+  if (!s) throw new Erro(404, 'Sugestão não encontrada.');
+  const destino = aceitar ? 'ACEITA' : 'IGNORADA';
+  if (s.status === destino) return { ok: true, versao: p.versao, historico: null, historicos: [] };
+  if (s.status !== 'PENDENTE') throw new Erro(409, 'Esta sugestão já foi decidida.');
+  if (aceitar && s.tipo === 'NOVA_DATA_COMBINADA') {
+    if (!String(c.motivo ?? '').trim()) throw bad('Informe o motivo da alteração da data combinada.');
+    p.dataCombinada = s.valor;
+  }
+  s.status = destino; p.versao = agoraIso();
+  const h = historicoProducao(p, usuario, `${usuario} ${aceitar ? 'aceitou' : 'ignorou'} a sugestão do WhatsApp.`);
+  return { ok: true, versao: p.versao, historico: h, historicos: [h] };
+}
+
 function processar(corpo, usuario) {
   switch (corpo?.tipo) {
     case 'baixa': case 'previsao_item': case 'obs_item':
@@ -595,6 +672,9 @@ function processar(corpo, usuario) {
     case 'dividir_pedido': return dividirPedido(corpo, usuario);
     case 'dividir_por_previsao': return dividirPorPrevisao(corpo, usuario);
     case 'nova_demanda': return novaDemanda(corpo, usuario);
+    case 'alterar_producao': return alterarProducao(corpo, usuario);
+    case 'aceitar_sugestao_whatsapp': return decidirSugestao(corpo, usuario, true);
+    case 'ignorar_sugestao_whatsapp': return decidirSugestao(corpo, usuario, false);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);

@@ -11,7 +11,11 @@ var linhas = {
   ganhas: abas['CAIXAS GANHAS'],
   pedidos: abas['PEDIDOS'],
   pedidosItens: abas['PEDIDOS_ITENS'],
-  etapas: abas['ETAPAS_PEDIDO']
+  etapas: abas['ETAPAS_PEDIDO'],
+  producao: abas['PRODUCAO'],
+  oficinas: abas['OFICINAS'],
+  whatsappMensagens: abas['WHATSAPP_MENSAGENS'],
+  whatsappSugestoes: abas['WHATSAPP_SUGESTOES']
 };
 var gerarId = function () { return require('crypto').randomUUID(); };
 return [{ json: processarAcao(estado, cabecalho, corpo, linhas, Date.now(), gerarId) }];

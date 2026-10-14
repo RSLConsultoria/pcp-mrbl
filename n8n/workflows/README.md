@@ -6,6 +6,19 @@ Esta release leva junto: leitura/gravação em lote, registro compilado no Ploom
 
 Siga na ordem. Cada item de planilha é "confira e, se faltar, faça".
 
+## Preparação da F4 — ainda não executar na planilha real
+
+Esta seção documenta o contrato já implementado e testado localmente para o Gantt e o intérprete silencioso. Ela **não autoriza criação de abas, deploy ou conexão com grupos reais**. Esses passos só entram na homologação da F4 depois da demonstração local e do aceite do dono.
+
+Quando a homologação for autorizada, crie as abas abaixo somente com o cabeçalho exato na linha 1. Nunca ordene nem apague suas linhas.
+
+- **PRODUCAO**: `deal_id` | `os` | `oficina_id` | `oficina_nome` | `inicio_costura` | `data_combinada` | `lead_time` | `pecas` | `cliente` | `peca` | `referencia` | `em_costura` | `atualizado_em_ploomes` | `sincronizado_em`.
+- **OFICINAS**: `ploomes_id` | `nome` | `grupo_jid` | `grupo_nome` | `ativo` | `atualizado_em`. O sync só pode alterar `ploomes_id`, `nome` e `atualizado_em`; os demais campos são humanos.
+- **WHATSAPP_MENSAGENS**: `id` | `evolution_id` | `quando` | `grupo_jid` | `grupo_nome` | `participante_jid` | `participante_nome` | `direcao` | `tipo` | `tipo_conteudo` | `texto` | `resposta_a_evolution_id` | `deal_id` | `os` | `oficina_id` | `associacao` | `status_envio` | `erro` | `criado_em`.
+- **WHATSAPP_SUGESTOES**: `id` | `mensagem_id` | `deal_id` | `os` | `tipo` | `valor` | `resumo` | `evidencia` | `confianca` | `status` | `criado_em` | `decidido_em` | `decidido_por` | `versao`.
+
+As operações da F4 recusam a ação antes da primeira escrita se faltar uma coluna usada por ela. O navegador não recebe `grupo_jid`, `participante_jid`, IDs internos da Evolution nem credenciais. O workflow de entrada apenas registra e sugere: ele não pode conter node de envio ou resposta ao grupo.
+
 ### A. Antes do deploy: credencial e planilha
 
 Nada daqui muda o que a API atual (antiga) faz.

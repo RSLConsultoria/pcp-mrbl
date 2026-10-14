@@ -11,6 +11,10 @@ var extras = {
   pedidosItens: abas['PEDIDOS_ITENS'],
   etapas: abas['ETAPAS_PEDIDO'],
   fornecedores: abas['FORNECEDORES'],
-  responsaveis: abas['RESPONSAVEIS']
+  responsaveis: abas['RESPONSAVEIS'],
+  producao: abas['PRODUCAO'],
+  oficinas: abas['OFICINAS'],
+  whatsappMensagens: abas['WHATSAPP_MENSAGENS'],
+  whatsappSugestoes: abas['WHATSAPP_SUGESTOES']
 };
 return [{ json: montarRespostaBoard(estado, abas['FALTANTES'], abas['CAIXAS GANHAS'], Date.now(), extras) }];

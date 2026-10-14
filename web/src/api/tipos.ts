@@ -96,6 +96,62 @@ export interface EtapaPedido {
   ordem: number;
 }
 
+export interface MensagemProducao {
+  id: string;
+  quando: string;
+  participanteNome: string;
+  direcao: 'ENVIADA' | 'RECEBIDA';
+  texto: string;
+  associacao: 'CITACAO' | 'OS_NO_TEXTO' | 'ULTIMA_COBRANCA' | 'MANUAL' | 'SEM_ASSOCIACAO';
+  statusEnvio: '' | 'PENDENTE' | 'ENVIANDO' | 'ENVIADA' | 'ERRO';
+  tipoConteudo: 'TEXTO' | 'NAO_TEXTUAL';
+}
+
+export interface MensagemWhatsappSemAssociacao extends MensagemProducao {
+  oficinaId: string;
+  oficina: string;
+  grupoNome: string;
+}
+
+export interface SugestaoProducao {
+  id: string;
+  mensagemId: string;
+  tipo: 'NOVA_DATA_COMBINADA' | 'PRAZO_CONFIRMADO' | 'MOTIVO_ATRASO' | 'OBSERVACAO';
+  valor: string;
+  resumo: string;
+  evidencia: string;
+  confianca: number | null;
+  status: 'PENDENTE' | 'ACEITA' | 'IGNORADA';
+  criadoEm: string;
+  versao: string;
+}
+
+export interface Producao {
+  dealId: string;
+  os: string;
+  oficinaId: string;
+  oficina: string;
+  inicioCostura: string;
+  dataCombinada: string;
+  leadTime: string;
+  pecas: number | null;
+  cliente: string;
+  peca: string;
+  referencia: string;
+  versao: string;
+  faltasCostura: Item[];
+  mensagens: MensagemProducao[];
+  sugestoes: SugestaoProducao[];
+  historico: EntradaHistorico[];
+}
+
+export interface OficinaProducao {
+  ploomesId: string;
+  nome: string;
+  grupoConfigurado: boolean;
+  grupoNome: string;
+}
+
 export interface Board {
   geradoEm: string; // ISO
   caixas: Caixa[];
@@ -106,6 +162,10 @@ export interface Board {
   etapasPedido?: EtapaPedido[];
   fornecedores?: string[]; // aba FORNECEDORES: ativos, em ordem (opções do pedido)
   responsaveis?: string[]; // aba RESPONSAVEIS: ativos, em ordem (responsável do pedido)
+  producao?: Producao[];
+  oficinas?: OficinaProducao[];
+  mensagensWhatsappSemAssociacao?: MensagemWhatsappSemAssociacao[];
+  dealsProducaoEditaveis?: string[];
 }
 
 // Corpo do POST /pcp-acao.
@@ -132,6 +192,9 @@ export type Acao =
   | { tipo: 'dividir_pedido'; pedidoId: string; versao: string; itens: { itemId: string; qtd: number }[] }
   | { tipo: 'dividir_por_previsao'; pedidoId: string; versao: string }
   | { tipo: 'nova_demanda'; os: string; caixa: 'COSTURA' | 'ACABAMENTO'; itens: { nome: string; cor: string; qtd: number; un: string }[] }
+  | { tipo: 'alterar_producao'; dealId: string; versao: string; oficinaId: string; dataCombinada: string; motivo: string }
+  | { tipo: 'aceitar_sugestao_whatsapp'; dealId: string; sugestaoId: string; versao: string; motivo: string }
+  | { tipo: 'ignorar_sugestao_whatsapp'; dealId: string; sugestaoId: string; versao: string }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
 
 export interface DadosPedido {

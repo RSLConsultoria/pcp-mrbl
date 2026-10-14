@@ -87,7 +87,8 @@ test('board: token valido sem cache pede leitura; com cache novo devolve o cache
   const r = limpo(ctx.montarRespostaBoard(estado, [], [], T0));
   assert.equal(r.status, 200);
   assert.deepEqual(r.body, { geradoEm: new Date(T0).toISOString(), caixas: [], avisos: [], usuarios: [], dealsEditaveis: [],
-    pedidos: [], etapasPedido: limpo(ctx.ETAPAS_PADRAO), fornecedores: [], responsaveis: [] });
+    pedidos: [], etapasPedido: limpo(ctx.ETAPAS_PADRAO), fornecedores: [], responsaveis: [],
+    producao: [], oficinas: [], mensagensWhatsappSemAssociacao: [], dealsProducaoEditaveis: ['0'] });
 
   assert.deepEqual(limpo(ctx.validarPedidoBoard(estado, cab, T0 + 54000)), { status: 200, body: r.body });
   assert.deepEqual(limpo(ctx.validarPedidoBoard(estado, cab, T0 + 56000)), { ler: true });

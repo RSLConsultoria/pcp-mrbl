@@ -44,6 +44,10 @@ const LEITURA_ACAO = {
     vr('PEDIDOS', [['id', 'etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel', 'criado_em', 'criado_por', 'baixado_em', 'atualizado_em', 'pai']]),
     vr('PEDIDOS_ITENS', [['id', 'pedido_id', 'item_id', 'deal_id', 'os', 'nome', 'un', 'qtd', 'fornecedor', 'previsao']]),
     vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']]),
+    vr('PRODUCAO', [['deal_id', 'os', 'oficina_id', 'oficina_nome', 'data_combinada', 'atualizado_em_ploomes']]),
+    vr('OFICINAS', [['ploomes_id', 'nome', 'grupo_jid', 'grupo_nome', 'ativo', 'atualizado_em']]),
+    vr('WHATSAPP_MENSAGENS', [['id', 'evolution_id', 'deal_id', 'oficina_id']]),
+    vr('WHATSAPP_SUGESTOES', [['id', 'mensagem_id', 'deal_id', 'os', 'tipo', 'valor', 'resumo', 'status', 'versao']]),
     { range: "'HISTORICO_APP'!A1:M1", majorDimension: 'ROWS', values: [CAB_HIST] }
   ]
 };
@@ -130,7 +134,9 @@ test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets
       vr('USUARIOS', [['email', 'nome', 'perfil', 'senha_hash', 'ativo'], ['l@x.com', 'Lucca', 'ADM', 'h', 'SIM'], ['b@x.com', 'Bia', 'PCP', 'h', 'NAO']]),
       vr('PEDIDOS', [['id']]), vr('PEDIDOS_ITENS', [['id']]), vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']]),
       vr('FORNECEDORES', [['id', 'nome', 'ativo'], ['f1', 'TECIDOS BETA', ''], ['f2', 'ANTIGO', 'NAO']]),
-      { range: "'RESPONSAVEIS'!A1:Z1000", majorDimension: 'ROWS' } // aba vazia: a API nao manda values
+      { range: "'RESPONSAVEIS'!A1:Z1000", majorDimension: 'ROWS' }, // aba vazia: a API nao manda values
+      vr('PRODUCAO', [['deal_id', 'em_costura']]), vr('OFICINAS', [['ploomes_id', 'nome']]),
+      vr('WHATSAPP_MENSAGENS', [['id']]), vr('WHATSAPP_SUGESTOES', [['id']])
     ]
   };
   const [saida] = rodarNode('montar-board', { $: cifrao({ 'Ler Planilha': [leitura] }), $getWorkflowStaticData: () => s.estado });

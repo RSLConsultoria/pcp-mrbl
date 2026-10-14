@@ -1696,6 +1696,647 @@ function aplicarNovaDemanda(acao, linhas, ctx) {
   };
 }
 
+// ----- src/producao.js -----
+// ===== src/producao.js =====
+// Regras puras da F4: snapshot da producao, prazo, ordenacao, alteracoes e
+// modelos de WhatsApp. Sem I/O e sem import/export para rodar nos Code nodes.
+
+var STATUS_ITEM_ABERTO_PRODUCAO = { ABERTO: 1, PARCIAL: 1 };
+var VALORES_ATIVO_PRODUCAO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
+var TIPOS_PRODUCAO = ['alterar_producao', 'aceitar_sugestao_whatsapp', 'ignorar_sugestao_whatsapp'];
+var CAMPO_OFICINA_PLOOMES = 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4';
+
+function linhaProducao(p, sincronizadoEm) {
+  p = p || {};
+  var pecas = numero(p.pecas);
+  return {
+    deal_id: texto(p.dealId),
+    os: texto(p.os),
+    oficina_id: texto(p.oficinaId),
+    oficina_nome: texto(p.oficina) || 'ALOCAR',
+    inicio_costura: dataISO(p.inicioCostura, new Date(sincronizadoEm).getUTCFullYear()),
+    data_combinada: dataISO(p.dataCombinada, new Date(sincronizadoEm).getUTCFullYear()),
+    lead_time: dataISO(p.leadTime, new Date(sincronizadoEm).getUTCFullYear()),
+    pecas: pecas === null || isNaN(pecas) ? '' : pecas,
+    cliente: texto(p.cliente),
+    peca: texto(p.peca),
+    referencia: texto(p.referencia),
+    em_costura: 'SIM',
+    atualizado_em_ploomes: texto(p.versao),
+    sincronizado_em: texto(sincronizadoEm)
+  };
+}
+
+function prazoDaProducao(p) {
+  var combinada = texto(p && p.dataCombinada);
+  if (combinada) return { data: combinada, origem: 'COMBINADA' };
+  var lead = texto(p && p.leadTime);
+  if (lead) return { data: lead, origem: 'LEAD_TIME' };
+  return { data: '', origem: 'SEM_PRAZO' };
+}
+
+function diasEntreISO(inicio, fim) {
+  var a = Date.parse(inicio + 'T12:00:00Z');
+  var b = Date.parse(fim + 'T12:00:00Z');
+  if (!isFinite(a) || !isFinite(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+function statusPrazo(p, hojeISO) {
+  var prazo = prazoDaProducao(p);
+  if (!prazo.data) return { status: 'SEM_PRAZO', dias: null, data: '', origem: prazo.origem };
+  var dias = diasEntreISO(hojeISO, prazo.data);
+  var status = dias < 0 ? 'ATRASADO' : dias === 0 ? 'HOJE' : dias <= 3 ? 'PROXIMO' : 'NO_PRAZO';
+  return { status: status, dias: dias, data: prazo.data, origem: prazo.origem };
+}
+
+function nomeOficinaProducao(p) {
+  return semAcento(p && p.oficina) || 'ALOCAR';
+}
+
+function ordenarProducoes(producoes) {
+  var lista = (producoes || []).slice();
+  var primeiraData = {};
+  lista.forEach(function (p) {
+    var oficina = nomeOficinaProducao(p);
+    var prazo = prazoDaProducao(p).data || '9999-99-99';
+    if (!primeiraData[oficina] || prazo < primeiraData[oficina]) primeiraData[oficina] = prazo;
+  });
+  return lista.sort(function (a, b) {
+    var oa = nomeOficinaProducao(a);
+    var ob = nomeOficinaProducao(b);
+    if (oa === 'ALOCAR' && ob !== 'ALOCAR') return -1;
+    if (ob === 'ALOCAR' && oa !== 'ALOCAR') return 1;
+    if (oa !== ob) {
+      if (primeiraData[oa] !== primeiraData[ob]) return primeiraData[oa] < primeiraData[ob] ? -1 : 1;
+      return oa < ob ? -1 : 1;
+    }
+    var pa = prazoDaProducao(a).data || '9999-99-99';
+    var pb = prazoDaProducao(b).data || '9999-99-99';
+    if (pa !== pb) return pa < pb ? -1 : 1;
+    return texto(a.os) < texto(b.os) ? -1 : texto(a.os) > texto(b.os) ? 1 : 0;
+  });
+}
+
+function faltasDaCostura(producao, caixas) {
+  var os = texto(producao && producao.os);
+  var faltas = [];
+  (caixas || []).forEach(function (c) {
+    if (!c || texto(c.os) !== os || semAcento(c.tipo) !== 'COSTURA') return;
+    (c.itens || []).forEach(function (i) {
+      if (i && STATUS_ITEM_ABERTO_PRODUCAO[semAcento(i.status)] && (i.resta === null || Number(i.resta) > 0)) faltas.push(i);
+    });
+  });
+  return faltas;
+}
+
+function producaoEditavel(dealId, permitidos) {
+  var lista = Array.isArray(permitidos) ? permitidos.map(texto) : [];
+  return lista.length === 0 || lista.indexOf(texto(dealId)) >= 0;
+}
+
+function validarAlteracaoProducao(corpo, atual, permitidos) {
+  corpo = corpo || {};
+  atual = atual || {};
+  var dealId = texto(corpo.dealId);
+  if (!producaoEditavel(dealId, permitidos)) return erroAcao(403, 'Edição liberada em breve para esta OS.');
+  if (!dealId || dealId !== texto(atual.dealId)) return erroAcao(404, 'OS não encontrada na produção.');
+  if (texto(corpo.versao) !== texto(atual.versao)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
+  var oficinaId = texto(corpo.oficinaId);
+  var data = texto(corpo.dataCombinada);
+  var motivo = texto(corpo.motivo).replace(/(\r\n|\n|\r)+/g, ' ');
+  if (data && !dataValida(data)) return erroAcao(400, 'Data combinada inválida.');
+  if (motivo.length > 500) return erroAcao(400, 'Motivo com no máximo 500 caracteres.');
+  var mudouData = data !== texto(atual.dataCombinada);
+  var mudouOficina = oficinaId !== texto(atual.oficinaId);
+  if (mudouData && !motivo) return erroAcao(400, 'Informe o motivo da alteração da data combinada.');
+  if (!mudouData && !mudouOficina) return erroAcao(400, 'Nada alterado.');
+  return {
+    ok: true,
+    acao: { dealId: dealId, versao: texto(corpo.versao), oficinaId: oficinaId, dataCombinada: data, motivo: motivo },
+    mudouData: mudouData,
+    mudouOficina: mudouOficina
+  };
+}
+
+function validarAcaoProducaoBasica(corpo, permitidos) {
+  corpo = corpo || {};
+  if (TIPOS_PRODUCAO.indexOf(corpo.tipo) < 0) return erroAcao(400, 'Tipo de ação inválido.');
+  var dealId = texto(corpo.dealId);
+  if (!dealId) return erroAcao(400, 'Informe a OS.');
+  if (!producaoEditavel(dealId, permitidos)) return erroAcao(403, 'Edição liberada em breve para esta OS.');
+  if (corpo.tipo === 'alterar_producao') {
+    if (texto(corpo.dataCombinada) && !dataValida(texto(corpo.dataCombinada))) return erroAcao(400, 'Data combinada inválida.');
+    if (texto(corpo.motivo).length > 500) return erroAcao(400, 'Motivo com no máximo 500 caracteres.');
+  } else if (!texto(corpo.sugestaoId)) {
+    return erroAcao(400, 'Informe a sugestão.');
+  }
+  return { ok: true };
+}
+
+function historicoProducao(ctx, dealId, os, acao, descricao) {
+  return {
+    id: ctx.gerarId(), quando: ctx.agora, usuario: ctx.usuario, email: ctx.email,
+    deal_id: dealId, os: os, item_id: '', acao: acao, texto: descricao,
+    ploomes_status: 'PENDENTE', ploomes_id: '', tentativas: 0, erro: ''
+  };
+}
+
+function processarAlteracaoProducao(corpo, linhas, ctx, permitidos) {
+  var row = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
+  if (!row) return erroAcao(404, 'OS não encontrada na produção.');
+  var atual = {
+    dealId: texto(row.deal_id), os: texto(row.os), oficinaId: texto(row.oficina_id),
+    dataCombinada: texto(row.data_combinada), versao: texto(row.atualizado_em_ploomes)
+  };
+  var v = validarAlteracaoProducao(corpo, atual, permitidos);
+  if (!v.ok) return v;
+  var oficinaNome = 'ALOCAR';
+  if (v.acao.oficinaId) {
+    var oficina = (linhas.oficinas || []).filter(function (o) {
+      return o && texto(o.ploomes_id) === v.acao.oficinaId && linhaAtivaProducao(o.ativo);
+    })[0];
+    if (!oficina) return erroAcao(400, 'Oficina inválida.');
+    oficinaNome = texto(oficina.nome);
+  }
+  var linha = { deal_id: atual.dealId };
+  var campos = {};
+  var partes = [];
+  if (v.mudouOficina) {
+    linha.oficina_id = v.acao.oficinaId;
+    linha.oficina_nome = oficinaNome;
+    campos[CAMPO_OFICINA_PLOOMES] = v.acao.oficinaId;
+    partes.push('oficina: ' + (texto(row.oficina_nome) || 'ALOCAR') + ' → ' + oficinaNome);
+  }
+  if (v.mudouData) {
+    linha.data_combinada = v.acao.dataCombinada;
+    campos[CAMPO_DATA_COMBINADA_PLOOMES] = v.acao.dataCombinada;
+    partes.push('data combinada: ' + (texto(row.data_combinada) || '—') + ' → ' + (v.acao.dataCombinada || '—'));
+  }
+  if (v.acao.motivo) partes.push('motivo: ' + v.acao.motivo);
+  var historico = historicoProducao(ctx, atual.dealId, atual.os, 'PRODUCAO_ALTERAR_COMBINADO', ctx.usuario + ' alterou o combinado: ' + partes.join(' · '));
+  return {
+    ok: true, versao: ctx.agora,
+    operacoes: [{ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: linha }],
+    historicos: [historico], ploomes: { dealId: atual.dealId, campos: campos }
+  };
+}
+
+function processarDecisaoSugestao(corpo, linhas, ctx) {
+  var sugestao = (linhas.whatsappSugestoes || []).filter(function (s) { return s && texto(s.id) === texto(corpo.sugestaoId); })[0];
+  if (!sugestao || texto(sugestao.deal_id) !== texto(corpo.dealId)) return erroAcao(404, 'Sugestão não encontrada.');
+  var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
+  if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(sugestao.mensagem_id); })[0];
+  if (!mensagem) return erroAcao(409, 'Mensagem da sugestão não encontrada.');
+  var r = decidirSugestaoWhatsapp({
+    decisao: corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'ACEITAR' : 'IGNORAR',
+    versao: corpo.versao, motivo: corpo.motivo
+  }, sugestao, producao, mensagem, ctx);
+  if (!r.ok || r.idempotente) return r.ok ? { ok: true, idempotente: true, versao: texto(producao.atualizado_em_ploomes), operacoes: [], historicos: [], ploomes: null } : r;
+  var acao = corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'WHATSAPP_SUGESTAO_ACEITA' : 'WHATSAPP_SUGESTAO_IGNORADA';
+  r.historicos = [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), acao, r.textoHistorico)];
+  r.versao = ctx.agora;
+  return r;
+}
+
+function dataCurtaProducao(iso) {
+  return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : 'sem data';
+}
+
+function modeloWhatsapp(tipo, p, hojeISO) {
+  p = p || {};
+  var cab = '*OS ' + texto(p.os) + '*';
+  var detalhe = texto(p.peca) + (numero(p.pecas) > 0 ? ', ' + formatarQtd(numero(p.pecas)) + ' pç' : '');
+  var prazo = prazoDaProducao(p);
+  if (tipo === 'CONFIRMAR_DATA') {
+    return cab + '\nBom dia. Confirmando a entrega de ' + detalhe + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
+  }
+  if (tipo === 'MATERIAL_ENVIADO') {
+    return cab + '\nBom dia. O material que faltava na caixa de costura foi enviado hoje.';
+  }
+  if (tipo === 'COBRANCA_PRAZO') {
+    var status = statusPrazo(p, hojeISO);
+    if (status.status === 'ATRASADO') {
+      return cab + '\nBom dia. A entrega de ' + detalhe + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
+    }
+    if (!prazo.data) return cab + '\nBom dia. Qual a previsão de entrega de ' + detalhe + '?';
+    return cab + '\nBom dia. A entrega de ' + detalhe + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
+  }
+  return '';
+}
+
+function linhaAtivaProducao(valor) {
+  var ativo = semAcento(valor);
+  return ativo === '' || !!VALORES_ATIVO_PRODUCAO[ativo];
+}
+
+function mensagemProducaoBoard(m) {
+  return {
+    id: texto(m.id),
+    quando: texto(m.quando),
+    participanteNome: texto(m.participante_nome),
+    direcao: semAcento(m.direcao),
+    texto: texto(m.texto),
+    associacao: semAcento(m.associacao),
+    statusEnvio: semAcento(m.status_envio),
+    tipoConteudo: semAcento(m.tipo_conteudo) || 'TEXTO'
+  };
+}
+
+function sugestaoProducaoBoard(s) {
+  var confianca = numero(s.confianca);
+  return {
+    id: texto(s.id),
+    mensagemId: texto(s.mensagem_id),
+    tipo: semAcento(s.tipo),
+    valor: texto(s.valor),
+    resumo: texto(s.resumo),
+    evidencia: texto(s.evidencia),
+    confianca: confianca === null || isNaN(confianca) ? null : confianca,
+    status: semAcento(s.status),
+    criadoEm: texto(s.criado_em),
+    versao: texto(s.versao)
+  };
+}
+
+function mensagensDaProducao(mensagens, dealId) {
+  return (mensagens || []).filter(function (m) {
+    return m && texto(m.deal_id) === dealId;
+  }).sort(function (a, b) {
+    return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
+  }).slice(0, 30).map(mensagemProducaoBoard);
+}
+
+function sugestoesDaProducao(sugestoes, dealId) {
+  var lista = (sugestoes || []).filter(function (s) {
+    return s && texto(s.deal_id) === dealId;
+  }).sort(function (a, b) {
+    return texto(a.criado_em) < texto(b.criado_em) ? 1 : texto(a.criado_em) > texto(b.criado_em) ? -1 : 0;
+  });
+  var pendentes = lista.filter(function (s) { return semAcento(s.status) === 'PENDENTE'; });
+  var decididas = lista.filter(function (s) { return semAcento(s.status) !== 'PENDENTE'; }).slice(0, 10);
+  return pendentes.concat(decididas).map(sugestaoProducaoBoard);
+}
+
+function oficinasProducaoBoard(oficinas) {
+  return (oficinas || []).filter(function (o) {
+    return o && texto(o.ploomes_id) && texto(o.nome) && linhaAtivaProducao(o.ativo);
+  }).map(function (o) {
+    return {
+      ploomesId: texto(o.ploomes_id),
+      nome: texto(o.nome),
+      grupoConfigurado: texto(o.grupo_jid) !== '',
+      grupoNome: texto(o.grupo_nome)
+    };
+  }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+}
+
+function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
+  var oficinasPorId = {};
+  (oficinas || []).forEach(function (o) {
+    if (o && texto(o.ploomes_id)) oficinasPorId[texto(o.ploomes_id)] = o;
+  });
+  return (mensagens || []).filter(function (m) {
+    return m && semAcento(m.direcao) === 'RECEBIDA' && !texto(m.deal_id) && semAcento(m.associacao) === 'SEM_ASSOCIACAO';
+  }).sort(function (a, b) {
+    return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
+  }).slice(0, 30).map(function (m) {
+    var base = mensagemProducaoBoard(m);
+    var oficinaId = texto(m.oficina_id);
+    var oficina = oficinasPorId[oficinaId] || {};
+    base.oficinaId = oficinaId;
+    base.oficina = texto(oficina.nome);
+    base.grupoNome = texto(m.grupo_nome) || texto(oficina.grupo_nome);
+    return base;
+  });
+}
+
+function producoesBoard(extras, caixas) {
+  extras = extras || {};
+  return ordenarProducoes((extras.producao || []).filter(function (l) {
+    return l && VALORES_ATIVO_PRODUCAO[semAcento(l.em_costura)];
+  }).map(function (l) {
+    var dealId = texto(l.deal_id);
+    var p = {
+      dealId: dealId,
+      os: texto(l.os),
+      oficinaId: texto(l.oficina_id),
+      oficina: texto(l.oficina_nome) || 'ALOCAR',
+      inicioCostura: texto(l.inicio_costura),
+      dataCombinada: texto(l.data_combinada),
+      leadTime: texto(l.lead_time),
+      pecas: numero(l.pecas),
+      cliente: texto(l.cliente),
+      peca: texto(l.peca),
+      referencia: texto(l.referencia),
+      versao: texto(l.atualizado_em_ploomes)
+    };
+    if (p.pecas === null || isNaN(p.pecas)) p.pecas = null;
+    p.faltasCostura = faltasDaCostura(p, caixas);
+    p.mensagens = mensagensDaProducao(extras.whatsappMensagens, dealId);
+    p.sugestoes = sugestoesDaProducao(extras.whatsappSugestoes, dealId);
+    p.historico = historicoDoDeal(extras.historico, dealId);
+    return p;
+  }));
+}
+
+// ----- src/whatsapp.js -----
+// ===== src/whatsapp.js =====
+// Regras puras da F4 para receber, associar e validar a interpretacao de
+// mensagens de grupos. O interprete e silencioso: este arquivo nunca envia.
+
+var TIPOS_INTERPRETACAO_WHATSAPP = {
+  NOVA_DATA_COMBINADA: 1,
+  PRAZO_CONFIRMADO: 1,
+  MOTIVO_ATRASO: 1,
+  OBSERVACAO: 1
+};
+
+function grupoWhatsappAtivo(grupos, jid) {
+  var alvo = texto(jid);
+  return (grupos || []).filter(function (g) {
+    var ativo = semAcento(g && g.ativo);
+    return g && texto(g.grupo_jid) === alvo && (ativo === '' || ativo === 'SIM' || ativo === 'S' || ativo === 'TRUE' || ativo === '1');
+  })[0] || null;
+}
+
+function conteudoDaMensagemWhatsapp(message) {
+  message = message || {};
+  if (typeof message.conversation === 'string') {
+    return { texto: texto(message.conversation), tipo: 'TEXTO', contexto: {} };
+  }
+  var candidatos = [message.extendedTextMessage, message.imageMessage, message.videoMessage, message.documentMessage];
+  for (var i = 0; i < candidatos.length; i++) {
+    var c = candidatos[i];
+    if (!c) continue;
+    var t = texto(c.text !== undefined ? c.text : c.caption);
+    return { texto: t, tipo: t ? 'TEXTO' : 'NAO_TEXTUAL', contexto: c.contextInfo || {} };
+  }
+  return { texto: '', tipo: 'NAO_TEXTUAL', contexto: {} };
+}
+
+function normalizarEventoWhatsapp(payload, grupos) {
+  payload = payload || {};
+  var evento = semAcento(payload.event).replace(/[._-]/g, '');
+  if (evento !== 'MESSAGESUPSERT') return { ok: false, motivo: 'EVENTO_IGNORADO' };
+  var d = payload.data || {};
+  var chave = d.key || {};
+  if (chave.fromMe === true) return { ok: false, motivo: 'MENSAGEM_PROPRIA' };
+  var grupo = grupoWhatsappAtivo(grupos, chave.remoteJid);
+  if (!grupo) return { ok: false, motivo: 'GRUPO_NAO_CADASTRADO' };
+  var conteudo = conteudoDaMensagemWhatsapp(d.message);
+  var segundos = Number(d.messageTimestamp);
+  var quando = isFinite(segundos) && segundos > 0 ? new Date(segundos * 1000).toISOString() : '';
+  return {
+    ok: true,
+    mensagem: {
+      evolutionId: texto(chave.id),
+      quando: quando,
+      grupoJid: texto(chave.remoteJid),
+      grupoNome: texto(grupo.grupo_nome),
+      participanteJid: texto(chave.participant),
+      participanteNome: texto(d.pushName),
+      fromMe: false,
+      texto: conteudo.texto,
+      respostaA: texto(conteudo.contexto.stanzaId),
+      tipoConteudo: conteudo.tipo,
+      oficinaId: texto(grupo.ploomes_id)
+    }
+  };
+}
+
+function mensagemWhatsappDuplicada(evolutionId, mensagens) {
+  var id = texto(evolutionId);
+  if (!id) return false;
+  return (mensagens || []).some(function (m) { return m && texto(m.evolution_id) === id; });
+}
+
+function resultadoSemAssociacaoWhatsapp() {
+  return { dealId: '', os: '', associacao: 'SEM_ASSOCIACAO' };
+}
+
+function associarMensagemWhatsapp(msg, producoes, mensagens) {
+  msg = msg || {};
+  producoes = producoes || [];
+  mensagens = mensagens || [];
+  var citada = texto(msg.respostaA);
+  if (citada) {
+    var origem = mensagens.filter(function (m) {
+      return m && texto(m.evolution_id) === citada && semAcento(m.direcao) === 'ENVIADA' && texto(m.grupo_jid) === texto(msg.grupoJid);
+    })[0];
+    if (origem && texto(origem.deal_id) && texto(origem.os)) {
+      return { dealId: texto(origem.deal_id), os: texto(origem.os), associacao: 'CITACAO' };
+    }
+  }
+
+  var textoMsg = texto(msg.texto);
+  var encontradas = producoes.filter(function (p) {
+    if (!p || !texto(p.os)) return false;
+    if (texto(msg.oficinaId) && texto(p.oficinaId) !== texto(msg.oficinaId)) return false;
+    var os = texto(p.os).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|\\D)' + os + '(\\D|$)').test(textoMsg);
+  });
+  if (encontradas.length === 1) {
+    return { dealId: texto(encontradas[0].dealId), os: texto(encontradas[0].os), associacao: 'OS_NO_TEXTO' };
+  }
+  if (encontradas.length > 1) return resultadoSemAssociacaoWhatsapp();
+
+  var agora = Date.parse(texto(msg.quando));
+  var limite = agora - 72 * 3600000;
+  var pendentes = mensagens.filter(function (m) {
+    if (!m || semAcento(m.direcao) !== 'ENVIADA' || semAcento(m.tipo) !== 'COBRANCA_PRAZO') return false;
+    if (texto(m.status_envio) && semAcento(m.status_envio) !== 'ENVIADA') return false;
+    if (texto(m.grupo_jid) !== texto(msg.grupoJid) || texto(m.respondida)) return false;
+    var ts = Date.parse(texto(m.quando));
+    return isFinite(ts) && isFinite(agora) && ts <= agora && ts >= limite;
+  });
+  var unicas = {};
+  pendentes.forEach(function (m) { if (texto(m.deal_id)) unicas[texto(m.deal_id)] = m; });
+  var ids = Object.keys(unicas);
+  if (ids.length === 1) {
+    var unica = unicas[ids[0]];
+    return { dealId: texto(unica.deal_id), os: texto(unica.os), associacao: 'ULTIMA_COBRANCA' };
+  }
+  return resultadoSemAssociacaoWhatsapp();
+}
+
+function somarDiasISO(data, dias) {
+  var ms = Date.parse(data + 'T12:00:00Z');
+  if (!isFinite(ms)) return '';
+  return new Date(ms + dias * 86400000).toISOString().slice(0, 10);
+}
+
+function resolverDataInterpretada(valor, quando) {
+  var bruto = texto(valor);
+  var normal = semAcento(bruto).toLowerCase();
+  var base = texto(quando).slice(0, 10);
+  if (normal === 'amanha') return somarDiasISO(base, 1);
+  if (normal === 'depois de amanha') return somarDiasISO(base, 2);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(bruto)) return dataValida(bruto) ? bruto : '';
+  var m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/.exec(bruto);
+  if (!m) return '';
+  var anoBase = Number(base.slice(0, 4));
+  var ano = m[3] ? Number(m[3].length === 2 ? '20' + m[3] : m[3]) : anoBase;
+  var iso = String(ano) + '-' + pad2(Number(m[2])) + '-' + pad2(Number(m[1]));
+  if (!dataValida(iso)) return '';
+  if (!m[3] && iso < base) {
+    iso = String(ano + 1) + '-' + pad2(Number(m[2])) + '-' + pad2(Number(m[1]));
+  }
+  return dataValida(iso) ? iso : '';
+}
+
+function interpretarComoObjeto(valor) {
+  if (valor && typeof valor === 'object') return valor;
+  if (typeof valor !== 'string') return null;
+  try { return JSON.parse(valor); } catch (e) { return null; }
+}
+
+function validarInterpretacaoWhatsapp(valor, quando) {
+  var o = interpretarComoObjeto(valor);
+  if (!o) return { ok: false, erro: 'Interpretação inválida.' };
+  var tipo = semAcento(o.tipo);
+  if (!TIPOS_INTERPRETACAO_WHATSAPP[tipo]) return { ok: false, erro: 'Tipo de interpretação inválido.' };
+  var confianca = Number(o.confianca);
+  if (!isFinite(confianca) || confianca < 0 || confianca > 1) return { ok: false, erro: 'Confiança inválida.' };
+  var resumo = texto(o.resumo).replace(/(\r\n|\n|\r)+/g, ' ').slice(0, 500);
+  var evidencia = texto(o.evidencia).replace(/(\r\n|\n|\r)+/g, ' ').slice(0, 500);
+  var data = tipo === 'NOVA_DATA_COMBINADA' ? resolverDataInterpretada(o.valor, quando) : '';
+  if (tipo === 'NOVA_DATA_COMBINADA' && !data) return { ok: false, erro: 'Data interpretada inválida.' };
+  if (confianca < 0.7) {
+    tipo = 'OBSERVACAO';
+    data = '';
+  }
+  return { ok: true, tipo: tipo, valor: tipo === 'NOVA_DATA_COMBINADA' ? data : '', resumo: resumo, evidencia: evidencia, confianca: confianca };
+}
+
+function producaoParaAssociacaoWhatsapp(p) {
+  p = p || {};
+  return {
+    dealId: texto(p.dealId !== undefined ? p.dealId : p.deal_id),
+    os: texto(p.os),
+    oficinaId: texto(p.oficinaId !== undefined ? p.oficinaId : p.oficina_id),
+    versao: texto(p.versao !== undefined ? p.versao : p.atualizado_em_ploomes),
+    ativa: p.em_costura === undefined || semAcento(p.em_costura) === 'SIM'
+  };
+}
+
+// Etapa pura usada pelo workflow de entrada depois da leitura da planilha e da
+// chamada opcional ao modelo. Ela só devolve operações de planilha: nunca envia
+// mensagem e nunca responde ao grupo.
+function processarEntradaWhatsapp(payload, dados, interpretacao, contexto) {
+  dados = dados || {};
+  contexto = contexto || {};
+  var normalizado = normalizarEventoWhatsapp(payload, dados.oficinas || []);
+  if (!normalizado.ok) return { ok: true, ignorada: true, motivo: normalizado.motivo, operacoes: [] };
+  var msg = normalizado.mensagem;
+  if (mensagemWhatsappDuplicada(msg.evolutionId, dados.mensagens || [])) {
+    return { ok: true, ignorada: true, motivo: 'DUPLICADA', operacoes: [] };
+  }
+
+  var producoes = (dados.producao || []).map(producaoParaAssociacaoWhatsapp).filter(function (p) { return p.ativa; });
+  var associacao = associarMensagemWhatsapp(msg, producoes, dados.mensagens || []);
+  var gerarId = contexto.gerarId;
+  if (typeof gerarId !== 'function') return { ok: false, erro: 'Gerador de ID não informado.', operacoes: [] };
+  var agora = texto(contexto.agora) || msg.quando;
+  var mensagemId = texto(gerarId());
+  var linhaMensagem = {
+    id: mensagemId,
+    evolution_id: msg.evolutionId,
+    quando: msg.quando || agora,
+    grupo_jid: msg.grupoJid,
+    grupo_nome: msg.grupoNome,
+    participante_jid: msg.participanteJid,
+    participante_nome: msg.participanteNome,
+    direcao: 'RECEBIDA',
+    tipo: 'RESPOSTA',
+    tipo_conteudo: msg.tipoConteudo,
+    texto: msg.texto,
+    resposta_a_evolution_id: msg.respostaA,
+    deal_id: associacao.dealId,
+    os: associacao.os,
+    oficina_id: msg.oficinaId,
+    associacao: associacao.associacao,
+    status_envio: '',
+    erro: '',
+    criado_em: agora
+  };
+  var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linhaMensagem }];
+  var precisaInterpretar = msg.tipoConteudo === 'TEXTO' && !!associacao.dealId;
+  if (!precisaInterpretar || interpretacao === undefined || interpretacao === null) {
+    return { ok: true, precisaInterpretar: precisaInterpretar, operacoes: operacoes };
+  }
+
+  var validada = validarInterpretacaoWhatsapp(interpretacao, msg.quando || agora);
+  if (!validada.ok) {
+    return { ok: true, precisaInterpretar: true, erroInterpretacao: validada.erro, operacoes: operacoes };
+  }
+  var prod = producoes.filter(function (p) { return p.dealId === associacao.dealId; })[0] || {};
+  operacoes.push({
+    aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id',
+    linha: {
+      id: texto(gerarId()), mensagem_id: mensagemId, deal_id: associacao.dealId, os: associacao.os,
+      tipo: validada.tipo, valor: validada.valor, resumo: validada.resumo, evidencia: validada.evidencia,
+      confianca: validada.confianca, status: 'PENDENTE', criado_em: agora,
+      decidido_em: '', decidido_por: '', versao: texto(prod.versao)
+    }
+  });
+  return { ok: true, precisaInterpretar: true, operacoes: operacoes };
+}
+
+var CAMPO_DATA_COMBINADA_PLOOMES = 'deal_E53BDEC3-F829-413D-9421-91D5D7411349';
+
+function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) {
+  corpo = corpo || {};
+  sugestao = sugestao || {};
+  producao = producao || {};
+  mensagem = mensagem || {};
+  contexto = contexto || {};
+  var decisao = semAcento(corpo.decisao);
+  if (decisao !== 'ACEITAR' && decisao !== 'IGNORAR') return erroAcao(400, 'Decisão inválida.');
+  var destino = decisao === 'ACEITAR' ? 'ACEITA' : 'IGNORADA';
+  var status = semAcento(sugestao.status);
+  if (status === destino) return { ok: true, idempotente: true, operacoes: [], historicos: [], ploomes: null };
+  if (status !== 'PENDENTE') return erroAcao(409, 'Esta sugestão já foi decidida.');
+
+  var dealId = texto(sugestao.deal_id);
+  var mesmoVinculo = dealId && dealId === texto(producao.deal_id) && dealId === texto(mensagem.deal_id) &&
+    texto(sugestao.mensagem_id) === texto(mensagem.id) && texto(sugestao.os) === texto(producao.os) &&
+    texto(producao.oficina_id) === texto(mensagem.oficina_id);
+  if (!mesmoVinculo) return erroAcao(409, 'A mensagem não pertence à mesma OS e oficina da sugestão.');
+  if (texto(corpo.versao) && texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) {
+    return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
+  }
+
+  var agora = texto(contexto.agora);
+  var usuario = texto(contexto.usuario);
+  var operacoes = [];
+  var ploomes = null;
+  var tipo = semAcento(sugestao.tipo);
+  var motivo = texto(corpo.motivo).replace(/(\r\n|\n|\r)+/g, ' ');
+  if (decisao === 'ACEITAR' && tipo === 'NOVA_DATA_COMBINADA') {
+    if (!motivo) return erroAcao(400, 'Informe o motivo da alteração da data combinada.');
+    var data = texto(sugestao.valor);
+    if (!dataValida(data)) return erroAcao(400, 'Data interpretada inválida.');
+    operacoes.push({ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: dealId, data_combinada: data } });
+    ploomes = { dealId: dealId, campos: {} };
+    ploomes.campos[CAMPO_DATA_COMBINADA_PLOOMES] = data;
+  }
+  operacoes.push({
+    aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id',
+    linha: { id: texto(sugestao.id), status: destino, decidido_em: agora, decidido_por: usuario }
+  });
+  return {
+    ok: true,
+    idempotente: false,
+    operacoes: operacoes,
+    historicos: [],
+    ploomes: ploomes,
+    textoHistorico: decisao === 'IGNORAR' ? usuario + ' ignorou a sugestão do WhatsApp.' :
+      usuario + ' aceitou a sugestão do WhatsApp' + (tipo === 'NOVA_DATA_COMBINADA' ? ': nova data ' + texto(sugestao.valor) + ' · ' + motivo : ': ' + texto(sugestao.resumo))
+  };
+}
+
 // ----- src/envioPloomes.js -----
 // ===== src/envioPloomes.js =====
 // Regras do workflow "Enviar ao Ploomes": quais linhas do HISTORICO_APP
@@ -1894,8 +2535,10 @@ var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha d
 // FORNECEDORES e RESPONSAVEIS (opcoes do pedido) precisam existir na planilha:
 // aba que nao existe derruba o batchGet inteiro (400). Aba vazia tudo bem.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
-  'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS'];
+  'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
@@ -1909,10 +2552,19 @@ var DESTINOS_ESCRITA = [
   { aba: 'ETAPAS_PEDIDO', operacao: 'update', chave: 'id' },
   { aba: 'FALTANTES', operacao: 'update', chave: 'id' },
   { aba: 'FALTANTES', operacao: 'append', chave: 'id' },  // nova demanda pos-saida
-  { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id' }
+  { aba: 'CAIXAS_PCP', operacao: 'appendOrUpdate', chave: 'deal_id' },
+  { aba: 'PRODUCAO', operacao: 'appendOrUpdate', chave: 'deal_id' },
+  { aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id' },
+  { aba: 'OFICINAS', operacao: 'appendOrUpdate', chave: 'ploomes_id' },
+  { aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id' },
+  { aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id' },
+  { aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id' },
+  { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
-var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES'];
+var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1 };
 var ABA_HISTORICO = 'HISTORICO_APP';
 // Falha numa gravacao (depois das tentativas): uma linha na aba ERROS_APP (colunas
 // quando, usuario, tipo, deal_id, passo, url, erro) e 500 com este aviso para o site.
@@ -2067,6 +2719,17 @@ function conferirOperacao(o) {
   }
 }
 
+// Nas abas novas da F4, nunca cria coluna durante uma acao. Todos os campos
+// precisam ter sido preparados no checklist antes de qualquer requisicao.
+function conferirCabecalhoF4(o, planilha) {
+  if (!ABAS_F4[o.aba]) return;
+  var cab = planilha && planilha.cabecalhos && planilha.cabecalhos[o.aba];
+  if (!cab) throw new Error('Cabeçalho obrigatório ausente: aba ' + o.aba);
+  Object.keys(o.linha || {}).forEach(function (campo) {
+    if (cab.indexOf(campo) < 0) throw new Error('Cabeçalho obrigatório ausente: ' + o.aba + '.' + campo);
+  });
+}
+
 // operacoes[] + historicos[] -> [{ method, url, body }] na ordem de execucao:
 // 1) cabecalhos novos (campo sem coluna vai para a proxima coluna livre).
 //    Atencao: duas acoes ao mesmo tempo que criem coluna na mesma aba escolhem a
@@ -2144,6 +2807,7 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
   }
 
   (operacoes || []).forEach(conferirOperacao);
+  (operacoes || []).forEach(function (o) { conferirCabecalhoF4(o, planilha); });
   (operacoes || []).forEach(function (o) {
     var e = estadoDa(o.aba);
     garantirColunas(e, o.linha);
@@ -2266,6 +2930,7 @@ var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
+var DEALS_PRODUCAO_EDITAVEIS = ['0'];  // Bloqueado ate haver um card de teste do funil Producao; vazio = todos.
 var DEALS_EDITAVEIS = ['607479158', '607493886', '607493902', '607520448'];  // vazio = todos. Até o go-live, só os cards de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
@@ -2375,10 +3040,15 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   var ped = montarPedidos(extras, new Date(agora).getFullYear(), faltantes || []);
   var fornecedores = nomesAtivos(extras.fornecedores);
   var responsaveis = nomesAtivos(extras.responsaveis);
+  var producao = producoesBoard(extras, r.caixas);
+  var oficinas = oficinasProducaoBoard(extras.oficinas);
+  var mensagensWhatsappSemAssociacao = mensagensSemAssociacaoProducaoBoard(extras.whatsappMensagens, extras.oficinas);
   var corpo = {
     geradoEm: new Date(agora).toISOString(), caixas: r.caixas, avisos: r.avisos.concat(ped.avisos), usuarios: usuarios,
     dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido,
-    fornecedores: fornecedores, responsaveis: responsaveis
+    fornecedores: fornecedores, responsaveis: responsaveis,
+    producao: producao, oficinas: oficinas, mensagensWhatsappSemAssociacao: mensagensWhatsappSemAssociacao,
+    dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice()
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
@@ -2389,6 +3059,10 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
 // sucesso = { ok: true }. O processarAcao repete as checagens.
 function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (sessao && corpo && TIPOS_PRODUCAO.indexOf(corpo.tipo) >= 0) {
+    var vProd = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
+    return vProd.ok ? { ok: true } : { ok: false, status: vProd.status, body: { erro: vProd.erro } };
+  }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     if (!ACOES_F3_ATIVAS) return { ok: false, status: 400, body: { erro: ERRO_F3_DESLIGADA } };
@@ -2459,12 +3133,30 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   return saida;
 }
 
+function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
+  var v = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var ctx = { usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId };
+  var r = corpo.tipo === 'alterar_producao'
+    ? processarAlteracaoProducao(corpo, linhas || {}, ctx, DEALS_PRODUCAO_EDITAVEIS)
+    : processarDecisaoSugestao(corpo, linhas || {}, ctx);
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos);
+  saida.ploomes = r.ploomes;
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
+}
+
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
 // pedidosItens?, etapas? } (linhas da planilha).
 // Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
 // historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (sessao && corpo && TIPOS_PRODUCAO.indexOf(corpo.tipo) >= 0) {
+    return processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId);
+  }
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);
@@ -2532,6 +3224,10 @@ var extras = {
   pedidosItens: abas['PEDIDOS_ITENS'],
   etapas: abas['ETAPAS_PEDIDO'],
   fornecedores: abas['FORNECEDORES'],
-  responsaveis: abas['RESPONSAVEIS']
+  responsaveis: abas['RESPONSAVEIS'],
+  producao: abas['PRODUCAO'],
+  oficinas: abas['OFICINAS'],
+  whatsappMensagens: abas['WHATSAPP_MENSAGENS'],
+  whatsappSugestoes: abas['WHATSAPP_SUGESTOES']
 };
 return [{ json: montarRespostaBoard(estado, abas['FALTANTES'], abas['CAIXAS GANHAS'], Date.now(), extras) }];
