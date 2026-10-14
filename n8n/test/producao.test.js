@@ -21,6 +21,43 @@ test('linhaProducao normaliza o snapshot e usa ALOCAR sem oficina', () => {
   });
 });
 
+test('paginação do Ploomes avança página cheia e para na página vazia', () => {
+  const cheia = ctx.avaliarPaginaProducao({ statusCode: 200, body: { value: [prod({ dealId: '1' }), prod({ dealId: '2' })] } }, 3, 2);
+  assert.equal(cheia.ok, true);
+  assert.equal(cheia.proximaPagina, 4);
+  assert.deepEqual(limpo(cheia.itens).map((x) => x.dealId), ['1', '2']);
+  assert.deepEqual(limpo(ctx.avaliarPaginaProducao({ statusCode: 200, body: { value: [] } }, 4, 2)), {
+    ok: true, itens: [], proximaPagina: null
+  });
+});
+
+test('paginação do Ploomes respeita rate limit sem produzir itens', () => {
+  assert.deepEqual(limpo(ctx.avaliarPaginaProducao({ statusCode: 429, headers: { 'retry-after': '12' } }, 1, 100)), {
+    ok: false, repetir: true, esperaSegundos: 12, erro: 'Ploomes limitou a consulta. Tentar novamente.'
+  });
+  assert.equal(ctx.avaliarPaginaProducao({ statusCode: 500 }, 1, 100).repetir, true);
+  assert.equal(ctx.avaliarPaginaProducao({ statusCode: 400 }, 1, 100).repetir, false);
+});
+
+test('sincronização faz upsert, encerra ausentes e preserva campos humanos das oficinas', () => {
+  const cards = [prod({ dealId: '700001', oficinaId: 'of-1', oficina: 'OFICINA RENOMEADA' }), prod({ dealId: '700003', os: '90003', oficinaId: 'of-3', oficina: 'OFICINA NOVA' })];
+  const atuais = [
+    { deal_id: '700001', em_costura: 'SIM' },
+    { deal_id: '700002', em_costura: 'SIM' },
+    { deal_id: '700004', em_costura: 'NAO' }
+  ];
+  const oficinas = [{ ploomes_id: 'of-1', nome: 'OFICINA ANTIGA', grupo_jid: 'grupo-ficticio@g.us', grupo_nome: 'GRUPO FICTÍCIO', ativo: 'NAO' }];
+  const r = limpo(ctx.montarSincronizacaoProducao(cards, atuais, oficinas, '2026-10-14T12:00:00.000Z'));
+  assert.deepEqual(r.operacoes.filter((o) => o.aba === 'PRODUCAO').map((o) => [o.operacao, o.linha.deal_id, o.linha.em_costura]), [
+    ['appendOrUpdate', '700001', 'SIM'], ['appendOrUpdate', '700003', 'SIM'], ['update', '700002', 'NAO']
+  ]);
+  assert.deepEqual(r.operacoes.filter((o) => o.aba === 'OFICINAS').map((o) => o.linha), [
+    { ploomes_id: 'of-1', nome: 'OFICINA RENOMEADA' },
+    { ploomes_id: 'of-3', nome: 'OFICINA NOVA', grupo_jid: '', grupo_nome: '', ativo: 'SIM' }
+  ]);
+  assert.equal(JSON.stringify(r), JSON.stringify(limpo(ctx.montarSincronizacaoProducao(cards, atuais, oficinas, '2026-10-14T12:00:00.000Z'))));
+});
+
 test('prazo efetivo prefere a combinada e cai no lead time', () => {
   assert.deepEqual(limpo(ctx.prazoDaProducao(prod({}))), { data: '2026-10-20', origem: 'COMBINADA' });
   assert.deepEqual(limpo(ctx.prazoDaProducao(prod({ dataCombinada: '' }))), { data: '2026-10-18', origem: 'LEAD_TIME' });

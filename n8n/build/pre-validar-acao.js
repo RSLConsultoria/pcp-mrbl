@@ -1728,6 +1728,81 @@ function linhaProducao(p, sincronizadoEm) {
   };
 }
 
+function avaliarPaginaProducao(resposta, pagina, tamanhoPagina) {
+  resposta = resposta || {};
+  var status = Number(resposta.statusCode !== undefined ? resposta.statusCode : resposta.status);
+  if (status === 429 || status >= 500) {
+    var headers = resposta.headers || {};
+    var espera = Number(headers['retry-after'] || headers['Retry-After']);
+    if (!isFinite(espera) || espera < 1) espera = status === 429 ? 30 : 5;
+    espera = Math.min(300, Math.round(espera));
+    return {
+      ok: false, repetir: true, esperaSegundos: espera,
+      erro: status === 429 ? 'Ploomes limitou a consulta. Tentar novamente.' : 'Ploomes indisponível. Tentar novamente.'
+    };
+  }
+  if (!(status >= 200 && status < 300)) {
+    return { ok: false, repetir: false, esperaSegundos: 0, erro: 'Falha ao consultar o Ploomes (HTTP ' + (isFinite(status) ? status : 'sem resposta') + ').' };
+  }
+  var body = resposta.body && typeof resposta.body === 'object' ? resposta.body : resposta;
+  var itens = Array.isArray(body.value) ? body.value : [];
+  var tamanho = Number(tamanhoPagina);
+  var atual = Number(pagina);
+  return {
+    ok: true,
+    itens: itens,
+    proximaPagina: tamanho > 0 && itens.length === tamanho ? atual + 1 : null
+  };
+}
+
+function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm) {
+  var porDeal = Object.create(null);
+  var ordemDeals = [];
+  (cards || []).forEach(function (card) {
+    var dealId = texto(card && card.dealId);
+    if (!dealId) return;
+    if (!Object.prototype.hasOwnProperty.call(porDeal, dealId)) ordemDeals.push(dealId);
+    porDeal[dealId] = card;
+  });
+
+  var operacoes = [];
+  ordemDeals.forEach(function (dealId) {
+    operacoes.push({ aba: 'PRODUCAO', operacao: 'appendOrUpdate', chave: 'deal_id', linha: linhaProducao(porDeal[dealId], sincronizadoEm) });
+  });
+  var encerrados = Object.create(null);
+  (producaoAtual || []).forEach(function (linha) {
+    var dealId = texto(linha && linha.deal_id);
+    if (!dealId || porDeal[dealId] || encerrados[dealId] || !VALORES_ATIVO_PRODUCAO[semAcento(linha.em_costura)]) return;
+    encerrados[dealId] = 1;
+    operacoes.push({
+      aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id',
+      linha: { deal_id: dealId, em_costura: 'NAO', sincronizado_em: texto(sincronizadoEm) }
+    });
+  });
+
+  var oficinasExistentes = Object.create(null);
+  (oficinasAtuais || []).forEach(function (oficina) {
+    var id = texto(oficina && oficina.ploomes_id);
+    if (id) oficinasExistentes[id] = 1;
+  });
+  var oficinasVistas = Object.create(null);
+  ordemDeals.forEach(function (dealId) {
+    var card = porDeal[dealId];
+    var id = texto(card && card.oficinaId);
+    var nome = texto(card && card.oficina);
+    if (!id || !nome || oficinasVistas[id]) return;
+    oficinasVistas[id] = 1;
+    var linha = { ploomes_id: id, nome: nome };
+    if (!oficinasExistentes[id]) {
+      linha.grupo_jid = '';
+      linha.grupo_nome = '';
+      linha.ativo = 'SIM';
+    }
+    operacoes.push({ aba: 'OFICINAS', operacao: 'appendOrUpdate', chave: 'ploomes_id', linha: linha });
+  });
+  return { operacoes: operacoes };
+}
+
 function prazoDaProducao(p) {
   var combinada = texto(p && p.dataCombinada);
   if (combinada) return { data: combinada, origem: 'COMBINADA' };
