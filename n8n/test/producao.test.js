@@ -84,13 +84,15 @@ test('ordenacao coloca ALOCAR primeiro e usa o prazo mais urgente', () => {
   assert.deepEqual(limpo(ctx.ordenarProducoes(itens)).map((x) => x.dealId), ['1', '4', '2', '3']);
 });
 
-test('faltasDaCostura cruza pela OS, somente COSTURA e itens abertos', () => {
+test('faltas de aviamentos separam COSTURA e ACABAMENTO e trazem somente itens abertos', () => {
   const caixas = [
-    { os: '90001', tipo: 'COSTURA', itens: [{ id: 'a', nome: 'VIÉS', status: 'ABERTO', resta: 3 }, { id: 'b', status: 'RESOLVIDO', resta: 0 }] },
-    { os: '90001', tipo: 'ACABAMENTO', itens: [{ id: 'c', status: 'ABERTO', resta: 2 }] },
-    { os: '90002', tipo: 'COSTURA', itens: [{ id: 'd', status: 'ABERTO', resta: 5 }] }
+    { dealId: '700001', os: '90001', tipo: 'COSTURA', itens: [{ id: 'a', nome: 'VIÉS', status: 'ABERTO', resta: 3 }, { id: 'b', status: 'RESOLVIDO', resta: 0 }] },
+    { dealId: '700001', os: '90001', tipo: 'ACABAMENTO', itens: [{ id: 'c', status: 'ABERTO', resta: 2 }, { id: 'e', status: 'PARCIAL', resta: 0 }] },
+    { dealId: 'outro-deal', os: '90001', tipo: 'ACABAMENTO', itens: [{ id: 'contaminacao', status: 'ABERTO', resta: 9 }] },
+    { dealId: '700002', os: '90002', tipo: 'COSTURA', itens: [{ id: 'd', status: 'ABERTO', resta: 5 }] }
   ];
   assert.deepEqual(limpo(ctx.faltasDaCostura(prod({}), caixas)).map((x) => x.id), ['a']);
+  assert.deepEqual(limpo(ctx.faltasDoAcabamento(prod({}), caixas)).map((x) => x.id), ['c']);
 });
 
 test('validarAlteracaoProducao exige motivo ao mudar data e respeita allowlist/versao', () => {

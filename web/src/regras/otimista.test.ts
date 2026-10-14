@@ -35,7 +35,7 @@ const pedidoDe = (b: Board, id: string) => (b.pedidos ?? []).find((p) => p.id ==
 const prod = (): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA A', inicioCostura: '2026-10-01',
   dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 100, cliente: 'CLIENTE TESTE', peca: 'PECA TESTE',
-  referencia: 'REF', versao: 'v1', faltasCostura: [], mensagens: [],
+  referencia: 'REF', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [],
   sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-22', resumo: 'Nova data', evidencia: 'dia 22', confianca: .9, status: 'PENDENTE', criadoEm: '', versao: 'v1' }],
   historico: []
 });

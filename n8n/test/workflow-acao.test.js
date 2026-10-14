@@ -16,6 +16,7 @@ function rodarNode(arq, globais) {
   const ctx = vm.createContext(Object.assign({ require }, globais));
   for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8'), ctx, { filename: f });
   ctx.DEALS_EDITAVEIS = [];
+  ctx.DEALS_PRODUCAO_EDITAVEIS = [];
   const adaptador = fs.readFileSync(path.join(RAIZ, 'adaptadores', arq + '.js'), 'utf8');
   return limpo(vm.runInContext('(function () {\n' + adaptador + '\n})()', ctx, { filename: arq + '.js' }));
 }
@@ -44,7 +45,10 @@ const LEITURA_ACAO = {
     vr('PEDIDOS', [['id', 'etapa', 'origem', 'quem', 'local', 'previsao', 'responsavel', 'criado_em', 'criado_por', 'baixado_em', 'atualizado_em', 'pai']]),
     vr('PEDIDOS_ITENS', [['id', 'pedido_id', 'item_id', 'deal_id', 'os', 'nome', 'un', 'qtd', 'fornecedor', 'previsao']]),
     vr('ETAPAS_PEDIDO', [['id', 'nome', 'ordem']]),
-    vr('PRODUCAO', [['deal_id', 'os', 'oficina_id', 'oficina_nome', 'data_combinada', 'atualizado_em_ploomes']]),
+    vr('PRODUCAO', [
+      ['deal_id', 'os', 'oficina_id', 'oficina_nome', 'data_combinada', 'atualizado_em_ploomes'],
+      ['600001', '90001', '', 'ALOCAR', '2026-10-18', '']
+    ]),
     vr('OFICINAS', [['ploomes_id', 'nome', 'grupo_jid', 'grupo_nome', 'ativo', 'atualizado_em']]),
     vr('WHATSAPP_MENSAGENS', [['id', 'evolution_id', 'deal_id', 'oficina_id']]),
     vr('WHATSAPP_SUGESTOES', [['id', 'mensagem_id', 'deal_id', 'os', 'tipo', 'valor', 'resumo', 'status', 'versao']]),
@@ -115,6 +119,43 @@ test('acao recusada ou sem nada a gravar: um item { vazio: true }', () => {
     $: cifrao({ 'Processar Acao': [{ status: 200, operacoes: [], historicos: [] }], 'Ler Planilha Acao': [LEITURA_ACAO] })
   });
   assert.deepEqual(nada, [{ json: { vazio: true } }]);
+});
+
+test('alteracao de data monta PATCH do campo de data do Ploomes antes das escritas', () => {
+  const { proc } = acao({ tipo: 'alterar_producao', dealId: '600001', dataCombinada: '2026-10-22', oficinaId: '', motivo: 'Prazo confirmado', versao: '' });
+  const [patch] = rodarNode('montar-alteracao-ploomes', { $: cifrao({ 'Processar Acao': [proc] }) });
+  assert.equal(patch.json.gravar, true);
+  assert.equal(patch.json.url, 'https://public-api2.ploomes.com/Deals(600001)');
+  assert.deepEqual(patch.json.registro, { OtherProperties: [{
+    FieldKey: 'deal_E53BDEC3-F829-413D-9421-91D5D7411349',
+    DateTimeValue: '2026-10-22T00:00:00'
+  }] });
+});
+
+test('acao sem alteracao no Ploomes pula o PATCH', () => {
+  const [patch] = rodarNode('montar-alteracao-ploomes', {
+    $: cifrao({ 'Processar Acao': [{ status: 200, ploomes: null }] })
+  });
+  assert.deepEqual(patch, { json: { gravar: false } });
+});
+
+test('limpar data combinada monta DateTimeValue nulo no mesmo campo do Ploomes', () => {
+  const [patch] = rodarNode('montar-alteracao-ploomes', { $: cifrao({ 'Processar Acao': [{
+    status: 200,
+    ploomes: { dealId: '600001', campos: { 'deal_E53BDEC3-F829-413D-9421-91D5D7411349': '' } }
+  }] }) });
+  assert.deepEqual(patch.json.registro, { OtherProperties: [{
+    FieldKey: 'deal_E53BDEC3-F829-413D-9421-91D5D7411349',
+    DateTimeValue: null
+  }] });
+});
+
+test('validacao do PATCH so libera a planilha para resposta 2xx', () => {
+  const executar = (statusCode) => rodarNode('validar-alteracao-ploomes', { $input: { first: () => ({ json: { statusCode } }) } })[0].json;
+  assert.equal(executar(204).ok, true);
+  assert.equal(executar(400).ok, false);
+  assert.match(executar(400).erro, /planilha nao foi alterada/);
+  assert.equal(executar(undefined).ok, false);
 });
 
 test('Montar Escritas: update sem linha derruba o node antes de gravar', () => {
@@ -201,7 +242,8 @@ test('pcp-api.sdk.js: nodes do lote, sem Filtrar/Tem/Gravar por aba', () => {
   const sdk = lerSdk('pcp-api.sdk.js');
   const nomes = blocos(sdk).map((b) => b.nome);
   for (const n of ['Ler Planilha', 'Montar Board', 'Ler Planilha Acao', 'Processar Acao', 'Montar Escritas',
-    'Tem Escritas?', 'Loop Escritas', 'Gravar Lote', 'Responder Acao', 'Ler USUARIOS']) {
+    'Montar Alteracao Ploomes', 'Tem Alteracao Ploomes?', 'Gravar Alteracao Ploomes', 'Validar Alteracao Ploomes',
+    'Alteracao Ploomes OK?', 'Responder Falha Ploomes', 'Tem Escritas?', 'Loop Escritas', 'Gravar Lote', 'Responder Acao', 'Ler USUARIOS']) {
     assert.ok(nomes.includes(n), n);
   }
   assert.ok(!/Filtrar |Tem PEDIDOS|Incluir |Atualizar |Ler FALTANTES|Ler CAIXAS/.test(sdk));
@@ -211,10 +253,15 @@ test('pcp-api.sdk.js: nodes do lote, sem Filtrar/Tem/Gravar por aba', () => {
 test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi; retry 3x / 3 s so onde repetir nao duplica', () => {
   const sdk = lerSdk('pcp-api.sdk.js');
   const google = blocos(sdk).filter((b) => /type: 'n8n-nodes-base\.(httpRequest|googleSheets)'/.test(b.txt));
-  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Anexo', 'Gravar Erro', 'Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
+  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Alteracao Ploomes', 'Gravar Anexo', 'Gravar Erro', 'Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
   const COM_RETRY = ['Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS'];
   google.forEach((b) => {
     assert.equal(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b.txt), COM_RETRY.includes(b.nome), b.nome);
+    if (b.nome === 'Gravar Alteracao Ploomes') {
+      assert.ok(b.txt.includes("httpHeaderAuth: { id: 'QfXOyNly69oAqwH2', name: 'Header Auth account' }"), b.nome);
+      assert.ok(b.txt.includes("method: 'PATCH'") && b.txt.includes("url: expr('{{ $json.url }}')"), b.nome);
+      return;
+    }
     assert.ok(b.txt.includes("googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' }"), b.nome);
     if (b.nome !== 'Ler USUARIOS') {
       assert.ok(b.txt.includes("authentication: 'predefinedCredentialType'") && b.txt.includes("nodeCredentialType: 'googleApi'"), b.nome);
@@ -232,6 +279,7 @@ test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi; retry 3x / 3 s 
   assert.ok(node('Gravar Lote').includes("onError: 'continueErrorOutput'"));
   assert.ok(node('Gravar Anexo').includes("onError: 'continueErrorOutput'"));
   assert.ok(node('Gravar Erro').includes("onError: 'continueRegularOutput'"));
+  assert.ok(sdk.indexOf("name: 'Gravar Alteracao Ploomes'") < sdk.indexOf("name: 'Montar Escritas'"));
   const rerr = node('Responder Erro');
   assert.ok(rerr.includes('executeOnce: true') && rerr.includes("$('Montar Erro').first().json.resposta") && rerr.includes('500'));
   assert.ok(sdk.includes("saveDataErrorExecution: 'none'"));

@@ -11,8 +11,8 @@ const item = {
   versao: '', editavel: true, pedidoId: '', pedidoIds: []
 };
 const producao = [
-  { dealId: '710001', os: '90001', oficinaId: '', oficina: 'ALOCAR', inicioCostura: '2026-10-01', dataCombinada: '2026-10-05', leadTime: '2026-10-08', pecas: 80, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-A', versao: 'v1', faltasCostura: [], mensagens: [], sugestoes: [], historico: [] },
-  { dealId: '710002', os: '90002', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-04', dataCombinada: '2026-10-12', leadTime: '2026-10-15', pecas: 120, cliente: 'CLIENTE MODELO', peca: 'COLETE TESTE', referencia: 'REF-B', versao: 'v2', faltasCostura: [item],
+  { dealId: '710001', os: '90001', oficinaId: '', oficina: 'ALOCAR', inicioCostura: '2026-10-01', dataCombinada: '2026-10-05', leadTime: '2026-10-08', pecas: 80, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-A', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] },
+  { dealId: '710002', os: '90002', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-04', dataCombinada: '2026-10-12', leadTime: '2026-10-15', pecas: 120, cliente: 'CLIENTE MODELO', peca: 'COLETE TESTE', referencia: 'REF-B', versao: 'v2', faltasCostura: [item], faltasAcabamento: [{ ...item, id: 'a1', nome: 'BOTÃO TESTE' }],
     mensagens: [
       { id: 'M-ERRO', quando: '2026-10-07T11:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: '*OS 90002* Confirma a entrega?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
       { id: 'M1', quando: '2026-10-07T12:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Entregamos dia 13.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
@@ -44,6 +44,7 @@ test('Gantt mostra ALOCAR, prazo vencido, indicadores e filtro por falta', async
   await expect(page.getByText('Passaram do prazo').locator('..')).toContainText('1');
   await page.getByLabel('Só com falta na costura').check();
   await expect(page.getByRole('button', { name: /OS 90002/ })).toBeVisible();
+  await expect(page.getByLabel('Aviamentos faltando: 1 na costura e 1 no acabamento').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /OS 90001/ })).toHaveCount(0);
 });
 
@@ -56,7 +57,7 @@ test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ p
   await expect(painel).toContainText('Entregamos dia 13.');
   await expect(painel.getByLabel('Mensagem')).toHaveValue(/\*OS 90002\*/);
   await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toBeVisible();
-  await expect(painel.getByRole('button', { name: /responder|enviar/i })).toHaveCount(0);
+  await expect(painel.getByRole('button', { name: /^(responder|enviar)$/i })).toHaveCount(0);
 });
 
 test('mensagem ambigua aparece para conferência sem expor identificadores do WhatsApp', async ({ page }) => {

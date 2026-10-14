@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
-import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -37,6 +37,7 @@ function MensagemPendente({ mensagem, producao, editaveis, executar }: {
 
 function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: ProducaoItem; board: Board; hojeIso: string; executar: Executar; onFechar: () => void }) {
   const prazo = prazoProducao(item);
+  const alertaAviamentos = resumoFaltasAviamentos(item);
   const [oficinaId, setOficinaId] = useState(item.oficinaId);
   const [dataCombinada, setDataCombinada] = useState(item.dataCombinada);
   const [motivo, setMotivo] = useState('');
@@ -89,6 +90,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           <div><span>Lead time</span><strong>{ddmm(item.leadTime) || '—'}</strong></div>
           <div><span>Peças</span><strong>{item.pecas ?? '—'}</strong></div>
         </section>
+        {alertaAviamentos.total > 0 && <p className="producao-alerta-aviamentos" aria-label={alertaAviamentos.texto}>⚠️ {alertaAviamentos.texto}</p>}
         <a className="producao-link" href={`https://app.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
         <section className="producao-secao producao-edicao">
           <h3>Alterar combinado</h3>
@@ -109,6 +111,12 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           <h3>Faltas da costura <span>{item.faltasCostura.length}</span></h3>
           {item.faltasCostura.length === 0 ? <p className="producao-vazio">Nenhuma falta aberta na caixa de costura.</p>
             : <ul className="producao-lista">{item.faltasCostura.map((f) => <li key={f.id}><strong>{f.nome}</strong><span>{f.resta ?? '—'} {f.un}</span></li>)}</ul>}
+        </section>
+        <section className="producao-secao">
+          <h3>Aviamentos para o acabamento <span>{item.faltasAcabamento.length}</span></h3>
+          <p className="producao-secao__ajuda">Precisam estar prontos quando a oficina concluir a costura.</p>
+          {item.faltasAcabamento.length === 0 ? <p className="producao-vazio">Nenhuma falta aberta na caixa de acabamento.</p>
+            : <ul className="producao-lista">{item.faltasAcabamento.map((f) => <li key={f.id}><strong>{f.nome}</strong><span>{f.resta ?? '—'} {f.un}</span></li>)}</ul>}
         </section>
         <section className="producao-secao producao-envio">
           <h3>Mensagem para a oficina</h3>
@@ -199,16 +207,17 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
           {itens.map((p) => {
             const prazo = prazoProducao(p);
             const status = statusProducao(p, hojeIso);
+            const alertaAviamentos = resumoFaltasAviamentos(p);
             const inicio = p.inicioCostura || prazo.data;
             const esquerda = inicio ? Math.max(0, indiceDia(inicio, janela.inicio)) * LARGURA_DIA : 0;
             const fim = prazo.data ? Math.min(janela.dias - 1, indiceDia(prazo.data, janela.inicio)) : 0;
             const largura = p.inicioCostura && prazo.data ? Math.max(16, (fim - Math.max(0, indiceDia(p.inicioCostura, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
             return <div className="gantt__linha" key={p.dealId}>
-              <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong><span>{p.peca || p.referencia || 'Sem descrição'}</span>{p.faltasCostura.length > 0 && <em>{p.faltasCostura.length} faltas</em>}</button>
+              <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong><span>{p.peca || p.referencia || 'Sem descrição'}</span>{alertaAviamentos.total > 0 && <em aria-label={alertaAviamentos.texto}>⚠️ {alertaAviamentos.total}</em>}</button>
               <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
                 {prazo.data ? <button type="button" onClick={() => setAberta(p.dealId)} title={`OS ${p.os} · ${ddmm(prazo.data)}`}
-                  className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${p.faltasCostura.length ? 'gantt__barra--falta' : ''}`}
-                  style={{ left: esquerda + 3, width: largura }}><span>{p.os}</span></button>
+                  className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${alertaAviamentos.total ? 'gantt__barra--falta' : ''}`}
+                  style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.total > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.texto}>⚠️</span>}{p.os}</span></button>
                   : <button type="button" className="gantt__sem-prazo" onClick={() => setAberta(p.dealId)}>Sem prazo</button>}
               </div>
             </div>;

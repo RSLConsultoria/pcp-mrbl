@@ -48,6 +48,15 @@ export function indicadoresProducao(lista: Producao[], hoje: string) {
   };
 }
 
+export function resumoFaltasAviamentos(p: Pick<Producao, 'faltasCostura' | 'faltasAcabamento'>): { total: number; texto: string } {
+  const costura = p.faltasCostura.length;
+  const acabamento = p.faltasAcabamento.length;
+  const partes = [];
+  if (costura) partes.push(`${costura} na costura`);
+  if (acabamento) partes.push(`${acabamento} no acabamento`);
+  return { total: costura + acabamento, texto: partes.length ? `Aviamentos faltando: ${partes.join(' e ')}` : '' };
+}
+
 export function janelaGantt(lista: Producao[], hoje: string): { inicio: string; fim: string; dias: number } {
   const datas = lista.flatMap((p) => [p.inicioCostura, prazoProducao(p).data]).filter(Boolean);
   let inicio = [somarDias(hoje, -30), ...datas].sort()[0];

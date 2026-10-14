@@ -240,8 +240,6 @@ function processarEntradaWhatsapp(payload, dados, interpretacao, contexto) {
   return { ok: true, precisaInterpretar: true, operacoes: operacoes };
 }
 
-var CAMPO_DATA_COMBINADA_PLOOMES = 'deal_E53BDEC3-F829-413D-9421-91D5D7411349';
-
 function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) {
   corpo = corpo || {};
   sugestao = sugestao || {};

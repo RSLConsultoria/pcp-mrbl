@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, statusProducao, validarMudancaProducao } from './producao';
+import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
   inicioCostura: '2026-10-01', dataCombinada: '2026-10-20', leadTime: '2026-10-18',
   pecas: 120, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-001', versao: 'v1',
-  faltasCostura: [], mensagens: [], sugestoes: [], historico: [], ...extra
+  faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [], ...extra
+});
+
+it('resume o alerta de aviamentos de costura e acabamento', () => {
+  expect(resumoFaltasAviamentos(prod())).toEqual({ total: 0, texto: '' });
+  expect(resumoFaltasAviamentos(prod({ faltasCostura: [{ id: 'c1' } as never] }))).toEqual({ total: 1, texto: 'Aviamentos faltando: 1 na costura' });
+  expect(resumoFaltasAviamentos(prod({ faltasCostura: [{ id: 'c1' } as never], faltasAcabamento: [{ id: 'a1' } as never, { id: 'a2' } as never] })))
+    .toEqual({ total: 3, texto: 'Aviamentos faltando: 1 na costura e 2 no acabamento' });
 });
 
 describe('prazo e status da producao', () => {

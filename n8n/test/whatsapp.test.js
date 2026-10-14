@@ -122,6 +122,7 @@ test('aceitar e ignorar sugestao sao idempotentes e nunca criam resposta ao grup
     { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id', linha: { id: 'SUG-1', status: 'ACEITA', decidido_em: '2026-10-13T14:00:00.000Z', decidido_por: 'Pessoa PCP' } }
   ]);
   assert.equal(aceita.ploomes.dealId, '700001');
+  assert.deepEqual(limpo(aceita.ploomes.campos), { 'deal_E53BDEC3-F829-413D-9421-91D5D7411349': '2026-10-20' });
   assert.equal('mensagem' in aceita || 'resposta' in aceita, false);
   assert.equal(ctx.decidirSugestaoWhatsapp({ decisao: 'ACEITAR', versao: 'v1', motivo: 'x' }, Object.assign({}, sugestao, { status: 'ACEITA' }), producao, mensagem, {}).idempotente, true);
   assert.equal(ctx.decidirSugestaoWhatsapp({ decisao: 'IGNORAR' }, Object.assign({}, sugestao, { status: 'IGNORADA' }), producao, mensagem, {}).idempotente, true);

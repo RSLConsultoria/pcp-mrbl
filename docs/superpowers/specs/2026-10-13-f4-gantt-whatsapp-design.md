@@ -174,8 +174,12 @@ Mensagens são limitadas às mais recentes necessárias ao painel; sugestões pe
 - somente lead time: azul listrada;
 - prazo vencido: vermelha;
 - sem início, mas com prazo: losango no prazo;
-- caixa de costura com falta aberta: borda e contador laranja;
+- qualquer aviamento aberto nas caixas de costura ou acabamento: `⚠️` na OS e na barra, com texto acessível e contadores separados no painel;
+- falta de costura indica material necessário durante a produção na oficina;
+- falta de acabamento indica material que precisa estar pronto quando a oficina concluir a costura;
 - datas combinadas anteriores: risco marrom e selo **alterada**.
+
+Não haverá alerta de primeira peça nesta fase. O contrato atual não possui previsão e conclusão específicas desse marco.
 
 ### Período
 
@@ -208,7 +212,7 @@ Painel lateral de 480 px com:
 2. status do prazo;
 3. início, combinada, lead time e peças;
 4. formulário **Alterar combinado**;
-5. faltas da caixa de costura e resumo da caixa de acabamento;
+5. faltas das caixas de costura e acabamento, em blocos separados;
 6. conversa do grupo relacionada à OS;
 7. sugestões pendentes;
 8. histórico de produção.
@@ -223,6 +227,7 @@ Campos: oficina, data combinada e motivo.
 - salvar atualiza o Ploomes, atualiza o snapshot local, grava o histórico e invalida o cache;
 - versão divergente retorna 409 e força recarga;
 - somente deals permitidos em `DEALS_PRODUCAO_EDITAVEIS` aceitam escrita até o go-live.
+- toda alteração de data, manual ou aceita do intérprete, grava primeiro o campo Ploomes `deal_E53BDEC3-F829-413D-9421-91D5D7411349`; a planilha só recebe a nova data depois do sucesso no Ploomes.
 
 ## 9. WhatsApp em grupos
 

@@ -46,6 +46,7 @@
 .gantt__pista { position: relative; min-height: 50px; border-bottom: 1px solid var(--borda); background: repeating-linear-gradient(to right, transparent 0, transparent 27px, #eef0f4 27px, #eef0f4 28px); }
 .gantt__barra { position: absolute; top: 10px; height: 29px; min-width: 14px; overflow: hidden; padding: 0 7px; border: 0; border-radius: 4px; background: #466cc8; color: #fff; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .gantt__barra span { font: 700 10px var(--font-sans); }
+.gantt__barra .gantt__alerta { margin-right: 4px; font-size: 12px; }
 .gantt__barra--lead { background: repeating-linear-gradient(135deg, #5e7fcf 0, #5e7fcf 6px, #7693d7 6px, #7693d7 12px); }
 .gantt__barra--atrasado { background: #c84949; }
 .gantt__barra--hoje, .gantt__barra--proximo { background: #c07b24; }
@@ -68,6 +69,7 @@
 .producao-resumo span { font-size: 11px; color: var(--leve); }
 .producao-resumo strong { font-size: 13px; font-weight: 600; }
 .producao-link { display: inline-block; margin-top: 16px; color: var(--navy); font-size: 12px; font-weight: 650; }
+.producao-alerta-aviamentos { margin: 14px 0 0; padding: 8px 10px; border: 1px solid #e9c790; border-radius: 4px; background: #fff9ed; color: #7c4c11; font-size: 12px; font-weight: 700; }
 .producao-edicao__campos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .producao-edicao__campos label, .producao-sugestao__acoes label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 650; color: var(--suave); }
 .producao-edicao__campos label:last-child { grid-column: 1 / -1; }
@@ -86,6 +88,7 @@
 .producao-secao h3 { display: flex; justify-content: space-between; margin: 0 0 10px; font-size: 13px; }
 .producao-secao h3 span { min-width: 22px; padding: 2px 6px; border-radius: 10px; background: var(--canvas); text-align: center; font-size: 10px; color: var(--suave); }
 .producao-secao > p { margin: 0; font-size: 13px; }
+.producao-secao .producao-secao__ajuda { margin: -4px 0 9px; color: var(--leve); font-size: 11px; }
 .producao-vazio { color: var(--leve); }
 .producao-lista, .producao-sugestoes, .producao-historico { list-style: none; margin: 0; padding: 0; }
 .producao-lista li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 12.5px; }

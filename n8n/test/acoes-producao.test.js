@@ -59,6 +59,7 @@ test('alterar_producao valida allowlist, versao e motivo e prepara planilha/Ploo
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.operacoes, [{ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: '700001', oficina_id: 'of-2', oficina_nome: 'OFICINA B', data_combinada: '2026-10-20' } }]);
   assert.equal(r.ploomes.dealId, '700001');
+  assert.deepEqual(r.ploomes.campos, { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': 'of-2', 'deal_E53BDEC3-F829-413D-9421-91D5D7411349': '2026-10-20' });
   assert.equal(r.historicos[0].acao, 'PRODUCAO_ALTERAR_COMBINADO');
   assert.match(r.historicos[0].texto, /Oficina confirmou/);
   ctx.DEALS_PRODUCAO_EDITAVEIS = ['outro'];

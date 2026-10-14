@@ -12,6 +12,8 @@ const NODES = {
   'montar-board': 'Montar Board',
   'pre-validar-acao': 'Pre Validar Acao',
   'processar-acao': 'Processar Acao',
+  'montar-alteracao-ploomes': 'Montar Alteracao Ploomes',
+  'validar-alteracao-ploomes': 'Validar Alteracao Ploomes',
   'montar-escritas': 'Montar Escritas',
   'limpar-cache': 'Limpar Cache',
   'montar-erro': 'Montar Erro',

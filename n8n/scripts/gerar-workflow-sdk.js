@@ -29,8 +29,10 @@ const posicao = (nome) => {
 linha(0, 0, ['Login', 'Ler USUARIOS', 'Processar Login', 'Responder Login']);
 linha(300, 0, ['Board', 'Validar Pedido', 'Precisa Ler?', 'Ler Planilha', 'Montar Board', 'Responder Board']);
 linha(600, 0, ['Acao', 'Pre Validar Acao', 'Pre OK?', 'Ler Planilha Acao', 'Processar Acao', 'Acao OK?',
-  'Montar Escritas', 'Tem Escritas?', 'Loop Escritas', 'Limpar Cache', 'Responder Acao']);
+  'Montar Alteracao Ploomes', 'Tem Alteracao Ploomes?', 'Gravar Alteracao Ploomes', 'Validar Alteracao Ploomes',
+  'Alteracao Ploomes OK?', 'Montar Escritas', 'Tem Escritas?', 'Loop Escritas', 'Limpar Cache', 'Responder Acao']);
 POS['Responder Pre'] = [3 * DX, 780];
+POS['Responder Falha Ploomes'] = [11 * DX, 780];
 // Loop: Repetir? e as duas gravacoes ficam acima do Loop Escritas (voltam para ele a cada
 // requisicao); a saida de erro vai para Montar Erro -> Gravar Erro -> Responder Erro.
 POS['Repetir?'] = [9 * DX, 400];
@@ -237,6 +239,9 @@ const loopEscritas = `const loopEscritas = splitInBatches({
 const temEscritas = 'const temEscritas = ' + condicao('Tem Escritas?', '{{ $json.vazio === true }}', 'boolean', 'false', "''")
   .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';';
 
+const temAlteracaoPloomes = 'const temAlteracaoPloomes = ' + condicao('Tem Alteracao Ploomes?', '{{ $json.gravar }}', 'boolean', 'true', "''")
+  .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';';
+
 RETRY = RETRY_API;
 const IMPORT_API = IMPORT.replace('ifElse, expr', 'ifElse, splitInBatches, nextBatch, expr');
 const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
@@ -257,6 +262,12 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   httpGoogle('lerPlanilhaAcao', 'Ler Planilha Acao', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_ACAO)), false, unico),
   code('processarAcao', 'Processar Acao', 'processar-acao'),
   'const acaoOk = ' + condicao('Acao OK?', '{{ $json.status }}', 'number', 'equals', '200') + ';',
+  code('montarAlteracaoPloomes', 'Montar Alteracao Ploomes', 'montar-alteracao-ploomes'),
+  temAlteracaoPloomes,
+  http('gravarAlteracaoPloomes', 'Gravar Alteracao Ploomes', 'PATCH', "expr('{{ $json.url }}')", true),
+  code('validarAlteracaoPloomes', 'Validar Alteracao Ploomes', 'validar-alteracao-ploomes'),
+  'const alteracaoPloomesOk = ' + condicao('Alteracao Ploomes OK?', '{{ $json.ok }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  responder('responderFalhaPloomes', 'Responder Falha Ploomes', '{{ { erro: $json.erro } }}', '{{ 502 }}', unico),
   code('montarEscritas', 'Montar Escritas', 'montar-escritas'),
   temEscritas,
   loopEscritas,
@@ -290,13 +301,23 @@ export default workflow('${id}', '${nomeWf}', {
   .to(preValidarAcao)
   .to(preOk
     .onTrue(lerPlanilhaAcao.to(processarAcao).to(acaoOk
-      .onTrue(montarEscritas.to(temEscritas
+      .onTrue(montarAlteracaoPloomes.to(temAlteracaoPloomes
+        .onTrue(gravarAlteracaoPloomes.to(validarAlteracaoPloomes).to(alteracaoPloomesOk
+          .onTrue(montarEscritas.to(temEscritas
+            .onTrue(loopEscritas
+              .onDone(limparCache.to(responderAcao))
+              .onEachBatch(repetir
+                .onTrue(gravarLote.onError(montarErro.to(gravarErro).to(responderErro)).to(nextBatch(loopEscritas)))
+                .onFalse(gravarAnexo.onError(montarErro).to(nextBatch(loopEscritas)))))
+            .onFalse(responderAcao)))
+          .onFalse(responderFalhaPloomes)))
+        .onFalse(montarEscritas.to(temEscritas
         .onTrue(loopEscritas
           .onDone(limparCache.to(responderAcao))
           .onEachBatch(repetir
             .onTrue(gravarLote.onError(montarErro.to(gravarErro).to(responderErro)).to(nextBatch(loopEscritas)))
             .onFalse(gravarAnexo.onError(montarErro).to(nextBatch(loopEscritas)))))
-        .onFalse(responderAcao)))
+        .onFalse(responderAcao)))))
       .onFalse(responderAcao)))
     .onFalse(responderPre));
 `;

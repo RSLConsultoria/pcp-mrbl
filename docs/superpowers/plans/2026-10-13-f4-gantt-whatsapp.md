@@ -195,6 +195,7 @@ Criar testes Vitest para:
 - modelos e resumo de alteração;
 - motivo obrigatório;
 - mensagens sem associação;
+- alerta `⚠️` com faltas abertas de costura e/ou acabamento, sem alerta de primeira peça;
 - estados de sugestão;
 - estado otimista e rollback das novas ações.
 
@@ -219,12 +220,15 @@ Criar testes Vitest para:
    - envio de modelo editável;
    - sugestões para aceitar/ignorar;
    - histórico.
+   - faltas de costura e acabamento separadas, explicando que o acabamento deve estar pronto ao fim da costura.
 5. Mostrar configuração ausente do grupo e mensagens sem associação.
 6. Manter layout responsivo sem largura fixa no conteúdo empurrado pelo painel.
 
 Depois de editar múltiplos componentes TSX, executar a revisão de boas práticas React disponível no ambiente.
 
 **Revisão da tarefa:** teclado, foco, rótulos, contraste, rolagem, telas estreitas e ausência de informação sensível no DOM.
+
+**Regra de persistência da data:** tanto `alterar_producao` quanto o aceite de `NOVA_DATA_COMBINADA` devem escrever o campo `deal_E53BDEC3-F829-413D-9421-91D5D7411349` no Ploomes antes de atualizar `PRODUCAO`; falha externa não pode deixar apenas a planilha com a nova data.
 
 ## Tarefa 10 — Mock e testes ponta a ponta
 

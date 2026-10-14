@@ -7,6 +7,7 @@ var VALORES_ATIVO_PRODUCAO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
 var TIPOS_PRODUCAO = ['alterar_producao', 'associar_whatsapp', 'aceitar_sugestao_whatsapp', 'ignorar_sugestao_whatsapp', 'enviar_whatsapp', 'reenviar_whatsapp'];
 var MODELOS_WHATSAPP = { COBRANCA_PRAZO: 1, CONFIRMAR_DATA: 1, MATERIAL_ENVIADO: 1 };
 var CAMPO_OFICINA_PLOOMES = 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4';
+var CAMPO_DATA_COMBINADA_PLOOMES = 'deal_E53BDEC3-F829-413D-9421-91D5D7411349';
 
 function linhaProducao(p, sincronizadoEm) {
   p = p || {};
@@ -155,16 +156,24 @@ function ordenarProducoes(producoes) {
   });
 }
 
-function faltasDaCostura(producao, caixas) {
-  var os = texto(producao && producao.os);
+function faltasDaCaixaProducao(producao, caixas, tipo) {
+  var dealId = texto(producao && producao.dealId);
   var faltas = [];
   (caixas || []).forEach(function (c) {
-    if (!c || texto(c.os) !== os || semAcento(c.tipo) !== 'COSTURA') return;
+    if (!c || texto(c.dealId) !== dealId || semAcento(c.tipo) !== tipo) return;
     (c.itens || []).forEach(function (i) {
       if (i && STATUS_ITEM_ABERTO_PRODUCAO[semAcento(i.status)] && (i.resta === null || Number(i.resta) > 0)) faltas.push(i);
     });
   });
   return faltas;
+}
+
+function faltasDaCostura(producao, caixas) {
+  return faltasDaCaixaProducao(producao, caixas, 'COSTURA');
+}
+
+function faltasDoAcabamento(producao, caixas) {
+  return faltasDaCaixaProducao(producao, caixas, 'ACABAMENTO');
 }
 
 function producaoEditavel(dealId, permitidos) {
@@ -514,6 +523,7 @@ function producoesBoard(extras, caixas) {
     };
     if (p.pecas === null || isNaN(p.pecas)) p.pecas = null;
     p.faltasCostura = faltasDaCostura(p, caixas);
+    p.faltasAcabamento = faltasDoAcabamento(p, caixas);
     p.mensagens = mensagensDaProducao(extras.whatsappMensagens, dealId);
     p.sugestoes = sugestoesDaProducao(extras.whatsappSugestoes, dealId);
     p.historico = historicoDoDeal(extras.historico, dealId);

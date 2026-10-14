@@ -140,6 +140,7 @@ export interface Producao {
   referencia: string;
   versao: string;
   faltasCostura: Item[];
+  faltasAcabamento: Item[];
   mensagens: MensagemProducao[];
   sugestoes: SugestaoProducao[];
   historico: EntradaHistorico[];

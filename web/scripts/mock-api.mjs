@@ -55,6 +55,9 @@ const estado = {
     caixa(90002, 'CORTE', 'COSTURA', 'PECA TESTE B', 'CLIENTE BETA', 'Lucca', [
       item('b1', 'ZIPER METAL MEDIO FIXO CA 18CM', 'UN', 52)
     ]),
+    caixa(90002, 'PEDIDO', 'ACABAMENTO', 'PECA TESTE B', 'CLIENTE BETA', 'Lucca', [
+      item('b2', 'BOTAO TESTE ACABAMENTO', 'UN', 80)
+    ]),
     caixa(90003, 'CORTE', 'COSTURA', 'PECA TESTE C', 'CLIENTE GAMA', '', [
       item('c1', 'VIES LINEAR 6 CM', 'MT', 450)
     ], { saiu: true, saiuComFalta: true, saiuEm: diaIso(-19) }),
@@ -97,7 +100,7 @@ const estado = {
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
   dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008'],
-  dealsProducaoEditaveis: ['710001', '710002', '710003'],
+  dealsProducaoEditaveis: ['700002', '700003', '700005'],
   oficinas: [
     { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL' },
     { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '' }
@@ -108,9 +111,9 @@ const estado = {
     statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
   }],
   producao: [
-    { dealId: '710001', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '700003', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
     {
-      dealId: '710002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
+      dealId: '700002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
       mensagens: [
         { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Pode confirmar a data de entrega?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
         { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Bom dia. A entrega segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
@@ -119,8 +122,8 @@ const estado = {
       sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
       historico: [{ quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'PCP Teste', texto: 'Data combinada ajustada após contato com a oficina.', ploomes: 'ENVIADO' }]
     },
-    { dealId: '710003', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
-    { dealId: '710004', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1', mensagens: [], sugestoes: [], historico: [] }
+    { dealId: '700005', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '700008', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1', mensagens: [], sugestoes: [], historico: [] }
   ]
 };
 
@@ -212,7 +215,12 @@ function montarBoard() {
     mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
     producao: estado.producao.map((p) => ({
       ...p,
-      faltasCostura: estado.caixas.filter((c) => c.os === p.os && c.tipo === 'COSTURA')
+      faltasCostura: estado.caixas.filter((c) => c.dealId === p.dealId && c.tipo === 'COSTURA')
+        .flatMap((c) => c.itens.filter((i) => aberto(i)).map((i) => ({
+          ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
+          editavel: true, pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((x) => x.id), pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
+        }))),
+      faltasAcabamento: estado.caixas.filter((c) => c.dealId === p.dealId && c.tipo === 'ACABAMENTO')
         .flatMap((c) => c.itens.filter((i) => aberto(i)).map((i) => ({
           ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
           editavel: true, pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((x) => x.id), pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
