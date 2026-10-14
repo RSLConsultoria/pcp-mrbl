@@ -10,10 +10,11 @@ const prod = (extra: Partial<Producao> = {}): Producao => ({
 });
 
 it('resume o alerta de aviamentos de costura e acabamento', () => {
-  expect(resumoFaltasAviamentos(prod())).toEqual({ total: 0, texto: '' });
-  expect(resumoFaltasAviamentos(prod({ faltasCostura: [{ id: 'c1' } as never] }))).toEqual({ total: 1, texto: 'Aviamentos faltando: 1 na costura' });
+  expect(resumoFaltasAviamentos(prod())).toEqual({ total: 0, costura: 0, acabamento: 0, textoCostura: '', textoAcabamento: '' });
+  expect(resumoFaltasAviamentos(prod({ faltasCostura: [{ id: 'c1' } as never] })))
+    .toEqual({ total: 1, costura: 1, acabamento: 0, textoCostura: '1 aviamento faltando na costura; impede finalizar a costura', textoAcabamento: '' });
   expect(resumoFaltasAviamentos(prod({ faltasCostura: [{ id: 'c1' } as never], faltasAcabamento: [{ id: 'a1' } as never, { id: 'a2' } as never] })))
-    .toEqual({ total: 3, texto: 'Aviamentos faltando: 1 na costura e 2 no acabamento' });
+    .toEqual({ total: 3, costura: 1, acabamento: 2, textoCostura: '1 aviamento faltando na costura; impede finalizar a costura', textoAcabamento: '2 aviamentos faltando no acabamento; precisam estar prontos para a etapa seguinte' });
 });
 
 describe('prazo e status da producao', () => {

@@ -195,7 +195,7 @@ Criar testes Vitest para:
 - modelos e resumo de alteração;
 - motivo obrigatório;
 - mensagens sem associação;
-- alerta `⚠️` com faltas abertas de costura e/ou acabamento, sem alerta de primeira peça;
+- alerta `🚫` para falta de costura que bloqueia a finalização e `⚠️` para falta de acabamento necessária na etapa seguinte, sem alerta de primeira peça;
 - estados de sugestão;
 - estado otimista e rollback das novas ações.
 

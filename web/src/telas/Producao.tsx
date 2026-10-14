@@ -90,7 +90,8 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           <div><span>Lead time</span><strong>{ddmm(item.leadTime) || '—'}</strong></div>
           <div><span>Peças</span><strong>{item.pecas ?? '—'}</strong></div>
         </section>
-        {alertaAviamentos.total > 0 && <p className="producao-alerta-aviamentos" aria-label={alertaAviamentos.texto}>⚠️ {alertaAviamentos.texto}</p>}
+        {alertaAviamentos.costura > 0 && <p className="producao-alerta-aviamentos producao-alerta-aviamentos--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.textoCostura}</p>}
+        {alertaAviamentos.acabamento > 0 && <p className="producao-alerta-aviamentos producao-alerta-aviamentos--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.textoAcabamento}</p>}
         <a className="producao-link" href={`https://app.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
         <section className="producao-secao producao-edicao">
           <h3>Alterar combinado</h3>
@@ -213,11 +214,11 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
             const fim = prazo.data ? Math.min(janela.dias - 1, indiceDia(prazo.data, janela.inicio)) : 0;
             const largura = p.inicioCostura && prazo.data ? Math.max(16, (fim - Math.max(0, indiceDia(p.inicioCostura, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
             return <div className="gantt__linha" key={p.dealId}>
-              <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong><span>{p.peca || p.referencia || 'Sem descrição'}</span>{alertaAviamentos.total > 0 && <em aria-label={alertaAviamentos.texto}>⚠️ {alertaAviamentos.total}</em>}</button>
+              <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong><span>{p.peca || p.referencia || 'Sem descrição'}</span><span className="gantt__alertas">{alertaAviamentos.costura > 0 && <em className="gantt__sinal gantt__sinal--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.costura}</em>}{alertaAviamentos.acabamento > 0 && <em className="gantt__sinal gantt__sinal--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.acabamento}</em>}</span></button>
               <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
                 {prazo.data ? <button type="button" onClick={() => setAberta(p.dealId)} title={`OS ${p.os} · ${ddmm(prazo.data)}`}
-                  className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${alertaAviamentos.total ? 'gantt__barra--falta' : ''}`}
-                  style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.total > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.texto}>⚠️</span>}{p.os}</span></button>
+                  className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${alertaAviamentos.costura ? 'gantt__barra--bloqueio' : alertaAviamentos.acabamento ? 'gantt__barra--falta' : ''}`}
+                  style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.costura > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoCostura}>🚫</span>}{alertaAviamentos.acabamento > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoAcabamento}>⚠️</span>}{p.os}</span></button>
                   : <button type="button" className="gantt__sem-prazo" onClick={() => setAberta(p.dealId)}>Sem prazo</button>}
               </div>
             </div>;

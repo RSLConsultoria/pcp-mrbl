@@ -48,13 +48,12 @@ export function indicadoresProducao(lista: Producao[], hoje: string) {
   };
 }
 
-export function resumoFaltasAviamentos(p: Pick<Producao, 'faltasCostura' | 'faltasAcabamento'>): { total: number; texto: string } {
+export function resumoFaltasAviamentos(p: Pick<Producao, 'faltasCostura' | 'faltasAcabamento'>) {
   const costura = p.faltasCostura.length;
   const acabamento = p.faltasAcabamento.length;
-  const partes = [];
-  if (costura) partes.push(`${costura} na costura`);
-  if (acabamento) partes.push(`${acabamento} no acabamento`);
-  return { total: costura + acabamento, texto: partes.length ? `Aviamentos faltando: ${partes.join(' e ')}` : '' };
+  const textoCostura = costura ? `${costura} aviamento${costura === 1 ? '' : 's'} faltando na costura; ${costura === 1 ? 'impede' : 'impedem'} finalizar a costura` : '';
+  const textoAcabamento = acabamento ? `${acabamento} aviamento${acabamento === 1 ? '' : 's'} faltando no acabamento; ${acabamento === 1 ? 'precisa' : 'precisam'} estar pronto${acabamento === 1 ? '' : 's'} para a etapa seguinte` : '';
+  return { total: costura + acabamento, costura, acabamento, textoCostura, textoAcabamento };
 }
 
 export function janelaGantt(lista: Producao[], hoje: string): { inicio: string; fim: string; dias: number } {

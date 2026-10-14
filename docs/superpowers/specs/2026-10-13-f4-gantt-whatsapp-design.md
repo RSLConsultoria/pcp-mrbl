@@ -174,7 +174,8 @@ Mensagens são limitadas às mais recentes necessárias ao painel; sugestões pe
 - somente lead time: azul listrada;
 - prazo vencido: vermelha;
 - sem início, mas com prazo: losango no prazo;
-- qualquer aviamento aberto nas caixas de costura ou acabamento: `⚠️` na OS e na barra, com texto acessível e contadores separados no painel;
+- aviamento aberto na caixa de costura: `🚫` na OS e na barra, pois impede finalizar a costura;
+- aviamento aberto na caixa de acabamento: `⚠️` na OS e na barra, pois precisa estar pronto para a etapa seguinte;
 - falta de costura indica material necessário durante a produção na oficina;
 - falta de acabamento indica material que precisa estar pronto quando a oficina concluir a costura;
 - datas combinadas anteriores: risco marrom e selo **alterada**.

@@ -44,7 +44,8 @@ test('Gantt mostra ALOCAR, prazo vencido, indicadores e filtro por falta', async
   await expect(page.getByText('Passaram do prazo').locator('..')).toContainText('1');
   await page.getByLabel('Só com falta na costura').check();
   await expect(page.getByRole('button', { name: /OS 90002/ })).toBeVisible();
-  await expect(page.getByLabel('Aviamentos faltando: 1 na costura e 1 no acabamento').first()).toBeVisible();
+  await expect(page.getByLabel('1 aviamento faltando na costura; impede finalizar a costura').first()).toBeVisible();
+  await expect(page.getByLabel('1 aviamento faltando no acabamento; precisa estar pronto para a etapa seguinte').first()).toBeVisible();
   await expect(page.getByRole('button', { name: /OS 90001/ })).toHaveCount(0);
 });
 

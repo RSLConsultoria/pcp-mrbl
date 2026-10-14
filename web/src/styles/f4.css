@@ -42,7 +42,10 @@
 .gantt__os:hover { background: var(--canvas); }
 .gantt__os strong { font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .gantt__os span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--suave); }
-.gantt__os em { padding: 2px 6px; border-radius: 10px; background: #fff1df; color: #985a10; font-size: 10px; font-style: normal; font-weight: 700; }
+.gantt__alertas { display: flex; gap: 3px; overflow: visible !important; }
+.gantt__os .gantt__sinal { padding: 2px 5px; border-radius: 10px; font-size: 10px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.gantt__sinal--costura { background: #fdecec; color: #9f2828; }
+.gantt__sinal--acabamento { background: #fff1df; color: #985a10; }
 .gantt__pista { position: relative; min-height: 50px; border-bottom: 1px solid var(--borda); background: repeating-linear-gradient(to right, transparent 0, transparent 27px, #eef0f4 27px, #eef0f4 28px); }
 .gantt__barra { position: absolute; top: 10px; height: 29px; min-width: 14px; overflow: hidden; padding: 0 7px; border: 0; border-radius: 4px; background: #466cc8; color: #fff; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .gantt__barra span { font: 700 10px var(--font-sans); }
@@ -51,6 +54,7 @@
 .gantt__barra--atrasado { background: #c84949; }
 .gantt__barra--hoje, .gantt__barra--proximo { background: #c07b24; }
 .gantt__barra--falta { box-shadow: 0 0 0 2px #dc892a; }
+.gantt__barra--bloqueio { box-shadow: 0 0 0 2px #a82525; }
 .gantt__barra--marco { width: 14px !important; padding: 0; transform: rotate(45deg); border-radius: 2px; }
 .gantt__barra--marco span { display: none; }
 .gantt__sem-prazo { position: sticky; left: 272px; margin: 12px 0 0 12px; height: 25px; padding: 0 8px; border: 1px dashed var(--leve); border-radius: 4px; background: #fff; color: var(--suave); font: 11px var(--font-sans); cursor: pointer; }
@@ -70,6 +74,8 @@
 .producao-resumo strong { font-size: 13px; font-weight: 600; }
 .producao-link { display: inline-block; margin-top: 16px; color: var(--navy); font-size: 12px; font-weight: 650; }
 .producao-alerta-aviamentos { margin: 14px 0 0; padding: 8px 10px; border: 1px solid #e9c790; border-radius: 4px; background: #fff9ed; color: #7c4c11; font-size: 12px; font-weight: 700; }
+.producao-alerta-aviamentos + .producao-alerta-aviamentos { margin-top: 6px; }
+.producao-alerta-aviamentos--costura { border-color: #e4adad; background: #fff3f3; color: #8d2424; }
 .producao-edicao__campos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .producao-edicao__campos label, .producao-sugestao__acoes label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; font-weight: 650; color: var(--suave); }
 .producao-edicao__campos label:last-child { grid-column: 1 / -1; }
