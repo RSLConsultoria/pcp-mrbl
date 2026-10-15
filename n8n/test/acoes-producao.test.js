@@ -19,7 +19,7 @@ const linhas = () => ({
     { deal_id: '700002', os: '90002', oficina_id: 'of-2', oficina_nome: 'OFICINA B', data_combinada: '2026-10-19', atualizado_em_ploomes: 'v2' }
   ],
   oficinas: [{ ploomes_id: 'of-1', nome: 'OFICINA A', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE', ativo: 'SIM' }, { ploomes_id: 'of-2', nome: 'OFICINA B', ativo: 'SIM' }],
-  whatsappMensagens: [{ id: 'MSG-1', deal_id: '700001', oficina_id: 'of-1' }],
+  whatsappMensagens: [{ id: 'MSG-1', deal_id: '700001', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us' }],
   whatsappSugestoes: [{ id: 'SUG-1', mensagem_id: 'MSG-1', deal_id: '700001', os: '90001', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-20', resumo: 'Entrega dia 20.', status: 'PENDENTE', versao: 'v1' }]
 });
 
@@ -79,6 +79,34 @@ test('aceitar sugestao prepara mudanca sem resposta ao grupo; repeticao aceita e
   const outra = limpo(ctx.processarAcao(estado, cab, corpo, ja, T0, () => 'NAO-USA'));
   assert.equal(outra.status, 200);
   assert.deepEqual(outra.operacoes, []);
+});
+
+test('aceitar ou ignorar sugestao exige a versao atual da producao', () => {
+  const { ctx, estado, cab } = contexto();
+  const base = { dealId: '700001', sugestaoId: 'SUG-1' };
+  const aceitarSemVersao = ctx.processarAcao(estado, cab, {
+    ...base, tipo: 'aceitar_sugestao_whatsapp', motivo: 'Oficina confirmou.'
+  }, linhas(), T0, () => 'X');
+  const ignorarSemVersao = ctx.processarAcao(estado, cab, {
+    ...base, tipo: 'ignorar_sugestao_whatsapp'
+  }, linhas(), T0, () => 'X');
+  const aceitarDesatualizada = ctx.processarAcao(estado, cab, {
+    ...base, tipo: 'aceitar_sugestao_whatsapp', versao: 'antiga', motivo: 'Oficina confirmou.'
+  }, linhas(), T0, () => 'X');
+  assert.equal(aceitarSemVersao.status, 409);
+  assert.equal(ignorarSemVersao.status, 409);
+  assert.equal(aceitarDesatualizada.status, 409);
+});
+
+test('decisao de sugestao exige o grupo atual da oficina e limita o motivo', () => {
+  const { ctx, estado, cab } = contexto();
+  const corpo = { tipo: 'aceitar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Oficina confirmou.' };
+  const grupoMudou = linhas();
+  grupoMudou.oficinas[0].grupo_jid = 'novo-grupo@g.us';
+  assert.equal(ctx.processarAcao(estado, cab, corpo, grupoMudou, T0, () => 'X').status, 409);
+
+  const motivoLongo = { ...corpo, motivo: 'x'.repeat(501) };
+  assert.equal(ctx.processarAcao(estado, cab, motivoLongo, linhas(), T0, () => 'X').status, 400);
 });
 
 test('ignorar sugestao registra decisao sem tocar no Ploomes', () => {

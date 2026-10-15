@@ -258,7 +258,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
     texto(sugestao.mensagem_id) === texto(mensagem.id) && texto(sugestao.os) === texto(producao.os) &&
     texto(producao.oficina_id) === texto(mensagem.oficina_id);
   if (!mesmoVinculo) return erroAcao(409, 'A mensagem não pertence à mesma OS e oficina da sugestão.');
-  if (texto(corpo.versao) && texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) {
+  if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) {
     return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   }
 
@@ -268,6 +268,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
   var ploomes = null;
   var tipo = semAcento(sugestao.tipo);
   var motivo = texto(corpo.motivo).replace(/(\r\n|\n|\r)+/g, ' ');
+  if (motivo.length > 500) return erroAcao(400, 'Motivo com no máximo 500 caracteres.');
   if (decisao === 'ACEITAR' && tipo === 'NOVA_DATA_COMBINADA') {
     if (!motivo) return erroAcao(400, 'Informe o motivo da alteração da data combinada.');
     var data = texto(sugestao.valor);

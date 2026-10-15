@@ -2136,6 +2136,15 @@ function processarDecisaoSugestao(corpo, linhas, ctx) {
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
   var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(sugestao.mensagem_id); })[0];
   if (!mensagem) return erroAcao(409, 'Mensagem da sugestão não encontrada.');
+  var destino = corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'ACEITA' : 'IGNORADA';
+  if (semAcento(sugestao.status) !== destino) {
+    var oficina = (linhas.oficinas || []).filter(function (o) {
+      return o && texto(o.ploomes_id) === texto(producao.oficina_id) && linhaAtivaProducao(o.ativo);
+    })[0];
+    if (!oficina || !texto(oficina.grupo_jid) || texto(oficina.grupo_jid) !== texto(mensagem.grupo_jid)) {
+      return erroAcao(409, 'O grupo da oficina mudou. Confira a configuração antes de decidir a sugestão.');
+    }
+  }
   var r = decidirSugestaoWhatsapp({
     decisao: corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'ACEITAR' : 'IGNORAR',
     versao: corpo.versao, motivo: corpo.motivo
@@ -2550,7 +2559,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
     texto(sugestao.mensagem_id) === texto(mensagem.id) && texto(sugestao.os) === texto(producao.os) &&
     texto(producao.oficina_id) === texto(mensagem.oficina_id);
   if (!mesmoVinculo) return erroAcao(409, 'A mensagem não pertence à mesma OS e oficina da sugestão.');
-  if (texto(corpo.versao) && texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) {
+  if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) {
     return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   }
 
@@ -2560,6 +2569,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
   var ploomes = null;
   var tipo = semAcento(sugestao.tipo);
   var motivo = texto(corpo.motivo).replace(/(\r\n|\n|\r)+/g, ' ');
+  if (motivo.length > 500) return erroAcao(400, 'Motivo com no máximo 500 caracteres.');
   if (decisao === 'ACEITAR' && tipo === 'NOVA_DATA_COMBINADA') {
     if (!motivo) return erroAcao(400, 'Informe o motivo da alteração da data combinada.');
     var data = texto(sugestao.valor);
@@ -3326,8 +3336,8 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   return { ok: true };
 }
 
-// Cache do board fora: o proximo GET le a planilha. Chamado ao aceitar a acao
-// (Processar Acao) e de novo depois das gravacoes (Limpar Cache).
+// Cache do board fora: o proximo GET le a planilha. O workflow chama esta
+// funcao depois das gravacoes ou ao tratar uma falha que pode ter sido parcial.
 function limparCacheBoard(estado) {
   if (estado) delete estado.board;
 }
@@ -3340,7 +3350,6 @@ function historicoDaResposta(h) {
 // gravacao/historico (primeira operacao / primeira linha) para os
 // adaptadores da F2 enquanto o workflow novo nao entra.
 function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
-  limparCacheBoard(estado);
   var body = { ok: true, versao: versao, historico: historicos.length ? historicoDaResposta(historicos[0]) : null };
   Object.keys(extrasBody || {}).forEach(function (k) { body[k] = extrasBody[k]; });
   var o = operacoes[0];
@@ -3465,8 +3474,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 }
 
 // ===== adaptador: Limpar Cache =====
-// Fim das gravacoes da acao: apaga o cache do board de novo. O Processar Acao ja
-// apaga antes de gravar, mas um board lido enquanto o loop gravava guardaria a
-// planilha ainda sem a acao por ate 55 s (e o site desfaria a mudanca na tela).
+// Fim das gravacoes da acao: apaga o cache somente depois de a planilha
+// confirmar a operacao, para o proximo GET reler o estado persistido.
 limparCacheBoard($getWorkflowStaticData('global'));
 return [{ json: { ok: true } }];

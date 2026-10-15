@@ -130,14 +130,14 @@ test('processarAcao: 400, 404 e 409', () => {
   assert.deepEqual(r, { status: 409, body: { erro: 'Alguém alterou esta caixa agora há pouco.' } });
 });
 
-test('processarAcao: 200 de item limpa o cache e devolve gravacao e historico', () => {
+test('processarAcao: 200 de item preserva o cache ate a gravacao e devolve gravacao e historico', () => {
   const e = {}; const cab = sessao(e, 'ana@x.com');
   e.board = { corpo: {}, guardadoEm: T0 };
   const r = limpo(ctx.processarAcao(e, cab, { tipo: 'baixa', dealId: '600001', itemId: 'a', valor: 4, versao: 'V1' },
     { faltantes: FALT, caixasPcp: [] }, T0, gerarId));
   const iso = new Date(T0).toISOString();
   assert.equal(r.status, 200);
-  assert.equal(e.board, undefined);
+  assert.deepEqual(e.board, { corpo: {}, guardadoEm: T0 });
   assert.deepEqual(r.body, { ok: true, versao: iso, historico: { quando: iso, usuario: 'Ana',
     texto: 'Ana deu baixa: 4 UN de ZIPER METAL (resta 6 UN)', ploomes: 'PENDENTE' } });
   assert.equal(r.gravacao.aba, 'FALTANTES');

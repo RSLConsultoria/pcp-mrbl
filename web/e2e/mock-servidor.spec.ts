@@ -186,7 +186,7 @@ test('mock: item resolvido e caixa somente leitura não dizem "lido da planilha 
   await expect(etiqueta).toContainText('Item resolvido.');
   await expect(p1.getByText(/lido da planilha de caixas ganhas/)).toHaveCount(0);
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'OS 90002' }).click();
+  await page.getByRole('button', { name: 'OS 90002' }).filter({ hasText: 'ZIPER METAL' }).click();
   const p2 = page.getByRole('complementary', { name: 'Caixa da OS 90002' });
   await expect(p2.getByText('Edição liberada em breve para esta caixa.')).toBeVisible();
   await expect(p2.getByText(/lido da planilha de caixas ganhas/)).toHaveCount(0);

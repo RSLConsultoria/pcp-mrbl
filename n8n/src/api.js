@@ -158,8 +158,8 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   return { ok: true };
 }
 
-// Cache do board fora: o proximo GET le a planilha. Chamado ao aceitar a acao
-// (Processar Acao) e de novo depois das gravacoes (Limpar Cache).
+// Cache do board fora: o proximo GET le a planilha. O workflow chama esta
+// funcao depois das gravacoes ou ao tratar uma falha que pode ter sido parcial.
 function limparCacheBoard(estado) {
   if (estado) delete estado.board;
 }
@@ -172,7 +172,6 @@ function historicoDaResposta(h) {
 // gravacao/historico (primeira operacao / primeira linha) para os
 // adaptadores da F2 enquanto o workflow novo nao entra.
 function respostaDeAcao(estado, versao, operacoes, historicos, extrasBody) {
-  limparCacheBoard(estado);
   var body = { ok: true, versao: versao, historico: historicos.length ? historicoDaResposta(historicos[0]) : null };
   Object.keys(extrasBody || {}).forEach(function (k) { body[k] = extrasBody[k]; });
   var o = operacoes[0];

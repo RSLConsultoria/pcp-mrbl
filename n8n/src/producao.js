@@ -437,6 +437,15 @@ function processarDecisaoSugestao(corpo, linhas, ctx) {
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
   var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(sugestao.mensagem_id); })[0];
   if (!mensagem) return erroAcao(409, 'Mensagem da sugestão não encontrada.');
+  var destino = corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'ACEITA' : 'IGNORADA';
+  if (semAcento(sugestao.status) !== destino) {
+    var oficina = (linhas.oficinas || []).filter(function (o) {
+      return o && texto(o.ploomes_id) === texto(producao.oficina_id) && linhaAtivaProducao(o.ativo);
+    })[0];
+    if (!oficina || !texto(oficina.grupo_jid) || texto(oficina.grupo_jid) !== texto(mensagem.grupo_jid)) {
+      return erroAcao(409, 'O grupo da oficina mudou. Confira a configuração antes de decidir a sugestão.');
+    }
+  }
   var r = decidirSugestaoWhatsapp({
     decisao: corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'ACEITAR' : 'IGNORAR',
     versao: corpo.versao, motivo: corpo.motivo

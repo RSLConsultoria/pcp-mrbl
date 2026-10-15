@@ -53,7 +53,7 @@ test('sync de produção agenda a cada cinco minutos e consulta somente a etapa 
   const buscar = no(w, 'Buscar Produção no Ploomes');
   assert.equal(buscar.typeVersion, 4.5);
   assert.equal(buscar.credentials.httpHeaderAuth.id, 'QfXOyNly69oAqwH2');
-  assert.match(buscar.parameters.url, /api2\.ploomes\.com\/Deals/);
+  assert.match(buscar.parameters.url, /^https:\/\/public-api2\.ploomes\.com\/Deals/);
   assert.match(JSON.stringify(buscar.parameters), /60015827/);
   assert.match(JSON.stringify(buscar.parameters), /60073488/);
   assert.match(JSON.stringify(buscar.parameters), /OtherProperties/);
