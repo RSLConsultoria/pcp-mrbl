@@ -119,13 +119,19 @@ function conteudoDaMensagemWhatsapp(message) {
   return { texto: '', tipo: 'NAO_TEXTUAL', contexto: {} };
 }
 
-function normalizarEventoWhatsapp(payload, grupos) {
+function normalizarEventoWhatsapp(payload, grupos, contexto) {
   payload = payload || {};
+  contexto = contexto || {};
   var evento = semAcento(payload.event).replace(/[._-]/g, '');
   if (evento !== 'MESSAGESUPSERT') return { ok: false, motivo: 'EVENTO_IGNORADO' };
-  var d = payload.data || {};
+  var instanciaEsperada = texto(contexto.instancia);
+  if (instanciaEsperada && texto(payload.instance) !== instanciaEsperada) {
+    return { ok: false, motivo: 'INSTANCIA_IGNORADA' };
+  }
+  var d = Array.isArray(payload.data) ? (payload.data[0] || {}) : (payload.data || {});
   var chave = d.key || {};
   if (chave.fromMe === true) return { ok: false, motivo: 'MENSAGEM_PROPRIA' };
+  if (!texto(chave.id)) return { ok: false, motivo: 'MENSAGEM_SEM_ID' };
   var grupo = grupoWhatsappAtivo(grupos, chave.remoteJid);
   if (!grupo) return { ok: false, motivo: 'GRUPO_NAO_CADASTRADO' };
   var conteudo = conteudoDaMensagemWhatsapp(d.message);
@@ -210,10 +216,27 @@ function somarDiasISO(data, dias) {
   return new Date(ms + dias * 86400000).toISOString().slice(0, 10);
 }
 
+function dataISOEmSaoPaulo(valor) {
+  var bruto = texto(valor);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(bruto)) return bruto;
+  var d = new Date(bruto);
+  if (!isFinite(d.getTime())) return '';
+  try {
+    var partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(d);
+    var mapa = {};
+    partes.forEach(function (p) { mapa[p.type] = p.value; });
+    return mapa.year + '-' + mapa.month + '-' + mapa.day;
+  } catch (e) {
+    return bruto.slice(0, 10);
+  }
+}
+
 function resolverDataInterpretada(valor, quando) {
   var bruto = texto(valor);
   var normal = semAcento(bruto).toLowerCase();
-  var base = texto(quando).slice(0, 10);
+  var base = dataISOEmSaoPaulo(quando);
   if (normal === 'amanha') return somarDiasISO(base, 1);
   if (normal === 'depois de amanha') return somarDiasISO(base, 2);
   if (/^\d{4}-\d{2}-\d{2}$/.test(bruto)) return dataValida(bruto) ? bruto : '';
@@ -253,24 +276,33 @@ function validarInterpretacaoWhatsapp(valor, quando) {
   return { ok: true, tipo: tipo, valor: tipo === 'NOVA_DATA_COMBINADA' ? data : '', resumo: resumo, evidencia: evidencia, confianca: confianca };
 }
 
+function respostaDoInterpreteWhatsapp(resposta) {
+  if (!resposta || typeof resposta !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(resposta, 'interpretacao') ||
+      resposta.interpretacao === null || resposta.interpretacao === undefined) {
+    return { ok: false, erro: 'O subworkflow do intérprete não devolveu a propriedade interpretacao.' };
+  }
+  return { ok: true, interpretacao: resposta.interpretacao };
+}
+
 function producaoParaAssociacaoWhatsapp(p) {
   p = p || {};
   return {
     dealId: texto(p.dealId !== undefined ? p.dealId : p.deal_id),
     os: texto(p.os),
     oficinaId: texto(p.oficinaId !== undefined ? p.oficinaId : p.oficina_id),
+    dataCombinada: texto(p.dataCombinada !== undefined ? p.dataCombinada : p.data_combinada),
     versao: texto(p.versao !== undefined ? p.versao : p.atualizado_em_ploomes),
     ativa: p.em_costura === undefined || semAcento(p.em_costura) === 'SIM'
   };
 }
 
-// Etapa pura usada pelo workflow de entrada depois da leitura da planilha e da
-// chamada opcional ao modelo. Ela só devolve operações de planilha: nunca envia
-// mensagem e nunca responde ao grupo.
-function processarEntradaWhatsapp(payload, dados, interpretacao, contexto) {
+// Primeira metade da entrada: valida, deduplica e associa antes de qualquer
+// chamada ao modelo. O contexto do intérprete omite grupo e participante.
+function prepararEntradaWhatsapp(payload, dados, contexto) {
   dados = dados || {};
   contexto = contexto || {};
-  var normalizado = normalizarEventoWhatsapp(payload, dados.oficinas || []);
+  var normalizado = normalizarEventoWhatsapp(payload, dados.oficinas || [], contexto);
   if (!normalizado.ok) return { ok: true, ignorada: true, motivo: normalizado.motivo, operacoes: [] };
   var msg = normalizado.mensagem;
   if (mensagemWhatsappDuplicada(msg.evolutionId, dados.mensagens || [])) {
@@ -282,7 +314,7 @@ function processarEntradaWhatsapp(payload, dados, interpretacao, contexto) {
   var gerarId = contexto.gerarId;
   if (typeof gerarId !== 'function') return { ok: false, erro: 'Gerador de ID não informado.', operacoes: [] };
   var agora = texto(contexto.agora) || msg.quando;
-  var mensagemId = texto(gerarId());
+  var mensagemId = texto(gerarId(msg.evolutionId));
   var linhaMensagem = {
     id: mensagemId,
     evolution_id: msg.evolutionId,
@@ -306,25 +338,63 @@ function processarEntradaWhatsapp(payload, dados, interpretacao, contexto) {
   };
   var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linhaMensagem }];
   var precisaInterpretar = msg.tipoConteudo === 'TEXTO' && !!associacao.dealId;
-  if (!precisaInterpretar || interpretacao === undefined || interpretacao === null) {
-    return { ok: true, precisaInterpretar: precisaInterpretar, operacoes: operacoes };
+  var prod = producoes.filter(function (p) { return p.dealId === associacao.dealId; })[0] || {};
+  return {
+    ok: true,
+    precisaInterpretar: precisaInterpretar,
+    mensagemId: mensagemId,
+    quando: msg.quando || agora,
+    dealId: associacao.dealId,
+    os: associacao.os,
+    versao: texto(prod.versao),
+    contextoInterpretacao: precisaInterpretar ? {
+      texto: msg.texto,
+      quando: msg.quando || agora,
+      dealId: associacao.dealId,
+      os: associacao.os,
+      dataCombinada: texto(prod.dataCombinada)
+    } : null,
+    operacoes: operacoes
+  };
+}
+
+// Segunda metade: só aceita o JSON validado e acrescenta a sugestão. Nunca
+// envia mensagem nem responde ao grupo.
+function concluirEntradaWhatsapp(preparada, interpretacao, contexto) {
+  preparada = preparada || {};
+  contexto = contexto || {};
+  var operacoes = (preparada.operacoes || []).slice();
+  if (!preparada.ok || preparada.ignorada || !preparada.precisaInterpretar || interpretacao === undefined || interpretacao === null) {
+    return Object.assign({}, preparada, { operacoes: operacoes });
   }
 
-  var validada = validarInterpretacaoWhatsapp(interpretacao, msg.quando || agora);
+  var validada = validarInterpretacaoWhatsapp(interpretacao, preparada.quando);
   if (!validada.ok) {
     return { ok: true, precisaInterpretar: true, erroInterpretacao: validada.erro, operacoes: operacoes };
   }
-  var prod = producoes.filter(function (p) { return p.dealId === associacao.dealId; })[0] || {};
+  var gerarId = contexto.gerarId;
+  if (typeof gerarId !== 'function') return { ok: false, erro: 'Gerador de ID não informado.', operacoes: operacoes };
   operacoes.push({
     aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id',
     linha: {
-      id: texto(gerarId()), mensagem_id: mensagemId, deal_id: associacao.dealId, os: associacao.os,
+      id: texto(gerarId()), mensagem_id: texto(preparada.mensagemId), deal_id: texto(preparada.dealId), os: texto(preparada.os),
       tipo: validada.tipo, valor: validada.valor, resumo: validada.resumo, evidencia: validada.evidencia,
-      confianca: validada.confianca, status: 'PENDENTE', criado_em: agora,
-      decidido_em: '', decidido_por: '', versao: texto(prod.versao)
+      confianca: validada.confianca, status: 'PENDENTE', criado_em: texto(contexto.agora) || texto(preparada.quando),
+      decidido_em: '', decidido_por: '', versao: texto(preparada.versao)
     }
   });
   return { ok: true, precisaInterpretar: true, operacoes: operacoes };
+}
+
+function idSugestaoWhatsapp(mensagemId) {
+  var id = texto(mensagemId);
+  return id.indexOf('WA-R-') === 0 ? 'WA-S-' + id.slice(5) : 'WA-S-' + id;
+}
+
+function processarEntradaWhatsapp(payload, dados, interpretacao, contexto) {
+  contexto = contexto || {};
+  var preparada = prepararEntradaWhatsapp(payload, dados, contexto);
+  return concluirEntradaWhatsapp(preparada, interpretacao, contexto);
 }
 
 function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) {

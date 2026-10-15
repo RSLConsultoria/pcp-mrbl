@@ -77,3 +77,13 @@ test('board vazio mantem o contrato da F4', () => {
   assert.deepEqual(r.mensagensWhatsappSemAssociacao, []);
   assert.ok(Array.isArray(r.dealsProducaoEditaveis));
 });
+
+test('board consolida duplicatas concorrentes pelo ID e prefere sugestão já decidida', () => {
+  const e = extras();
+  e.whatsappMensagens.push(Object.assign({}, e.whatsappMensagens[0]));
+  e.whatsappSugestoes.push(Object.assign({}, e.whatsappSugestoes[0], { status: 'ACEITA', decidido_em: '2026-10-13T12:00:00.000Z' }));
+  const r = limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body;
+  assert.equal(r.producao[0].mensagens.length, 1);
+  assert.equal(r.producao[0].sugestoes.length, 1);
+  assert.equal(r.producao[0].sugestoes[0].status, 'ACEITA');
+});

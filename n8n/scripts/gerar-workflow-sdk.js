@@ -62,6 +62,15 @@ const POS_WHATSAPP_SAIDA = {};
   ['Enviar pela Evolution', 6, 0], ['Resultado WhatsApp', 7, 0], ['Gravar Resultado WhatsApp', 8, 0]]
   .forEach(([n, c, y]) => { POS_WHATSAPP_SAIDA[n] = [c * DX, y]; });
 
+const POS_WHATSAPP_ENTRADA = {};
+[['Receber WhatsApp', 0, 0], ['Ler Contexto WhatsApp', 1, 0], ['Preparar Entrada WhatsApp', 2, 0],
+  ['Gravar Mensagem?', 3, 0], ['Gravar Mensagem Recebida', 4, 0], ['Confirmar Recebimento', 5, 0],
+  ['Precisa Interpretar?', 6, 0], ['Montar Contexto do Intérprete', 7, 0], ['Interpretar com Modelo', 8, 0],
+  ['Finalizar Entrada WhatsApp', 9, 0], ['Tem Sugestão?', 10, 0], ['Gravar Sugestão WhatsApp', 11, 0],
+  ['Montar Erro de Recepção', 3, 260], ['Registrar Erro de Recepção', 4, 260], ['Solicitar Reentrega', 5, 260],
+  ['Montar Erro de Interpretação', 9, 260], ['Registrar Erro de Interpretação', 10, 260]]
+  .forEach(([n, c, y]) => { POS_WHATSAPP_ENTRADA[n] = [c * DX, y]; });
+
 const CRED = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
 const OPCOES_RAW = "options: { cellFormat: 'RAW', handlingExtraData: 'insertInNewColumn' }";
 // Todo Google Sheets do workflow da API tenta de novo (cota/instabilidade da
@@ -520,6 +529,139 @@ export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp',
     .to(deveEnviarWhatsapp.onTrue(enviarWhatsapp.to(resultadoWhatsapp).to(gravarResultadoWhatsapp)))));
 `;
 
+posAtual = POS_WHATSAPP_ENTRADA;
+RETRY = RETRY_API;
+const LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+const urlContextoWhatsapp = lote.urlLeitura(DOC, LEITURAS_WHATSAPP_ENTRADA);
+const whatsappEntrada = IMPORT + [
+  `const receberWhatsapp = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Receber WhatsApp',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'pcp-whatsapp-entrada-CONFIGURAR_SEGREDO',
+      responseMode: 'responseNode',
+      options: {}
+    },
+    position: ${posicao('Receber WhatsApp')}
+  },
+  output: [{ headers: {}, body: {} }]
+});`,
+  httpGoogle('lerContextoWhatsapp', 'Ler Contexto WhatsApp', 'GET', JSON.stringify(urlContextoWhatsapp), false, ERRO_SAIDA),
+  `const prepararEntradaWhatsapp = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Preparar Entrada WhatsApp',
+    onError: 'continueErrorOutput',
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: ${lerBuild('preparar-whatsapp-entrada')} },
+    position: ${posicao('Preparar Entrada WhatsApp')}
+  },
+  output: [{ gravar: false, precisaInterpretar: false }]
+});`,
+  'const deveGravarMensagemWhatsapp = ' + condicao('Gravar Mensagem?', '{{ $json.gravar }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  httpGoogle('gravarMensagemWhatsapp', 'Gravar Mensagem Recebida', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  `const confirmarRecebimentoWhatsapp = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Confirmar Recebimento',
+    parameters: {
+      respondWith: 'json',
+      responseBody: expr('{{ { ok: true } }}'),
+      options: { responseCode: 200, responseHeaders: { entries: [{ name: 'Cache-Control', value: 'no-store' }] } }
+    },
+    position: ${posicao('Confirmar Recebimento')}
+  },
+  output: [{}]
+});`,
+  'const precisaInterpretarWhatsapp = ' + condicao('Precisa Interpretar?', "{{ $('Preparar Entrada WhatsApp').first().json.precisaInterpretar }}", 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  code('montarContextoInterprete', 'Montar Contexto do Intérprete', 'montar-contexto-interprete'),
+  `const interpretarComModelo = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.2,
+  config: {
+    name: 'Interpretar com Modelo',
+    onError: 'continueErrorOutput',
+    parameters: {
+      source: 'database',
+      workflowId: { __rl: true, value: 'CONFIGURAR_INTERPRETE', mode: 'id' },
+      mode: 'once',
+      options: { waitForSubWorkflow: true }
+    },
+    position: ${posicao('Interpretar com Modelo')}
+  },
+  output: [{ interpretacao: {} }]
+});`,
+  `const finalizarEntradaWhatsapp = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Finalizar Entrada WhatsApp',
+    onError: 'continueErrorOutput',
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: ${lerBuild('finalizar-whatsapp-entrada')} },
+    position: ${posicao('Finalizar Entrada WhatsApp')}
+  },
+  output: [{ gravar: true }]
+});`,
+  'const temSugestaoWhatsapp = ' + condicao('Tem Sugestão?', '{{ $json.gravar }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  httpGoogle('gravarSugestaoWhatsapp', 'Gravar Sugestão WhatsApp', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  code('montarErroRecepcaoWhatsapp', 'Montar Erro de Recepção', 'montar-erro-whatsapp-entrada'),
+  httpGoogle('registrarErroRecepcaoWhatsapp', 'Registrar Erro de Recepção', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", ''),
+  `const solicitarReentregaWhatsapp = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Solicitar Reentrega',
+    parameters: {
+      respondWith: 'json',
+      responseBody: expr('{{ { ok: false } }}'),
+      options: { responseCode: 503, responseHeaders: { entries: [{ name: 'Cache-Control', value: 'no-store' }] } }
+    },
+    position: ${posicao('Solicitar Reentrega')}
+  },
+  output: [{}]
+});`,
+  code('montarErroInterpretacaoWhatsapp', 'Montar Erro de Interpretação', 'montar-erro-whatsapp-entrada'),
+  httpGoogle('registrarErroInterpretacaoWhatsapp', 'Registrar Erro de Interpretação', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", '')
+].join('\n\n') + `
+
+export default workflow('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsApp', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 90,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none'
+})
+  .add(receberWhatsapp)
+  .to(lerContextoWhatsapp.onError(
+    montarErroRecepcaoWhatsapp.to(registrarErroRecepcaoWhatsapp).to(solicitarReentregaWhatsapp)))
+  .add(lerContextoWhatsapp).to(
+    prepararEntradaWhatsapp.onError(
+      montarErroRecepcaoWhatsapp.to(registrarErroRecepcaoWhatsapp).to(solicitarReentregaWhatsapp)))
+  .add(prepararEntradaWhatsapp).to(deveGravarMensagemWhatsapp)
+  .add(deveGravarMensagemWhatsapp.onTrue(
+    gravarMensagemWhatsapp.onError(
+      montarErroRecepcaoWhatsapp.to(registrarErroRecepcaoWhatsapp).to(solicitarReentregaWhatsapp))))
+  .add(deveGravarMensagemWhatsapp.onFalse(confirmarRecebimentoWhatsapp))
+  .add(gravarMensagemWhatsapp).to(confirmarRecebimentoWhatsapp)
+  .add(confirmarRecebimentoWhatsapp).to(precisaInterpretarWhatsapp)
+  .add(precisaInterpretarWhatsapp.onTrue(
+    montarContextoInterprete.to(
+      interpretarComModelo.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp)))))
+  .add(interpretarComModelo).to(
+    finalizarEntradaWhatsapp.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp)))
+  .add(finalizarEntradaWhatsapp).to(temSugestaoWhatsapp)
+  .add(temSugestaoWhatsapp.onTrue(
+    gravarSugestaoWhatsapp.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp))));
+`;
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api.sdk.js'), api);
 console.log('workflows/pcp-api.sdk.js');
@@ -531,3 +673,5 @@ fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-producao-sync.sdk.js'), syncP
 console.log('workflows/pcp-producao-sync.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-whatsapp-saida.sdk.js'), whatsappSaida);
 console.log('workflows/pcp-whatsapp-saida.sdk.js');
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-whatsapp-entrada.sdk.js'), whatsappEntrada);
+console.log('workflows/pcp-whatsapp-entrada.sdk.js');

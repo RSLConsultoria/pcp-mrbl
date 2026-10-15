@@ -36,6 +36,7 @@ var DESTINOS_ESCRITA = [
   { aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id' },
   { aba: 'OFICINAS', operacao: 'appendOrUpdate', chave: 'ploomes_id' },
   { aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id' },
+  { aba: 'WHATSAPP_MENSAGENS', operacao: 'appendOrUpdate', chave: 'id' },
   { aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id' },
   { aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id' },
   { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id' }

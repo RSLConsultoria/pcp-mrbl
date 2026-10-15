@@ -47,6 +47,20 @@ test('normalizarEventoWhatsapp ignora grupo não cadastrado, fromMe e evento irr
   assert.equal(ctx.normalizarEventoWhatsapp(outro, GRUPOS).motivo, 'EVENTO_IGNORADO');
 });
 
+test('normalizarEventoWhatsapp aceita data em lista e valida a instância configurada', () => {
+  const emLista = evento();
+  emLista.data = [emLista.data];
+  assert.equal(ctx.normalizarEventoWhatsapp(emLista, GRUPOS, { instancia: 'pcp-teste' }).ok, true);
+
+  const outraInstancia = evento();
+  outraInstancia.instance = 'outra-instancia';
+  assert.equal(ctx.normalizarEventoWhatsapp(outraInstancia, GRUPOS, { instancia: 'pcp-teste' }).motivo, 'INSTANCIA_IGNORADA');
+
+  const semId = evento();
+  semId.data.key.id = '';
+  assert.equal(ctx.normalizarEventoWhatsapp(semId, GRUPOS, { instancia: 'pcp-teste' }).motivo, 'MENSAGEM_SEM_ID');
+});
+
 test('normalizarEventoWhatsapp registra conteúdo não textual sem inventar texto', () => {
   const e = evento({ message: { audioMessage: { mimetype: 'audio/ogg' } } });
   const m = ctx.normalizarEventoWhatsapp(e, GRUPOS).mensagem;
@@ -89,6 +103,10 @@ test('resolverDataInterpretada entende ISO, dd/mm, amanhã e rejeita data imposs
   assert.equal(ctx.resolverDataInterpretada('20/10', '2026-10-13T13:20:00.000Z'), '2026-10-20');
   assert.equal(ctx.resolverDataInterpretada('amanhã', '2026-10-13T13:20:00.000Z'), '2026-10-14');
   assert.equal(ctx.resolverDataInterpretada('31/02', '2026-10-13T13:20:00.000Z'), '');
+});
+
+test('data relativa usa o dia de America/Sao_Paulo, inclusive perto da meia-noite', () => {
+  assert.equal(ctx.resolverDataInterpretada('amanhã', '2026-10-14T02:30:00.000Z'), '2026-10-14');
 });
 
 test('validarInterpretacaoWhatsapp aplica schema e confiança baixa vira observação', () => {
@@ -156,6 +174,46 @@ test('entrada associada grava a mensagem e a sugestao, sem criar resposta ao gru
   assert.equal('resposta' in resultado || 'envio' in resultado, false);
 });
 
+test('preparação da entrada entrega ao intérprete somente o contexto necessário', () => {
+  const preparada = ctx.prepararEntradaWhatsapp(evento(), {
+    oficinas: GRUPOS,
+    producao: [{ deal_id: '700001', os: '90001', oficina_id: 'of-1', data_combinada: '2026-10-18', atualizado_em_ploomes: 'v1', em_costura: 'SIM' }],
+    mensagens: []
+  }, { instancia: 'pcp-teste', agora: '2026-10-13T13:21:00.000Z', gerarId: () => 'MSG-INTERNA' });
+
+  assert.equal(preparada.ok, true);
+  assert.equal(preparada.precisaInterpretar, true);
+  assert.deepEqual(limpo(preparada.contextoInterpretacao), {
+    texto: 'A OS 90001 fica pronta amanhã.', quando: '2026-10-13T13:20:00.000Z',
+    dealId: '700001', os: '90001', dataCombinada: '2026-10-18'
+  });
+  assert.equal(JSON.stringify(preparada.contextoInterpretacao).includes('participante'), false);
+  assert.equal(JSON.stringify(preparada.contextoInterpretacao).includes('grupo-ficticio'), false);
+});
+
+test('conclusão inválida preserva a mensagem e não cria sugestão', () => {
+  const preparada = ctx.prepararEntradaWhatsapp(evento(), {
+    oficinas: GRUPOS, producao: [{ deal_id: '700001', os: '90001', oficina_id: 'of-1', atualizado_em_ploomes: 'v1', em_costura: 'SIM' }], mensagens: []
+  }, { agora: '2026-10-13T13:21:00.000Z', gerarId: () => 'MSG-INTERNA' });
+  const concluida = ctx.concluirEntradaWhatsapp(preparada, '{json inválido', { gerarId: () => 'SUG-1' });
+  assert.equal(concluida.erroInterpretacao, 'Interpretação inválida.');
+  assert.equal(concluida.operacoes.length, 1);
+  assert.equal(concluida.operacoes[0].aba, 'WHATSAPP_MENSAGENS');
+});
+
+test('ID da sugestão é determinístico a partir da mensagem recebida', () => {
+  assert.equal(ctx.idSugestaoWhatsapp('WA-R-abc123'), 'WA-S-abc123');
+  assert.equal(ctx.idSugestaoWhatsapp('MSG-1'), 'WA-S-MSG-1');
+});
+
+test('subworkflow do intérprete exige exatamente a propriedade interpretacao', () => {
+  const valor = { tipo: 'PRAZO_CONFIRMADO', valor: '', resumo: 'Prazo confirmado.', evidencia: 'confirmado', confianca: 0.95 };
+  assert.deepEqual(limpo(ctx.respostaDoInterpreteWhatsapp({ interpretacao: valor })), { ok: true, interpretacao: valor });
+  assert.equal(ctx.respostaDoInterpreteWhatsapp({ output: valor }).ok, false);
+  assert.equal(ctx.respostaDoInterpreteWhatsapp(valor).ok, false);
+  assert.equal(ctx.respostaDoInterpreteWhatsapp({ interpretacao: null }).ok, false);
+});
+
 test('entrada duplicada nao grava; ambigua grava sem chamar o interprete', () => {
   const duplicada = ctx.processarEntradaWhatsapp(evento(), { oficinas: GRUPOS, producao: PRODUCOES, mensagens: [{ evolution_id: 'MSG-1' }] }, null, { gerarId: () => 'X' });
   assert.deepEqual(limpo(duplicada), { ok: true, ignorada: true, motivo: 'DUPLICADA', operacoes: [] });
@@ -170,4 +228,11 @@ test('entrada duplicada nao grava; ambigua grava sem chamar o interprete', () =>
   assert.equal(ambigua.operacoes.length, 1);
   assert.equal(ambigua.operacoes[0].linha.associacao, 'SEM_ASSOCIACAO');
   assert.equal(ambigua.operacoes[0].linha.deal_id, '');
+});
+
+test('processar entrada repassa a instância esperada para a normalização', () => {
+  const rejeitada = ctx.processarEntradaWhatsapp(evento(), { oficinas: GRUPOS, producao: PRODUCOES, mensagens: [] }, null, {
+    instancia: 'instancia-diferente', gerarId: () => 'X'
+  });
+  assert.deepEqual(limpo(rejeitada), { ok: true, ignorada: true, motivo: 'INSTANCIA_IGNORADA', operacoes: [] });
 });

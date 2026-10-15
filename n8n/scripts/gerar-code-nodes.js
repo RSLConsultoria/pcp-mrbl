@@ -23,6 +23,10 @@ const NODES = {
   'resultado-envio': 'Resultado Envio',
   'selecionar-whatsapp-saida': 'Selecionar Saida WhatsApp',
   'resultado-whatsapp-saida': 'Resultado WhatsApp',
+  'preparar-whatsapp-entrada': 'Preparar Entrada WhatsApp',
+  'montar-contexto-interprete': 'Montar Contexto do Intérprete',
+  'finalizar-whatsapp-entrada': 'Finalizar Entrada WhatsApp',
+  'montar-erro-whatsapp-entrada': 'Montar Erro WhatsApp Entrada',
   'sincronizar-producao': 'Montar Sincronização',
   'montar-erro-producao': 'Montar Erro Produção'
 };

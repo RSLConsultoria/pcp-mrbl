@@ -517,18 +517,37 @@ function sugestaoProducaoBoard(s) {
   };
 }
 
+function linhasWhatsappUnicas(linhas, preferirDecidida) {
+  var saida = [];
+  var posicoes = {};
+  (linhas || []).forEach(function (linha) {
+    var id = texto(linha && linha.id);
+    if (!id || posicoes[id] === undefined) {
+      if (id) posicoes[id] = saida.length;
+      saida.push(linha);
+      return;
+    }
+    var pos = posicoes[id];
+    if (preferirDecidida && semAcento(saida[pos] && saida[pos].status) === 'PENDENTE' &&
+        semAcento(linha && linha.status) !== 'PENDENTE') {
+      saida[pos] = linha;
+    }
+  });
+  return saida;
+}
+
 function mensagensDaProducao(mensagens, dealId) {
-  return (mensagens || []).filter(function (m) {
+  return linhasWhatsappUnicas((mensagens || []).filter(function (m) {
     return m && texto(m.deal_id) === dealId;
-  }).sort(function (a, b) {
+  }), false).sort(function (a, b) {
     return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
   }).slice(0, 30).map(mensagemProducaoBoard);
 }
 
 function sugestoesDaProducao(sugestoes, dealId) {
-  var lista = (sugestoes || []).filter(function (s) {
+  var lista = linhasWhatsappUnicas((sugestoes || []).filter(function (s) {
     return s && texto(s.deal_id) === dealId;
-  }).sort(function (a, b) {
+  }), true).sort(function (a, b) {
     return texto(a.criado_em) < texto(b.criado_em) ? 1 : texto(a.criado_em) > texto(b.criado_em) ? -1 : 0;
   });
   var pendentes = lista.filter(function (s) { return semAcento(s.status) === 'PENDENTE'; });
@@ -554,9 +573,9 @@ function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
   (oficinas || []).forEach(function (o) {
     if (o && texto(o.ploomes_id)) oficinasPorId[texto(o.ploomes_id)] = o;
   });
-  return (mensagens || []).filter(function (m) {
+  return linhasWhatsappUnicas((mensagens || []).filter(function (m) {
     return m && semAcento(m.direcao) === 'RECEBIDA' && !texto(m.deal_id) && semAcento(m.associacao) === 'SEM_ASSOCIACAO';
-  }).sort(function (a, b) {
+  }), false).sort(function (a, b) {
     return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
   }).slice(0, 30).map(function (m) {
     var base = mensagemProducaoBoard(m);
