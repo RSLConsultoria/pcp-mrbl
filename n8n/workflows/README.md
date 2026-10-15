@@ -21,6 +21,8 @@ As operações da F4 recusam a ação antes da primeira escrita se faltar uma co
 
 O workflow agendado da produção é gerado em `workflows/json/pcp-producao-sync.json` com o nome **PCP MRBL - Sincronizar Produção**. Ele consulta a etapa Costura a cada cinco minutos, faz upsert por `deal_id`, marca como `NAO` as linhas que saíram da etapa e atualiza em `OFICINAS` somente os campos vindos do Ploomes. O arquivo gerado é um workflow novo e inativo; não o importe, ative ou execute antes da homologação autorizada da F4.
 
+O envio da fila é gerado em `workflows/json/pcp-whatsapp-saida.json` com o nome **PCP MRBL - Enviar WhatsApp**. A cada dois minutos ele escolhe somente a pendência mais antiga, grava `ENVIANDO` antes da chamada e usa o contrato instalado da Evolution (`POST /message/sendText/producao`, corpo `number` + `text`). Sucesso grava `evolution_id` e `ENVIADA`; 4xx, 429, 5xx, timeout ou resposta sem ID ficam como `ERRO` para conferência e reenvio humano. Uma tentativa `ENVIANDO` abandonada por mais de dez minutos também vira `ERRO` sem reenvio automático. Execução manual para antes da leitura da fila; o timeout de 90 segundos é menor que o intervalo de 120 segundos, impedindo duas chamadas concorrentes pelo próprio workflow. Dados de execuções com erro não são retidos pelo n8n. O arquivo é novo e inativo; não o importe ou ative antes da homologação autorizada, com grupo fictício exclusivo e deal de produção incluído na allowlist.
+
 ### A. Antes do deploy: credencial e planilha
 
 Nada daqui muda o que a API atual (antiga) faz.

@@ -21,6 +21,8 @@ const NODES = {
   'invalidas-envio': 'Marcar Invalidas',
   'montar-registro': 'Montar Registro',
   'resultado-envio': 'Resultado Envio',
+  'selecionar-whatsapp-saida': 'Selecionar Saida WhatsApp',
+  'resultado-whatsapp-saida': 'Resultado WhatsApp',
   'sincronizar-producao': 'Montar Sincronização',
   'montar-erro-producao': 'Montar Erro Produção'
 };

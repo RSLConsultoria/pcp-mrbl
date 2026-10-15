@@ -9,6 +9,93 @@ var TIPOS_INTERPRETACAO_WHATSAPP = {
   OBSERVACAO: 1
 };
 
+var PREFIXO_TENTATIVA_WHATSAPP = 'Tentativa iniciada em ';
+var ERRO_ENVIO_INCERTO_WHATSAPP = 'Resultado incerto. Confira no WhatsApp antes de confirmar um reenvio.';
+
+function instanteDaTentativaWhatsapp(mensagem) {
+  var erro = texto(mensagem && mensagem.erro);
+  if (erro.indexOf(PREFIXO_TENTATIVA_WHATSAPP) !== 0) return NaN;
+  return Date.parse(erro.slice(PREFIXO_TENTATIVA_WHATSAPP.length));
+}
+
+function ordemFilaWhatsapp(a, b) {
+  var x = Date.parse(texto(a && (a.criado_em || a.quando)));
+  var y = Date.parse(texto(b && (b.criado_em || b.quando)));
+  if (!isFinite(x)) x = Number.MAX_SAFE_INTEGER;
+  if (!isFinite(y)) y = Number.MAX_SAFE_INTEGER;
+  if (x !== y) return x - y;
+  return texto(a && a.id) < texto(b && b.id) ? -1 : 1;
+}
+
+// Escolhe no maximo uma linha por execucao. A fila e marcada como ENVIANDO
+// antes da chamada externa; assim uma nova execucao nao repete a mensagem.
+// Uma tentativa abandonada fica para conferencia humana, sem reenvio automatico.
+function selecionarSaidaWhatsapp(mensagens, agora) {
+  var agoraMs = Date.parse(texto(agora));
+  var limite = agoraMs - 10 * 60000;
+  var travadas = (mensagens || []).filter(function (m) {
+    if (!m || semAcento(m.status_envio) !== 'ENVIANDO') return false;
+    var inicio = instanteDaTentativaWhatsapp(m);
+    return isFinite(agoraMs) && isFinite(inicio) && inicio <= limite;
+  }).sort(ordemFilaWhatsapp);
+  if (travadas.length) {
+    return {
+      enviar: false, id: texto(travadas[0].id), mensagem: travadas[0],
+      linha: { id: texto(travadas[0].id), status_envio: 'ERRO', erro: ERRO_ENVIO_INCERTO_WHATSAPP }
+    };
+  }
+
+  var pendentes = (mensagens || []).filter(function (m) {
+    // Sem ID nao existe chave segura para atualizar a linha; ignora em vez de
+    // correr o risco de casar uma linha vazia na planilha.
+    return m && texto(m.id) && semAcento(m.status_envio) === 'PENDENTE';
+  }).sort(ordemFilaWhatsapp);
+  if (!pendentes.length) return null;
+  var alvo = pendentes[0];
+  var id = texto(alvo.id);
+  var grupo = texto(alvo.grupo_jid);
+  var corpo = typeof alvo.texto === 'string' ? alvo.texto.trim() : '';
+  var erro = '';
+  if (semAcento(alvo.direcao) !== 'ENVIADA') erro = 'A fila de saída aceita somente mensagens enviadas.';
+  else if (!grupo) erro = 'Mensagem sem grupo configurado.';
+  else if (!corpo) erro = 'Mensagem sem texto.';
+  if (erro) return { enviar: false, id: id, mensagem: alvo, linha: { id: id, status_envio: 'ERRO', erro: erro } };
+  return {
+    enviar: true, id: id, grupo_jid: grupo, texto: corpo, mensagem: alvo,
+    linha: { id: id, status_envio: 'ENVIANDO', erro: PREFIXO_TENTATIVA_WHATSAPP + texto(agora) }
+  };
+}
+
+function corpoRespostaWhatsapp(resposta) {
+  var corpo = resposta && resposta.body;
+  if (typeof corpo !== 'string') return corpo || {};
+  try { return JSON.parse(corpo); } catch (e) { return {}; }
+}
+
+function idRespostaWhatsapp(resposta) {
+  var corpo = corpoRespostaWhatsapp(resposta);
+  return texto(corpo && corpo.key && corpo.key.id) || texto(corpo && corpo.id) ||
+    texto(resposta && resposta.key && resposta.key.id) || texto(resposta && resposta.id);
+}
+
+function resultadoSaidaWhatsapp(mensagem, resposta) {
+  mensagem = mensagem || {};
+  resposta = resposta || {};
+  var id = texto(mensagem.id);
+  var status = Number(resposta.statusCode);
+  var evolutionId = idRespostaWhatsapp(resposta);
+  if (status >= 200 && status < 300 && evolutionId) {
+    return { id: id, evolution_id: evolutionId, status_envio: 'ENVIADA', erro: '' };
+  }
+  var erro;
+  if (status >= 200 && status < 300) erro = 'Envio aceito, mas a Evolution respondeu sem ID. Confira no WhatsApp antes de reenviar.';
+  else if (status === 429) erro = 'Limite da Evolution (HTTP 429). Confirme um reenvio mais tarde.';
+  else if (status >= 400 && status < 500) erro = 'A Evolution recusou o envio (HTTP ' + status + ').';
+  else if (status >= 500) erro = 'Resultado incerto na Evolution (HTTP ' + status + '). Confira no WhatsApp antes de reenviar.';
+  else erro = 'Resultado incerto por timeout ou falha de conexão. Confira no WhatsApp antes de reenviar.';
+  return { id: id, evolution_id: '', status_envio: 'ERRO', erro: erro };
+}
+
 function grupoWhatsappAtivo(grupos, jid) {
   var alvo = texto(jid);
   return (grupos || []).filter(function (g) {

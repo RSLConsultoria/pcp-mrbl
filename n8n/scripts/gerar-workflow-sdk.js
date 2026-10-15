@@ -56,6 +56,12 @@ const POS_SYNC_PRODUCAO = {};
   ['Montar Erro Produção', 6, 260], ['Registrar Erro Produção', 7, 260]]
   .forEach(([n, c, y]) => { POS_SYNC_PRODUCAO[n] = [c * DX, y]; });
 
+const POS_WHATSAPP_SAIDA = {};
+[['A cada 2 minutos', 0, 0], ['Execucao Agendada?', 1, 0], ['Ler Fila WhatsApp', 2, 0],
+  ['Selecionar Saida WhatsApp', 3, 0], ['Gravar Tentativa WhatsApp', 4, 0], ['Deve Enviar?', 5, 0],
+  ['Enviar pela Evolution', 6, 0], ['Resultado WhatsApp', 7, 0], ['Gravar Resultado WhatsApp', 8, 0]]
+  .forEach(([n, c, y]) => { POS_WHATSAPP_SAIDA[n] = [c * DX, y]; });
+
 const CRED = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
 const OPCOES_RAW = "options: { cellFormat: 'RAW', handlingExtraData: 'insertInNewColumn' }";
 // Todo Google Sheets do workflow da API tenta de novo (cota/instabilidade da
@@ -458,6 +464,62 @@ const syncProducao = IMPORT_API + [
               .to(nextBatch(loopEscritasProducao))))))));
 `;
 
+posAtual = POS_WHATSAPP_SAIDA;
+RETRY = RETRY_API;
+const whatsappSaida = IMPORT + [
+  `const agendaWhatsapp = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'A cada 2 minutos',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 2 }] } },
+    position: ${posicao('A cada 2 minutos')}
+  },
+  output: [{}]
+});`,
+  'const execucaoAgendadaWhatsapp = ' + condicao('Execucao Agendada?', '{{ $execution.mode }}', 'string', 'equals', "'trigger'") + ';',
+  sheets('lerFilaWhatsapp', 'Ler Fila WhatsApp', 'WHATSAPP_MENSAGENS', ''),
+  code('selecionarWhatsapp', 'Selecionar Saida WhatsApp', 'selecionar-whatsapp-saida'),
+  escrever('gravarTentativaWhatsapp', 'Gravar Tentativa WhatsApp', 'update', 'WHATSAPP_MENSAGENS', ['id']),
+  'const deveEnviarWhatsapp = ' + condicao('Deve Enviar?', "{{ $('Selecionar Saida WhatsApp').first().json.status_envio }}", 'string', 'equals', "'ENVIANDO'") + ';',
+  `const enviarWhatsapp = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.4,
+  config: {
+    name: 'Enviar pela Evolution',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'http://evolution:8080/message/sendText/producao',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr("{{ JSON.stringify({ number: $('Selecionar Saida WhatsApp').first().json.grupo_jid, text: $('Selecionar Saida WhatsApp').first().json.texto }) }}"),
+      options: { response: { response: { fullResponse: true, neverError: true } }, timeout: 30000 }
+    },
+    credentials: { httpHeaderAuth: { id: 'G24I6UDBgu3Z5X0b', name: 'Evolution API' } },
+    position: ${posicao('Enviar pela Evolution')}
+  },
+  output: [{ statusCode: 200, body: { key: { id: 'evolution-ficticio' } } }]
+});`,
+  code('resultadoWhatsapp', 'Resultado WhatsApp', 'resultado-whatsapp-saida'),
+  escrever('gravarResultadoWhatsapp', 'Gravar Resultado WhatsApp', 'update', 'WHATSAPP_MENSAGENS', ['id'])
+].join('\n\n') + `
+
+export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 90,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none'
+})
+  .add(agendaWhatsapp)
+  .to(execucaoAgendadaWhatsapp.onTrue(lerFilaWhatsapp
+    .to(selecionarWhatsapp)
+    .to(gravarTentativaWhatsapp)
+    .to(deveEnviarWhatsapp.onTrue(enviarWhatsapp.to(resultadoWhatsapp).to(gravarResultadoWhatsapp)))));
+`;
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api.sdk.js'), api);
 console.log('workflows/pcp-api.sdk.js');
@@ -467,3 +529,5 @@ fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-envio.sdk.js'), envio);
 console.log('workflows/pcp-envio.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-producao-sync.sdk.js'), syncProducao);
 console.log('workflows/pcp-producao-sync.sdk.js');
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-whatsapp-saida.sdk.js'), whatsappSaida);
+console.log('workflows/pcp-whatsapp-saida.sdk.js');
