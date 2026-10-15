@@ -8,6 +8,59 @@ var TIPOS_PRODUCAO = ['alterar_producao', 'associar_whatsapp', 'aceitar_sugestao
 var MODELOS_WHATSAPP = { COBRANCA_PRAZO: 1, CONFIRMAR_DATA: 1, MATERIAL_ENVIADO: 1 };
 var CAMPO_OFICINA_PLOOMES = 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4';
 var CAMPO_DATA_COMBINADA_PLOOMES = 'deal_E53BDEC3-F829-413D-9421-91D5D7411349';
+var CAMPO_OS_PRODUCAO = 'deal_C06992BA-FF1E-47A8-9330-5242026E691E';
+var CAMPO_INICIO_COSTURA = 'deal_92FBE0E7-E136-41BF-AE47-1E427B178727';
+var CAMPO_LEAD_TIME = 'deal_1B168E7F-E71D-4895-8A37-D7DB6FD3418D';
+var CAMPO_PECAS_CORTE = 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD';
+var CAMPO_DESCRICAO_PECA = 'deal_B53149A5-FDAB-49C4-85E6-46CC6FB3F0B7';
+var CAMPO_REFERENCIA = 'deal_BDA9B977-176D-48FD-9F4D-6E8869D8286D';
+
+function propriedadeDoDeal(deal, campo) {
+  var props = deal && Array.isArray(deal.OtherProperties) ? deal.OtherProperties : [];
+  return props.filter(function (p) { return p && texto(p.FieldKey) === campo; })[0] || null;
+}
+
+function valorPropriedadePloomes(prop) {
+  if (!prop) return '';
+  var candidatos = [prop.StringValue, prop.BigStringValue, prop.ObjectValueName, prop.IntegerValue,
+    prop.DecimalValue, prop.DateTimeValue];
+  for (var i = 0; i < candidatos.length; i++) {
+    if (candidatos[i] !== null && candidatos[i] !== undefined && texto(candidatos[i]) !== '') return candidatos[i];
+  }
+  return '';
+}
+
+function idObjetoPloomes(prop) {
+  if (!prop) return '';
+  var candidatos = [prop.ObjectValueId, prop.IntegerValue, prop.StringValue];
+  for (var i = 0; i < candidatos.length; i++) {
+    if (candidatos[i] !== null && candidatos[i] !== undefined && texto(candidatos[i]) !== '') return texto(candidatos[i]);
+  }
+  return '';
+}
+
+// O contrato de OtherProperties foi conferido no workflow existente do Ploomes:
+// cada campo informa FieldKey e o valor tipado (String/Integer/Decimal/DateTime/Object).
+function normalizarDealProducao(deal) {
+  deal = deal || {};
+  var oficina = propriedadeDoDeal(deal, CAMPO_OFICINA_PLOOMES);
+  var pecas = valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_PECAS_CORTE));
+  var nPecas = numero(pecas);
+  return {
+    dealId: texto(deal.Id),
+    os: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_OS_PRODUCAO))),
+    oficinaId: idObjetoPloomes(oficina),
+    oficina: texto(oficina && oficina.ObjectValueName),
+    inicioCostura: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_INICIO_COSTURA))),
+    dataCombinada: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_DATA_COMBINADA_PLOOMES))),
+    leadTime: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_LEAD_TIME))),
+    pecas: nPecas === null || isNaN(nPecas) ? '' : nPecas,
+    cliente: texto(deal.ContactName),
+    peca: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_DESCRICAO_PECA))) || texto(deal.Title),
+    referencia: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_REFERENCIA))),
+    versao: texto(deal.LastUpdateDate) || texto(deal.UpdatedAt)
+  };
+}
 
 function linhaProducao(p, sincronizadoEm) {
   p = p || {};
@@ -47,7 +100,13 @@ function avaliarPaginaProducao(resposta, pagina, tamanhoPagina) {
     return { ok: false, repetir: false, esperaSegundos: 0, erro: 'Falha ao consultar o Ploomes (HTTP ' + (isFinite(status) ? status : 'sem resposta') + ').' };
   }
   var body = resposta.body && typeof resposta.body === 'object' ? resposta.body : resposta;
-  var itens = Array.isArray(body.value) ? body.value : [];
+  if (!Array.isArray(body.value)) {
+    return {
+      ok: false, repetir: false, esperaSegundos: 0,
+      erro: 'Resposta inválida do Ploomes: lista de negócios ausente.'
+    };
+  }
+  var itens = body.value;
   var tamanho = Number(tamanhoPagina);
   var atual = Number(pagina);
   return {

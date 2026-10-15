@@ -19,6 +19,8 @@ Quando a homologação for autorizada, crie as abas abaixo somente com o cabeça
 
 As operações da F4 recusam a ação antes da primeira escrita se faltar uma coluna usada por ela. O navegador não recebe `grupo_jid`, `participante_jid`, IDs internos da Evolution nem credenciais. O workflow de entrada apenas registra e sugere: ele não pode conter node de envio ou resposta ao grupo.
 
+O workflow agendado da produção é gerado em `workflows/json/pcp-producao-sync.json` com o nome **PCP MRBL - Sincronizar Produção**. Ele consulta a etapa Costura a cada cinco minutos, faz upsert por `deal_id`, marca como `NAO` as linhas que saíram da etapa e atualiza em `OFICINAS` somente os campos vindos do Ploomes. O arquivo gerado é um workflow novo e inativo; não o importe, ative ou execute antes da homologação autorizada da F4.
+
 ### A. Antes do deploy: credencial e planilha
 
 Nada daqui muda o que a API atual (antiga) faz.

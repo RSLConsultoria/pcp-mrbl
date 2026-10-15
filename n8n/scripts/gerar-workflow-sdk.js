@@ -49,6 +49,13 @@ posAtual = POS_ENVIO;
   ['Resultado Envio', 6, 160], ['Gravar Envio', 7, 160]].forEach(([n, c, y]) => { POS_ENVIO[n] = [c * DX, y]; });
 posAtual = POS;
 
+const POS_SYNC_PRODUCAO = {};
+[['A cada 5 minutos', 0, 0], ['Ler Snapshot Produção', 1, 0], ['Buscar Produção no Ploomes', 2, 0],
+  ['Montar Sincronização', 3, 0], ['Tem Escritas?', 4, 0], ['Loop Escritas Produção', 5, 0],
+  ['Repetir Escrita?', 6, 0], ['Gravar Produção', 7, -100], ['Anexar Produção', 7, 100],
+  ['Montar Erro Produção', 6, 260], ['Registrar Erro Produção', 7, 260]]
+  .forEach(([n, c, y]) => { POS_SYNC_PRODUCAO[n] = [c * DX, y]; });
+
 const CRED = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
 const OPCOES_RAW = "options: { cellFormat: 'RAW', handlingExtraData: 'insertInNewColumn' }";
 // Todo Google Sheets do workflow da API tenta de novo (cota/instabilidade da
@@ -361,6 +368,96 @@ export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
   .to(selecionarEnvio.to(buscarContato).to(montarRegistro).to(criarRegistro).to(resultadoEnvio).to(gravarEnvio));
 `;
 
+posAtual = POS_SYNC_PRODUCAO;
+RETRY = RETRY_API;
+const LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS'];
+const urlSnapshotProducao = lote.urlLeitura(DOC, LEITURAS_SYNC_PRODUCAO);
+const syncProducao = IMPORT_API + [
+  `const agendaProducao = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'A cada 5 minutos',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } },
+    position: ${posicao('A cada 5 minutos')}
+  },
+  output: [{}]
+});`,
+  httpGoogle('lerSnapshotProducao', 'Ler Snapshot Produção', 'GET', JSON.stringify(urlSnapshotProducao), false, ERRO_SAIDA),
+  `const buscarProducao = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Buscar Produção no Ploomes',
+    retryOnFail: true,
+    maxTries: 3,
+    waitBetweenTries: 30000,
+    onError: 'continueErrorOutput',
+    parameters: {
+      method: 'GET',
+      url: 'https://api2.ploomes.com/Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$top=100',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      options: {
+        response: { response: { fullResponse: true, neverError: false } },
+        pagination: { pagination: {
+          paginationMode: 'updateAParameterInEachRequest',
+          parameters: { parameters: [{ type: 'qs', name: '$skip', value: expr('{{ $pageCount * 100 }}') }] },
+          paginationCompleteWhen: 'other',
+          completeExpression: expr('{{ !Array.isArray($response.body.value) || $response.body.value.length < 100 }}'),
+          requestInterval: 700
+        } },
+        timeout: 30000
+      }
+    },
+    credentials: { httpHeaderAuth: { id: 'QfXOyNly69oAqwH2', name: 'Header Auth account' } },
+    position: ${posicao('Buscar Produção no Ploomes')}
+  },
+  output: [{ statusCode: 200, body: { value: [] } }]
+});`,
+  code('montarSyncProducao', 'Montar Sincronização', 'sincronizar-producao'),
+  'const temEscritasProducao = ' + condicao('Tem Escritas?', '{{ $json.vazio === true }}', 'boolean', 'false', "''")
+    .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';',
+  `const loopEscritasProducao = splitInBatches({
+  version: 3,
+  config: {
+    name: 'Loop Escritas Produção',
+    parameters: { batchSize: 1, options: {} },
+    position: ${posicao('Loop Escritas Produção')}
+  }
+});`,
+  'const repetirEscritaProducao = ' + condicao('Repetir Escrita?', '{{ $json.repetir }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  httpGoogle('gravarProducao', 'Gravar Produção', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
+  httpGoogle('anexarProducao', 'Anexar Produção', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  code('montarErroProducao', 'Montar Erro Produção', 'montar-erro-producao'),
+  httpGoogle('registrarErroProducao', 'Registrar Erro Produção', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", '')
+].join('\n\n') + `
+
+  export default workflow('pcp-mrbl-producao-sync', 'PCP MRBL - Sincronizar Produção', {
+    timezone: 'America/Sao_Paulo',
+    executionTimeout: 240,
+    saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'all'
+})
+  .add(agendaProducao)
+  .to(lerSnapshotProducao
+    .onError(montarErroProducao.to(registrarErroProducao))
+    .to(buscarProducao
+      .onError(montarErroProducao.to(registrarErroProducao))
+      .to(montarSyncProducao)
+      .to(temEscritasProducao
+        .onTrue(loopEscritasProducao
+          .onEachBatch(repetirEscritaProducao
+            .onTrue(gravarProducao
+              .onError(montarErroProducao.to(registrarErroProducao))
+              .to(nextBatch(loopEscritasProducao)))
+            .onFalse(anexarProducao
+              .onError(montarErroProducao.to(registrarErroProducao))
+              .to(nextBatch(loopEscritasProducao))))))));
+`;
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api.sdk.js'), api);
 console.log('workflows/pcp-api.sdk.js');
@@ -368,3 +465,5 @@ fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api-homolog.sdk.js'), apiHomo
 console.log('workflows/pcp-api-homolog.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-envio.sdk.js'), envio);
 console.log('workflows/pcp-envio.sdk.js');
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-producao-sync.sdk.js'), syncProducao);
+console.log('workflows/pcp-producao-sync.sdk.js');

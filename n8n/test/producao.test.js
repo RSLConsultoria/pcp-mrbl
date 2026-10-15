@@ -21,6 +21,47 @@ test('linhaProducao normaliza o snapshot e usa ALOCAR sem oficina', () => {
   });
 });
 
+test('normalizarDealProducao lê os valores tipados de OtherProperties', () => {
+  const deal = {
+    Id: 700001,
+    Title: 'OS 90001 - CAMISA TESTE',
+    ContactName: 'CLIENTE FICTÍCIO',
+    LastUpdateDate: '2026-10-14T15:20:00Z',
+    OtherProperties: [
+      { FieldKey: 'deal_C06992BA-FF1E-47A8-9330-5242026E691E', StringValue: '90001' },
+      { FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', IntegerValue: 44, ObjectValueName: 'OFICINA FICTÍCIA' },
+      { FieldKey: 'deal_92FBE0E7-E136-41BF-AE47-1E427B178727', DateTimeValue: '2026-10-01T03:00:00Z' },
+      { FieldKey: 'deal_E53BDEC3-F829-413D-9421-91D5D7411349', DateTimeValue: '2026-10-20T03:00:00Z' },
+      { FieldKey: 'deal_1B168E7F-E71D-4895-8A37-D7DB6FD3418D', DateTimeValue: '2026-10-18T03:00:00Z' },
+      { FieldKey: 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD', DecimalValue: 120 },
+      { FieldKey: 'deal_B53149A5-FDAB-49C4-85E6-46CC6FB3F0B7', StringValue: 'CAMISA TESTE' },
+      { FieldKey: 'deal_BDA9B977-176D-48FD-9F4D-6E8869D8286D', StringValue: 'REF-001' }
+    ]
+  };
+  assert.deepEqual(limpo(ctx.normalizarDealProducao(deal)), {
+    dealId: '700001', os: '90001', oficinaId: '44', oficina: 'OFICINA FICTÍCIA',
+    inicioCostura: '2026-10-01T03:00:00Z', dataCombinada: '2026-10-20T03:00:00Z',
+    leadTime: '2026-10-18T03:00:00Z', pecas: 120, cliente: 'CLIENTE FICTÍCIO',
+    peca: 'CAMISA TESTE', referencia: 'REF-001', versao: '2026-10-14T15:20:00Z'
+  });
+});
+
+test('normalizarDealProducao tolera oficina e campos ausentes sem inventar dados', () => {
+  const deal = {
+    Id: '700002', Title: 'PEÇA SEM CADASTRO', OtherProperties: [
+      { FieldKey: 'deal_C06992BA-FF1E-47A8-9330-5242026E691E', IntegerValue: 90002 },
+      { FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', ObjectValueId: 'of-2', ObjectValueName: 'OFICINA B' }
+    ]
+  };
+  const r = limpo(ctx.normalizarDealProducao(deal));
+  assert.equal(r.dealId, '700002');
+  assert.equal(r.os, '90002');
+  assert.equal(r.oficinaId, 'of-2');
+  assert.equal(r.oficina, 'OFICINA B');
+  assert.equal(r.pecas, '');
+  assert.equal(r.peca, 'PEÇA SEM CADASTRO');
+});
+
 test('paginação do Ploomes avança página cheia e para na página vazia', () => {
   const cheia = ctx.avaliarPaginaProducao({ statusCode: 200, body: { value: [prod({ dealId: '1' }), prod({ dealId: '2' })] } }, 3, 2);
   assert.equal(cheia.ok, true);
@@ -37,6 +78,16 @@ test('paginação do Ploomes respeita rate limit sem produzir itens', () => {
   });
   assert.equal(ctx.avaliarPaginaProducao({ statusCode: 500 }, 1, 100).repetir, true);
   assert.equal(ctx.avaliarPaginaProducao({ statusCode: 400 }, 1, 100).repetir, false);
+});
+
+test('paginação rejeita resposta 200 sem a lista de negócios para não encerrar a produção', () => {
+  const r = limpo(ctx.avaliarPaginaProducao({ statusCode: 200, body: { mensagem: 'formato inesperado' } }, 1, 100));
+  assert.deepEqual(r, {
+    ok: false,
+    repetir: false,
+    esperaSegundos: 0,
+    erro: 'Resposta inválida do Ploomes: lista de negócios ausente.'
+  });
 });
 
 test('sincronização faz upsert, encerra ausentes e preserva campos humanos das oficinas', () => {

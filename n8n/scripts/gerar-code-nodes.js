@@ -20,7 +20,9 @@ const NODES = {
   'selecionar-envio': 'Selecionar Envio',
   'invalidas-envio': 'Marcar Invalidas',
   'montar-registro': 'Montar Registro',
-  'resultado-envio': 'Resultado Envio'
+  'resultado-envio': 'Resultado Envio',
+  'sincronizar-producao': 'Montar Sincronização',
+  'montar-erro-producao': 'Montar Erro Produção'
 };
 
 const corpo = ARQUIVOS
