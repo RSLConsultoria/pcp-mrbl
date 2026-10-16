@@ -64,7 +64,12 @@ test('agendamento pega só as vencidas sem sugestão e marca ERRO depois de 5 te
   const r = limpo(ctx.selecionarInterpretacoesPendentesWhatsapp({
     producao: PRODUCAO, mensagens, sugestoes: [{ id: 'WA-S-COM-SUGESTAO', mensagem_id: 'COM-SUGESTAO', status: 'PENDENTE' }]
   }, AGORA));
-  assert.deepEqual(r.interpretar, [{ mensagemId: 'VENCIDA', dealId: '700001' }, { mensagemId: 'ASSOCIADA-SEM-TENTATIVA', dealId: '700001' }]);
+  // O agendamento reserva (conta) a tentativa antes de disparar: o Interpretar não conta de novo.
+  assert.deepEqual(r.interpretar, [{ mensagemId: 'VENCIDA', dealId: '700001', reservada: true }, { mensagemId: 'ASSOCIADA-SEM-TENTATIVA', dealId: '700001', reservada: true }]);
+  assert.deepEqual(r.reservas, [
+    { id: 'VENCIDA', interpretacao_status: 'PENDENTE', interpretacao_tentativas: 2, interpretacao_proxima: mais(10) },
+    { id: 'ASSOCIADA-SEM-TENTATIVA', interpretacao_status: 'PENDENTE', interpretacao_tentativas: 1, interpretacao_proxima: mais(10) }
+  ]);
   assert.deepEqual(r.erros, [{ id: 'ESGOTADA', interpretacao_status: 'ERRO', interpretacao_proxima: '' }]);
 });
 
@@ -96,4 +101,35 @@ test('associação manual marca a mensagem como a interpretar, para o agendament
     id: 'MSG-SEM', deal_id: '700001', os: '90001', oficina_id: 'of-1', associacao: 'MANUAL',
     interpretacao_status: 'PENDENTE', interpretacao_tentativas: 0, interpretacao_proxima: mais(10)
   });
+});
+
+test('mensagem que o Interpretar nunca chega a rodar ainda vira ERRO: cada rodada do agendamento conta uma tentativa', () => {
+  let mensagem = recebida({ interpretacao_tentativas: 0, interpretacao_proxima: '' });
+  let agora = Date.parse(AGORA);
+  for (let rodada = 1; rodada <= 5; rodada++) {
+    const r = ctx.selecionarInterpretacoesPendentesWhatsapp({ producao: PRODUCAO, mensagens: [mensagem], sugestoes: [] }, new Date(agora).toISOString());
+    assert.equal(r.interpretar.length, 1, 'rodada ' + rodada);
+    mensagem = Object.assign({}, mensagem, r.reservas[0]);   // gravado; o Interpretar falha sem gravar nada
+    agora += 15 * 60000;
+  }
+  const fim = limpo(ctx.selecionarInterpretacoesPendentesWhatsapp({ producao: PRODUCAO, mensagens: [mensagem], sugestoes: [] }, new Date(agora).toISOString()));
+  assert.deepEqual(fim.interpretar, []);
+  assert.deepEqual(fim.erros, [{ id: 'WA-R-1', interpretacao_status: 'ERRO', interpretacao_proxima: '' }]);
+});
+
+test('pedido já reservado pelo agendamento não conta em dobro no Interpretar WhatsApp', () => {
+  const dados = { producao: PRODUCAO, mensagens: [recebida({ interpretacao_tentativas: 5 })], sugestoes: [], faltantes: [], ganhas: [] };
+  const r = limpo(ctx.prepararInterpretacaoManualWhatsapp(dados, { mensagemId: 'WA-R-1', dealId: '700001', reservada: true }, '2026-10-13', AGORA));
+  assert.equal(r.interpretar, true);
+  assert.deepEqual(r.reserva, { id: 'WA-R-1', interpretacao_status: 'PENDENTE', interpretacao_tentativas: 5, interpretacao_proxima: mais(10) });
+  const passou = { producao: PRODUCAO, mensagens: [recebida({ interpretacao_tentativas: 6 })], sugestoes: [], faltantes: [], ganhas: [] };
+  assert.equal(ctx.prepararInterpretacaoManualWhatsapp(passou, { mensagemId: 'WA-R-1', dealId: '700001', reservada: true }, '2026-10-13', AGORA).motivo, 'LIMITE_TENTATIVAS');
+});
+
+test('linhas físicas repetidas: vale a primeira, deduplicada antes de filtrar as pendentes', () => {
+  // A gravação atualiza a primeira linha com o id; a cópia antiga não pode reabrir a mensagem.
+  const mensagens = [recebida({ id: 'DUP', interpretacao_status: 'ERRO', interpretacao_tentativas: 5 }), recebida({ id: 'DUP' })];
+  const r = ctx.selecionarInterpretacoesPendentesWhatsapp({ producao: PRODUCAO, mensagens, sugestoes: [] }, AGORA);
+  assert.equal(r.interpretar.length, 0);
+  assert.equal(r.erros.length, 0);
 });

@@ -158,3 +158,12 @@ test('Montar Pedido de Interpretação manda só mensagemId e dealId', () => {
   });
   assert.deepEqual(r, [{ json: { mensagemId: 'MSG-SEM', dealId: '700001' } }]);
 });
+
+test('Preparar Interpretação repassa reservada: pedido do agendamento não conta a tentativa de novo', () => {
+  const [normal] = rodarAdaptador('preparar-interpretacao-manual', { 'Receber Pedido de Interpretação': [PEDIDO], $input: [leitura()] });
+  const [reservado] = rodarAdaptador('preparar-interpretacao-manual', {
+    'Receber Pedido de Interpretação': [Object.assign({ reservada: true }, PEDIDO)], $input: [leitura()]
+  });
+  assert.match(JSON.stringify(normal.json.body), /"PENDENTE",1,/);
+  assert.match(JSON.stringify(reservado.json.body), /"PENDENTE",0,/);
+});

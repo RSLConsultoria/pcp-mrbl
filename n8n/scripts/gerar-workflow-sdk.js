@@ -798,11 +798,12 @@ export default workflow('pcp-mrbl-interpretar-whatsapp', 'PCP MRBL - Interpretar
 `;
 
 // Novas tentativas do interprete (16/10): a cada 15 min marca ERRO definitivo nas
-// mensagens que esgotaram as 5 tentativas e manda as vencidas, uma a uma, ao
-// Interpretar WhatsApp (o mesmo caminho da associacao manual).
+// mensagens que esgotaram as 5 tentativas, reserva (conta) a tentativa das vencidas
+// e so entao as manda, uma a uma, ao Interpretar WhatsApp (mesmo caminho da
+// associacao manual), que nao conta de novo (reservada: true).
 const POS_RETENTAR = {};
-[['A cada 15 minutos', 0, 0], ['Ler Interpretações Pendentes', 1, 0], ['Selecionar Interpretações', 2, -100],
-  ['Interpretar de Novo', 3, -100], ['Marcar Erros Definitivos', 2, 100], ['Gravar Erros Definitivos', 3, 100]]
+[['A cada 15 minutos', 0, 0], ['Ler Interpretações Pendentes', 1, 0], ['Marcar Tentativas', 2, 0],
+  ['Gravar Tentativas', 3, 0], ['Selecionar Interpretações', 4, 0], ['Interpretar de Novo', 5, 0]]
   .forEach(([n, c, y]) => { POS_RETENTAR[n] = [c * DX, y]; });
 posAtual = POS_RETENTAR;
 RETRY = RETRY_API;
@@ -820,8 +821,9 @@ const retentarInterpretacao = IMPORT + [
   httpGoogle('lerPendentesInterpretacao', 'Ler Interpretações Pendentes', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_RETENTAR_INTERPRETACAO)), false, unico),
   code('selecionarInterpretacoes', 'Selecionar Interpretações', 'selecionar-interpretacoes-pendentes'),
   executarWorkflow('interpretarDeNovo', 'Interpretar de Novo', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, true, 'continueRegularOutput', 'each'),
-  code('marcarErrosInterpretacao', 'Marcar Erros Definitivos', 'marcar-erros-interpretacao'),
-  httpGoogle('gravarErrosInterpretacao', 'Gravar Erros Definitivos', 'POST', "expr('{{ $json.url }}')", true, "onError: 'continueRegularOutput',\n    ")
+  code('marcarTentativas', 'Marcar Tentativas', 'marcar-tentativas-interpretacao'),
+  // batchUpdate idempotente, com retry; se falhar, o workflow para sem disparar.
+  httpGoogle('gravarTentativas', 'Gravar Tentativas', 'POST', "expr('{{ $json.url }}')", true)
 ].join('\n\n') + `
 
 export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar Interpretação', {
@@ -832,9 +834,10 @@ export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar 
 })
   .add(agendaRetentar)
   .to(lerPendentesInterpretacao)
-  .to(marcarErrosInterpretacao.to(gravarErrosInterpretacao))
-  .add(lerPendentesInterpretacao)
-  .to(selecionarInterpretacoes.to(interpretarDeNovo));
+  .to(marcarTentativas)
+  .to(gravarTentativas)
+  .to(selecionarInterpretacoes)
+  .to(interpretarDeNovo);
 `;
 
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });

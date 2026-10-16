@@ -11,7 +11,8 @@ var preparadaManual = prepararInterpretacaoManualWhatsapp({
   ganhas: planilhaInterpretacao.linhas['CAIXAS GANHAS']
 }, {
   mensagemId: texto(pedidoInterpretacao.mensagemId),
-  dealId: texto(pedidoInterpretacao.dealId)
+  dealId: texto(pedidoInterpretacao.dealId),
+  reservada: pedidoInterpretacao.reservada === true
 }, dataISOEmSaoPaulo(new Date().toISOString()), new Date().toISOString());
 if (!preparadaManual.ok) throw new Error(preparadaManual.erro || 'Falha ao preparar a interpretação.');
 if (!preparadaManual.interpretar) return [{ json: { interpretar: false, motivo: preparadaManual.motivo } }];
