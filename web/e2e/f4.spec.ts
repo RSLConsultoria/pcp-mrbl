@@ -126,7 +126,8 @@ test('revisa e coloca uma cobrança padrão na fila', async ({ page }) => {
   await mensagem.fill('*OS 90002* Pode confirmar o prazo atualizado?');
   await painel.getByRole('button', { name: 'Colocar na fila' }).click();
   await expect.poll(() => acoes.at(-1)).toMatchObject({
-    tipo: 'enviar_whatsapp', dealId: '710002', modelo: 'COBRANCA_PRAZO', texto: '*OS 90002* Pode confirmar o prazo atualizado?'
+    tipo: 'enviar_whatsapp', dealId: '710002', modelo: 'COBRANCA_PRAZO', texto: '*OS 90002* Pode confirmar o prazo atualizado?',
+    chave: expect.stringMatching(/^[A-Za-z0-9-]{8,64}$/)
   });
   await expect(painel.locator('.producao-conversa p').filter({ hasText: '*OS 90002* Pode confirmar o prazo atualizado?' })).toBeVisible();
 });
@@ -192,4 +193,18 @@ test('reenvio exige confirmação e mantém a tentativa com erro', async ({ page
   page.once('dialog', (dialog) => dialog.accept());
   await painel.getByRole('button', { name: 'Reenviar' }).click();
   await expect(painel.getByText('*OS 90002* Confirma a entrega?', { exact: true })).toHaveCount(2);
+  await expect(painel.getByRole('button', { name: 'Reenviar' })).toHaveCount(0);
+});
+
+test('colocar na fila fica desabilitado enquanto o envio está em andamento', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes, 1_500);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  const botao = painel.getByRole('button', { name: 'Colocar na fila' });
+  await botao.click();
+  await expect(botao).toBeDisabled();
+  await botao.click({ force: true });
+  await expect(botao).toBeEnabled({ timeout: 5_000 });
+  expect(acoes.filter((a) => a.tipo === 'enviar_whatsapp')).toHaveLength(1);
 });

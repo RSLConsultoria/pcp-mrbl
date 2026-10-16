@@ -256,7 +256,8 @@ O navegador nunca chama a Evolution. Uma ação autenticada cria uma linha `PEND
 - falha conhecida antes do envio pode ser repetida com limite;
 - timeout depois de uma tentativa fica para conferência manual, evitando mensagem duplicada;
 - o botão de reenviar mostra a mensagem anterior e exige confirmação;
-- enviar duas vezes a mesma ação com a mesma chave não cria duas linhas.
+- enviar duas vezes a mesma ação com a mesma chave não cria duas linhas: o site gera uma `chave` por clique (`crypto.randomUUID`), guardada na fila junto com a ação, e o servidor usa `id` = `WA-E-<chave>`; se a linha já existe na mesma OS, responde sucesso sem gravar de novo (sem `chave`, o id continua aleatório);
+- cada tentativa com erro aceita um único reenvio: o reenvio tem `id` = `WA-RE-<id da original>`, e a existência dessa linha é o vínculo com a original (sem coluna nova). Um segundo reenvio da mesma original dá 409, e o board marca a original com `reenviada`, escondendo o botão.
 
 O aviso de material enviado entra na mesma fila depois que `enviar_oficina` grava a ação. Se o WhatsApp falhar, o envio físico continua registrado e o app mostra a pendência; a ação de estoque não é desfeita.
 
@@ -304,7 +305,7 @@ Novos tipos em `POST pcp-acao`:
 | `associar_whatsapp` | Liga uma mensagem sem associação a uma OS do mesmo grupo |
 | `aceitar_sugestao_whatsapp` | Aplica a sugestão no Ploomes/histórico |
 | `ignorar_sugestao_whatsapp` | Encerra a sugestão sem efeito externo |
-| `reenviar_whatsapp` | Cria nova tentativa após confirmação humana |
+| `reenviar_whatsapp` | Cria nova tentativa após confirmação humana (uma por mensagem original) |
 
 Todas exigem sessão. Escritas no Ploomes e envios reais exigem deal permitido. O servidor recalcula modelos, valida grupo/oficina e não confia em IDs ou textos auxiliares enviados pelo navegador.
 

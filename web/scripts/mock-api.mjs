@@ -690,6 +690,10 @@ function enviarWhatsapp(c, usuario) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  // como o servidor: o id sai da chave do clique e a mesma ação de novo não cria segunda linha
+  if (c.chave !== undefined && !/^[A-Za-z0-9-]{8,64}$/.test(String(c.chave))) throw bad('Chave de envio inválida.');
+  const mensagemId = c.chave ? `WA-E-${c.chave}` : `MSG-FILA-${Date.now()}`;
+  if (c.chave && p.mensagens.some((m) => m.id === mensagemId)) return { ok: true, versao: p.versao, historico: null, historicos: [], mensagemId };
   conferirVersao(p.versao, c.versao, 'esta OS');
   const oficina = estado.oficinas.find((o) => o.ploomesId === p.oficinaId);
   if (!oficina?.grupoConfigurado) throw new Erro(409, 'Configure o grupo desta oficina na aba OFICINAS.');
@@ -697,7 +701,6 @@ function enviarWhatsapp(c, usuario) {
   const texto = String(c.texto ?? '').trim();
   if (!texto || texto.length > 1500) throw bad('Mensagem com até 1500 caracteres.');
   if (!new RegExp(`(^|\\D)${p.os}(\\D|$)`).test(texto)) throw bad(`A mensagem precisa identificar a OS ${p.os}.`);
-  const mensagemId = `MSG-FILA-${Date.now()}`;
   p.mensagens.unshift({ id: mensagemId, quando: agoraIso(), participanteNome: usuario, direcao: 'ENVIADA', texto, associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO' });
   const h = historicoProducao(p, usuario, `${usuario} enfileirou uma mensagem no WhatsApp para ${oficina.grupoNome || oficina.nome}.`);
   return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };
@@ -714,8 +717,11 @@ function reenviarWhatsapp(c, usuario) {
   if (original.direcao !== 'ENVIADA' || original.statusEnvio !== 'ERRO') throw new Erro(409, 'Somente uma tentativa com erro pode ser reenviada.');
   const oficina = estado.oficinas.find((o) => o.ploomesId === p.oficinaId);
   if (!oficina?.grupoConfigurado) throw new Erro(409, 'Configure o grupo desta oficina na aba OFICINAS.');
-  const mensagemId = `MSG-FILA-${Date.now()}`;
-  p.mensagens.unshift({ ...original, id: mensagemId, quando: agoraIso(), participanteNome: usuario, statusEnvio: 'PENDENTE' });
+  // um reenvio por mensagem: o id sai da original
+  const mensagemId = `WA-RE-${original.id}`;
+  if (original.reenviada || p.mensagens.some((m) => m.id === mensagemId)) throw new Erro(409, 'Esta mensagem já foi reenviada. Confira a nova tentativa na conversa.');
+  original.reenviada = true;
+  p.mensagens.unshift({ ...original, id: mensagemId, quando: agoraIso(), participanteNome: usuario, statusEnvio: 'PENDENTE', reenviada: false });
   const h = historicoProducao(p, usuario, `${usuario} confirmou o reenvio de uma mensagem do WhatsApp.`);
   return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };
 }

@@ -105,6 +105,7 @@ export interface MensagemProducao {
   associacao: 'CITACAO' | 'OS_NO_TEXTO' | 'ULTIMA_COBRANCA' | 'MANUAL' | 'SEM_ASSOCIACAO';
   statusEnvio: '' | 'PENDENTE' | 'ENVIANDO' | 'ENVIADA' | 'ERRO';
   tipoConteudo: 'TEXTO' | 'NAO_TEXTUAL';
+  reenviada?: boolean; // tentativa com erro que já ganhou um reenvio (só um por mensagem)
 }
 
 export interface MensagemWhatsappSemAssociacao extends MensagemProducao {
@@ -197,7 +198,9 @@ export type Acao =
   | { tipo: 'aceitar_sugestao_whatsapp'; dealId: string; sugestaoId: string; versao: string; motivo: string }
   | { tipo: 'ignorar_sugestao_whatsapp'; dealId: string; sugestaoId: string; versao: string }
   | { tipo: 'associar_whatsapp'; dealId: string; mensagemId: string; versao: string }
-  | { tipo: 'enviar_whatsapp'; dealId: string; versao: string; modelo: 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO'; texto: string }
+  // chave: gerada no clique e guardada na fila; o servidor tira dela o id da mensagem, e a
+  // mesma ação enviada de novo não cria segunda linha.
+  | { tipo: 'enviar_whatsapp'; dealId: string; versao: string; modelo: 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO'; texto: string; chave: string }
   | { tipo: 'reenviar_whatsapp'; dealId: string; mensagemId: string; versao: string; confirmou: true }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
 

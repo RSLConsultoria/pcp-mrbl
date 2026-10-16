@@ -49,7 +49,7 @@ describe('criarFila', () => {
   it('produção: qualquer ação da OS segue a versão trocada por uma alteração anterior', async () => {
     const { fila, chamadas } = montar();
     void fila.adicionar({ tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-1', dataCombinada: '2026-10-20', motivo: 'Teste.' });
-    void fila.adicionar({ tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Teste.' });
+    void fila.adicionar({ tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Teste.', chave: 'c-0001-teste' });
     void fila.adicionar({ tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 's1', versao: 'v1' });
     chamadas[0].ok(resposta('v2'));
     await tique();

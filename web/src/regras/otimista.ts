@@ -178,10 +178,13 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
     case 'reenviar_whatsapp':
       return comProducao(board, acao.dealId, (p) => {
         const original = p.mensagens.find((m) => m.id === acao.mensagemId && m.statusEnvio === 'ERRO');
-        if (!original) return p;
+        if (!original || original.reenviada) return p; // o servidor aceita um reenvio por mensagem
         return {
           ...p,
-          mensagens: [{ ...original, id: `novo:whatsapp:${ctx.n}`, quando: `${ctx.hoje}T12:00:00.000Z`, statusEnvio: 'PENDENTE' as const }, ...p.mensagens]
+          mensagens: [
+            { ...original, id: `novo:whatsapp:${ctx.n}`, quando: `${ctx.hoje}T12:00:00.000Z`, statusEnvio: 'PENDENTE' as const, reenviada: false },
+            ...p.mensagens.map((m) => (m.id === original.id ? { ...m, reenviada: true } : m))
+          ]
         };
       });
     case 'nova_demanda': {

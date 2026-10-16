@@ -59,7 +59,7 @@ describe('aplicarOtimista: producao e sugestoes', () => {
 
   it('mostra imediatamente a mensagem enfileirada como pendente', () => {
     const b = aplicar(quadro({ producao: [prod()] }), {
-      tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nQual a previsão?'
+      tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nQual a previsão?', chave: 'c-0001-teste'
     });
     expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: '*OS 90001*\nQual a previsão?', statusEnvio: 'PENDENTE' });
   });
@@ -82,6 +82,10 @@ describe('aplicarOtimista: producao e sugestoes', () => {
     expect(b.producao?.[0].mensagens).toHaveLength(2);
     expect(b.producao?.[0].mensagens[0]).toMatchObject({ statusEnvio: 'PENDENTE', texto: '*OS 90001* teste' });
     expect(b.producao?.[0].mensagens[1].statusEnvio).toBe('ERRO');
+    expect(b.producao?.[0].mensagens[1].reenviada).toBe(true);
+    // a tentativa com erro já reenviada não gera outra
+    const c = aplicar(b, { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true });
+    expect(c.producao?.[0].mensagens).toHaveLength(2);
   });
 });
 

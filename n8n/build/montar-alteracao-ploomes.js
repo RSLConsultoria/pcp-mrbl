@@ -1714,6 +1714,20 @@ var CAMPO_PECAS_CORTE = 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD';
 var CAMPO_DESCRICAO_PECA = 'deal_B53149A5-FDAB-49C4-85E6-46CC6FB3F0B7';
 var CAMPO_REFERENCIA = 'deal_BDA9B977-176D-48FD-9F4D-6E8869D8286D';
 
+// Chave do clique no site (crypto.randomUUID): o reenvio da mesma acao pela
+// fila manda a mesma chave, e o id da mensagem sai dela de forma deterministica.
+var CHAVE_ENVIO_WHATSAPP = /^[A-Za-z0-9-]{8,64}$/;
+
+function idEnvioWhatsapp(chave) {
+  return 'WA-E-' + texto(chave);
+}
+
+// Um reenvio por mensagem original: o id do reenvio sai do id da original, e a
+// linha existente com esse id e o vinculo (sem coluna nova na planilha).
+function idReenvioWhatsapp(idOriginal) {
+  return 'WA-RE-' + texto(idOriginal);
+}
+
 function propriedadeDoDeal(deal, campo) {
   var props = deal && Array.isArray(deal.OtherProperties) ? deal.OtherProperties : [];
   return props.filter(function (p) { return p && texto(p.FieldKey) === campo; })[0] || null;
@@ -1976,6 +1990,7 @@ function validarAcaoProducaoBasica(corpo, permitidos) {
     if (!MODELOS_WHATSAPP[semAcento(corpo.modelo)]) return erroAcao(400, 'Modelo de mensagem inválido.');
     var mensagem = typeof corpo.texto === 'string' ? corpo.texto.trim() : '';
     if (!mensagem || mensagem.length > 1500) return erroAcao(400, 'Mensagem com até 1500 caracteres.');
+    if (corpo.chave !== undefined && !CHAVE_ENVIO_WHATSAPP.test(texto(corpo.chave))) return erroAcao(400, 'Chave de envio inválida.');
   } else if (corpo.tipo === 'associar_whatsapp') {
     if (!texto(corpo.mensagemId)) return erroAcao(400, 'Informe a mensagem do WhatsApp.');
   } else if (corpo.tipo === 'reenviar_whatsapp') {
@@ -2023,6 +2038,9 @@ function processarReenvioWhatsapp(corpo, linhas, ctx) {
   if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   var original = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(corpo.mensagemId); })[0];
   if (!original || texto(original.deal_id) !== texto(producao.deal_id)) return erroAcao(404, 'Mensagem do WhatsApp não encontrada para esta OS.');
+  var id = idReenvioWhatsapp(original.id);
+  var jaReenviada = (linhas.whatsappMensagens || []).some(function (m) { return m && texto(m.id) === id; });
+  if (jaReenviada) return erroAcao(409, 'Esta mensagem já foi reenviada. Confira a nova tentativa na conversa.');
   if (semAcento(original.direcao) !== 'ENVIADA' || semAcento(original.status_envio) !== 'ERRO') {
     return erroAcao(409, 'Somente uma tentativa com erro pode ser reenviada.');
   }
@@ -2033,7 +2051,6 @@ function processarReenvioWhatsapp(corpo, linhas, ctx) {
   if (!oficina || !texto(oficina.grupo_jid) || texto(oficina.grupo_jid) !== texto(original.grupo_jid)) {
     return erroAcao(409, 'O grupo da oficina mudou. Prepare uma nova mensagem.');
   }
-  var id = ctx.gerarId();
   var linha = {
     id: id, evolution_id: '', quando: ctx.agora, grupo_jid: texto(original.grupo_jid), grupo_nome: texto(original.grupo_nome),
     participante_jid: '', participante_nome: ctx.usuario, direcao: 'ENVIADA', tipo: semAcento(original.tipo),
@@ -2052,6 +2069,18 @@ function processarReenvioWhatsapp(corpo, linhas, ctx) {
 function processarEnvioWhatsapp(corpo, linhas, ctx) {
   var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  var temChave = texto(corpo.chave) !== '';
+  var id = temChave ? idEnvioWhatsapp(corpo.chave) : ctx.gerarId();
+  if (temChave) {
+    var existente = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === id; })[0];
+    if (existente) {
+      // A mesma acao chegou de novo (reenvio da fila): sucesso sem nova linha.
+      if (texto(existente.deal_id) === texto(producao.deal_id) && semAcento(existente.direcao) === 'ENVIADA') {
+        return { ok: true, idempotente: true, versao: texto(producao.atualizado_em_ploomes), mensagemId: id, ploomes: null, operacoes: [], historicos: [] };
+      }
+      return erroAcao(409, 'Esta chave de envio já foi usada em outra mensagem.');
+    }
+  }
   if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   var oficinaId = texto(producao.oficina_id);
   if (!oficinaId) return erroAcao(409, 'Aloque uma oficina antes de enviar a mensagem.');
@@ -2064,7 +2093,6 @@ function processarEnvioWhatsapp(corpo, linhas, ctx) {
   var mensagem = corpo.texto.trim();
   if (!osRegex.test(mensagem)) return erroAcao(400, 'A mensagem precisa identificar a OS ' + os + '.');
   var agora = ctx.agora;
-  var id = ctx.gerarId();
   var modelo = semAcento(corpo.modelo);
   var linha = {
     id: id, evolution_id: '', quando: agora, grupo_jid: texto(oficina.grupo_jid), grupo_nome: texto(oficina.grupo_nome),
@@ -2191,8 +2219,9 @@ function linhaAtivaProducao(valor) {
   return ativo === '' || !!VALORES_ATIVO_PRODUCAO[ativo];
 }
 
-function mensagemProducaoBoard(m) {
+function mensagemProducaoBoard(m, reenviadas) {
   return {
+    reenviada: !!(reenviadas && reenviadas[idReenvioWhatsapp(m.id)]),
     id: texto(m.id),
     quando: texto(m.quando),
     participanteNome: texto(m.participante_nome),
@@ -2240,11 +2269,14 @@ function linhasWhatsappUnicas(linhas, preferirDecidida) {
 }
 
 function mensagensDaProducao(mensagens, dealId) {
-  return linhasWhatsappUnicas((mensagens || []).filter(function (m) {
+  var daOs = (mensagens || []).filter(function (m) {
     return m && texto(m.deal_id) === dealId;
-  }), false).sort(function (a, b) {
+  });
+  var ids = {};
+  daOs.forEach(function (m) { ids[texto(m.id)] = 1; });
+  return linhasWhatsappUnicas(daOs, false).sort(function (a, b) {
     return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
-  }).slice(0, 30).map(mensagemProducaoBoard);
+  }).slice(0, 30).map(function (m) { return mensagemProducaoBoard(m, ids); });
 }
 
 function sugestoesDaProducao(sugestoes, dealId) {
@@ -2282,6 +2314,7 @@ function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
     return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
   }).slice(0, 30).map(function (m) {
     var base = mensagemProducaoBoard(m);
+    delete base.reenviada;
     var oficinaId = texto(m.oficina_id);
     var oficina = oficinasPorId[oficinaId] || {};
     base.oficinaId = oficinaId;

@@ -5,6 +5,13 @@ export type StatusPrazoProducao = 'ATRASADO' | 'HOJE' | 'PROXIMO' | 'NO_PRAZO' |
 export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean }
 export type ModeloMensagemProducao = 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO';
 
+// Chave de um clique em "Colocar na fila" (o servidor aceita [A-Za-z0-9-]{8,64}).
+export function chaveEnvioWhatsapp(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function prazoProducao(p: Pick<Producao, 'dataCombinada' | 'leadTime'>): { data: string; origem: OrigemPrazo } {
   if (p.dataCombinada) return { data: p.dataCombinada, origem: 'COMBINADA' };
   if (p.leadTime) return { data: p.leadTime, origem: 'LEAD_TIME' };

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
-import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -46,6 +46,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
   const [erroMensagem, setErroMensagem] = useState('');
   const [modelo, setModelo] = useState<ModeloMensagemProducao>('COBRANCA_PRAZO');
   const [mensagem, setMensagem] = useState(() => modeloMensagemProducao('COBRANCA_PRAZO', item, hojeIso));
+  const [enfileirando, setEnfileirando] = useState(false);
   const editavel = !board.dealsProducaoEditaveis?.length || board.dealsProducaoEditaveis.includes(item.dealId);
   const oficina = board.oficinas?.find((o) => o.ploomesId === item.oficinaId);
   const salvar = () => {
@@ -68,8 +69,12 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
   const enfileirarMensagem = () => {
     const texto = mensagem.trim();
     if (!texto || texto.length > 1500) return setErroMensagem('Escreva uma mensagem com até 1500 caracteres.');
+    if (enfileirando) return;
     setErroMensagem('');
-    void executar({ tipo: 'enviar_whatsapp', dealId: item.dealId, versao: item.versao, modelo, texto }, 'Mensagem colocada na fila do WhatsApp');
+    setEnfileirando(true);
+    // Uma chave por clique: a fila guarda a ação com ela e o servidor não duplica a mensagem.
+    void executar({ tipo: 'enviar_whatsapp', dealId: item.dealId, versao: item.versao, modelo, texto, chave: chaveEnvioWhatsapp() }, 'Mensagem colocada na fila do WhatsApp')
+      .finally(() => setEnfileirando(false));
   };
   const reenviarMensagem = (mensagemId: string, texto: string) => {
     if (!window.confirm(`Reenviar esta mensagem?\n\n${texto}`)) return;
@@ -130,7 +135,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               <label>Mensagem<textarea rows={5} maxLength={1500} value={mensagem} disabled={!editavel} onChange={(e) => setMensagem(e.target.value)} /></label>
               <small>Será enviada para {oficina.grupoNome || oficina.nome}. O texto pode ser revisado antes de entrar na fila.</small>
               {erroMensagem && <p className="campo__erro" role="alert">{erroMensagem}</p>}
-              {editavel && <button type="button" className="botao botao--signal" onClick={enfileirarMensagem}>Colocar na fila</button>}
+              {editavel && <button type="button" className="botao botao--signal" disabled={enfileirando} onClick={enfileirarMensagem}>Colocar na fila</button>}
             </>}
         </section>
         <section className="producao-secao">
@@ -154,7 +159,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               <p>{m.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : m.texto}</p>
               {m.associacao === 'SEM_ASSOCIACAO' && <small>Mensagem ainda sem associação</small>}
               {m.statusEnvio === 'ERRO' && <small>Falha no envio.</small>}
-              {m.statusEnvio === 'ERRO' && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>}
+              {m.statusEnvio === 'ERRO' && !m.reenviada && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>}
             </li>)}</ol>}
         </section>
         <section className="producao-secao"><h3>Histórico</h3>{item.historico.length === 0 ? <p className="producao-vazio">Sem alterações registradas.</p>

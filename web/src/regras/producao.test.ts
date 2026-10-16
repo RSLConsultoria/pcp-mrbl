@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao } from './producao';
+import { chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -68,4 +68,11 @@ it('modelos de mensagem sempre identificam a OS e podem ser editados antes da fi
   expect(modeloMensagemProducao('COBRANCA_PRAZO', prod(), '2026-10-21')).toContain('estava prevista para 20/10');
   expect(modeloMensagemProducao('CONFIRMAR_DATA', prod(), '2026-10-13')).toContain('120 peças');
   expect(modeloMensagemProducao('MATERIAL_ENVIADO', prod(), '2026-10-13')).toContain('material que faltava');
+});
+
+it('gera uma chave de envio por clique no formato que o servidor aceita', () => {
+  const a = chaveEnvioWhatsapp();
+  const b = chaveEnvioWhatsapp();
+  expect(a).toMatch(/^[A-Za-z0-9-]{8,64}$/);
+  expect(a).not.toBe(b);
 });

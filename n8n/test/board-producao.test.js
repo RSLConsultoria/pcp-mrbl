@@ -49,7 +49,7 @@ test('board inclui somente producao em Costura e relaciona conversa, sugestao e 
     inicioCostura: '2026-10-01', dataCombinada: '2026-10-20', leadTime: '2026-10-18',
     pecas: 120, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-001', versao: 'v1',
     faltasCostura: [], faltasAcabamento: [],
-    mensagens: [{ id: 'MSG-1', quando: '2026-10-13T10:00:00.000Z', participanteNome: 'Pessoa Teste', direcao: 'RECEBIDA', texto: 'A OS 90001 fica pronta dia 20/10', associacao: 'OS_NO_TEXTO', statusEnvio: '', tipoConteudo: 'TEXTO' }],
+    mensagens: [{ reenviada: false, id: 'MSG-1', quando: '2026-10-13T10:00:00.000Z', participanteNome: 'Pessoa Teste', direcao: 'RECEBIDA', texto: 'A OS 90001 fica pronta dia 20/10', associacao: 'OS_NO_TEXTO', statusEnvio: '', tipoConteudo: 'TEXTO' }],
     sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-20', resumo: 'Oficina informou nova data.', evidencia: 'dia 20/10', confianca: 0.93, status: 'PENDENTE', criadoEm: '2026-10-13T10:01:00.000Z', versao: 'v1' }],
     historico: [{ quando: '2026-10-12T09:00:00.000Z', usuario: 'PCP Teste', texto: 'Data combinada ajustada.', ploomes: 'ENVIADO' }]
   });

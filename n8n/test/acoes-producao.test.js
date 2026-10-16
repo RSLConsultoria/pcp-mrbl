@@ -160,7 +160,7 @@ test('reenviar whatsapp exige confirmação e cria nova tentativa sem apagar o e
   let seq = 0;
   const r = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'ID-R-' + (++seq)));
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.mensagemId, 'ID-R-1');
+  assert.equal(r.body.mensagemId, 'WA-RE-MSG-ERRO');
   assert.equal(r.operacoes.length, 1);
   assert.equal(r.operacoes[0].operacao, 'append');
   assert.equal(r.operacoes[0].linha.status_envio, 'PENDENTE');
@@ -206,4 +206,62 @@ test('versão da produção: aceitar nova data grava a versão; ignorar mantém 
   const ignorar = limpo(ctx.processarAcao(estado, cab, { tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1' }, linhas(), T0, () => 'H'));
   assert.equal(ignorar.status, 200);
   assert.equal(ignorar.body.versao, 'v1');
+});
+
+test('enviar whatsapp com chave deriva o id e não cria segunda linha no reenvio da mesma ação', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  const chave = '0b7c2f1e-1111-4222-8333-944455556666';
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Cobrança.', chave };
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'ALEATORIO'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.mensagemId, 'WA-E-' + chave);
+  assert.equal(r.operacoes[0].linha.id, 'WA-E-' + chave);
+  dados.whatsappMensagens.push(r.operacoes[0].linha);
+
+  const repetida = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0 + 5000, () => 'OUTRO'));
+  assert.equal(repetida.status, 200, JSON.stringify(repetida.body));
+  assert.equal(repetida.body.mensagemId, 'WA-E-' + chave);
+  assert.deepEqual(repetida.operacoes, []);
+  assert.deepEqual(repetida.historicos, []);
+
+  // A mesma chave em outra OS não pode reaproveitar a linha.
+  ctx.DEALS_PRODUCAO_EDITAVEIS = ['700001', '700002'];
+  dados.oficinas[1].grupo_jid = 'grupo-b@g.us';
+  const outra = ctx.processarAcao(estado, cab, { ...corpo, dealId: '700002', versao: 'v2', texto: '*OS 90002* Cobrança.' }, dados, T0, () => 'X');
+  assert.equal(outra.status, 409);
+  assert.equal(ctx.processarAcao(estado, cab, { ...corpo, chave: 'x' }, dados, T0, () => 'X').status, 400);
+  assert.equal(ctx.processarAcao(estado, cab, { ...corpo, chave: "a'b<c>defgh" }, dados, T0, () => 'X').status, 400);
+});
+
+test('enviar whatsapp sem chave continua gerando id como antes', () => {
+  const { ctx, estado, cab } = contexto();
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Cobrança.' };
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'UUID-1'));
+  assert.equal(r.body.mensagemId, 'UUID-1');
+});
+
+test('reenviar whatsapp só uma vez por mensagem original e o board marca a original como reenviada', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  dados.whatsappMensagens = [{
+    id: 'MSG-ERRO', evolution_id: '', quando: '2026-10-13T12:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
+    participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
+    texto: '*OS 90001*\nQual a previsão?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
+    associacao: 'MANUAL', status_envio: 'ERRO', erro: 'Falha simulada', criado_em: '2026-10-13T12:00:00.000Z'
+  }];
+  const corpo = { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true };
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'ALEATORIO'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.mensagemId, ctx.idReenvioWhatsapp('MSG-ERRO'));
+  assert.notEqual(r.body.mensagemId, 'ALEATORIO');
+  dados.whatsappMensagens.push(r.operacoes[0].linha);
+
+  const segunda = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0 + 1000, () => 'OUTRO'));
+  assert.equal(segunda.status, 409);
+  assert.match(segunda.body.erro, /já foi reenviada/);
+
+  const board = limpo(ctx.mensagensDaProducao(dados.whatsappMensagens, '700001'));
+  assert.equal(board.find((m) => m.id === 'MSG-ERRO').reenviada, true);
+  assert.equal(board.find((m) => m.id === r.body.mensagemId).reenviada, false);
 });
