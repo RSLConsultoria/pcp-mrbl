@@ -5,3 +5,11 @@ dist/
 .env.*
 !.env.example
 !.env.e2e
+
+# n8n-as-code local (config e cache do dono; não versionar)
+n8nac-config.json
+.n8nac/
+# pasta workflows/ da raiz (n8nac); n8n/workflows continua versionada
+/workflows/
+.agents/
+.github/agents/
