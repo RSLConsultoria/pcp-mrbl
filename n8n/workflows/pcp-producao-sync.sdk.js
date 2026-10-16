@@ -46,7 +46,7 @@ const buscarProducao = node({
     onError: 'continueErrorOutput',
     parameters: {
       method: 'GET',
-      url: 'https://public-api2.ploomes.com/Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$top=100',
+      url: 'https://public-api2.ploomes.com/Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$orderby=Id&$top=100',
       authentication: 'genericCredentialType',
       genericAuthType: 'httpHeaderAuth',
       options: {

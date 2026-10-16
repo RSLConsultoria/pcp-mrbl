@@ -46,7 +46,7 @@ test('nomes de node unicos, webhooks com webhookId e credencial nas leituras em 
 });
 
 test('toda conexao aponta para node existente', () => {
-  for (const f of ['pcp-api.sdk.js', 'pcp-api-homolog.sdk.js', 'pcp-envio.sdk.js', 'pcp-producao-sync.sdk.js']) {
+  for (const f of ['pcp-api.sdk.js', 'pcp-api-homolog.sdk.js', 'pcp-envio.sdk.js', 'pcp-producao-sync.sdk.js', 'pcp-whatsapp-entrada.sdk.js', 'pcp-whatsapp-saida.sdk.js']) {
     const w = wf(f);
     const nomes = new Set(w.nodes.map((n) => n.name));
     for (const [de, c] of Object.entries(w.connections)) {

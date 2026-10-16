@@ -57,6 +57,8 @@ test('sync de produção agenda a cada cinco minutos e consulta somente a etapa 
   assert.match(JSON.stringify(buscar.parameters), /60015827/);
   assert.match(JSON.stringify(buscar.parameters), /60073488/);
   assert.match(JSON.stringify(buscar.parameters), /OtherProperties/);
+  // Paginação por $skip só é estável com ordem fixa.
+  assert.match(buscar.parameters.url, /&\$orderby=Id(&|$)/);
   assert.equal(buscar.parameters.options.pagination.pagination.paginationMode, 'updateAParameterInEachRequest');
   assert.equal(buscar.parameters.options.pagination.pagination.requestInterval, 700);
   assert.equal(buscar.retryOnFail, true);
