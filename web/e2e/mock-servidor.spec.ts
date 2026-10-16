@@ -212,3 +212,30 @@ test('mock: produção só oferece cobrança e confirmação; material enviado �
   const r = await acaoNoMock(page, { tipo: 'enviar_whatsapp', dealId: '700002', versao: 'v2', modelo: 'MATERIAL_ENVIADO', texto: 'Material enviado.', chave: 'c-material-0001' });
   expect(r).toEqual({ status: 400, corpo: { erro: 'Modelo de mensagem inválido.' } });
 });
+
+test('mock: associar mensagem com data gera a sugestão do intérprete; sem data, não gera', async ({ page, api }) => {
+  void api;
+  await entrar(page, '#producao');
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await expect(painel.getByText(/Nova data:/)).toHaveCount(1);
+  await painel.getByRole('button', { name: 'Fechar painel' }).click();
+
+  await page.getByText('2 mensagens aguardando associação').click();
+  const comData = page.getByRole('listitem').filter({ hasText: 'A PECA TESTE B fica pronta dia' });
+  await comData.getByRole('button', { name: 'Associar', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Mensagem associada. A interpretação aparece em instantes.' })).toBeVisible();
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  await expect(painel.getByText(/Nova data:/)).toHaveCount(2);
+  await painel.getByRole('button', { name: 'Fechar painel' }).click();
+
+  // A outra mensagem (sem data) é associada sem sugestão nova.
+  // A lista de pendentes continua aberta, agora com uma mensagem.
+  await expect(page.getByText('1 mensagem aguardando associação')).toBeVisible();
+  const semData = page.getByRole('listitem').filter({ hasText: 'As duas ordens ficam prontas na sexta.' });
+  await semData.getByRole('button', { name: 'Associar', exact: true }).click();
+  await expect(page.getByText(/aguardando associação/)).toHaveCount(0);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  await expect(painel).toContainText('As duas ordens ficam prontas na sexta.');
+  await expect(painel.getByText(/Nova data:/)).toHaveCount(2);
+});

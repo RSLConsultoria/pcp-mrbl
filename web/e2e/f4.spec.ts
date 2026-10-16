@@ -186,6 +186,8 @@ test('associa manualmente uma mensagem a uma OS do mesmo grupo', async ({ page }
   await page.getByText('1 mensagem aguardando associação').click();
   await page.getByRole('button', { name: 'Associar', exact: true }).click();
   await expect(page.getByText('1 mensagem aguardando associação')).toHaveCount(0);
+  // A interpretação roda em segundo plano no servidor (workflow Interpretar WhatsApp).
+  await expect(page.getByRole('status').filter({ hasText: 'Mensagem associada. A interpretação aparece em instantes.' })).toBeVisible();
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
   await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90002' })).toContainText('As duas ficam prontas amanhã.');
 });

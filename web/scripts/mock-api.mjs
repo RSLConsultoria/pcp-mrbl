@@ -109,6 +109,10 @@ const estado = {
     id: 'MSG-SEM-1', quando: new Date(Date.now() - 900_000).toISOString(), participanteNome: 'Pessoa da oficina',
     direcao: 'RECEBIDA', texto: 'As duas ordens ficam prontas na sexta.', associacao: 'SEM_ASSOCIACAO',
     statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
+  }, {
+    id: 'MSG-SEM-2', quando: new Date(Date.now() - 600_000).toISOString(), participanteNome: 'Pessoa da oficina',
+    direcao: 'RECEBIDA', texto: `A PECA TESTE B fica pronta dia ${diaIso(6).slice(8, 10)}/${diaIso(6).slice(5, 7)}.`, associacao: 'SEM_ASSOCIACAO',
+    statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
   }],
   producao: [
     { dealId: '700003', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
@@ -671,6 +675,27 @@ function decidirSugestao(c, usuario, aceitar) {
   return { ok: true, versao: p.versao, historico: h, historicos: [h] };
 }
 
+// Simula o workflow Interpretar WhatsApp: mensagem associada com data (dd/mm ou "amanhã")
+// ganha uma sugestão PENDENTE; sem data, nada. Uma sugestão por mensagem.
+function dataNoTexto(texto) {
+  if (/amanh[ãa]/i.test(texto)) return diaIso(1);
+  const m = /(\d{1,2})\/(\d{1,2})/.exec(texto);
+  if (!m) return '';
+  const hoje = diaIso(0);
+  const doAno = (ano) => `${ano}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const iso = doAno(Number(hoje.slice(0, 4)));
+  return iso < hoje ? doAno(Number(hoje.slice(0, 4)) + 1) : iso;
+}
+
+function simularInterpretacao(p, mensagem) {
+  if (mensagem.tipoConteudo !== 'TEXTO' || p.sugestoes.some((s) => s.mensagemId === mensagem.id)) return;
+  const data = dataNoTexto(String(mensagem.texto ?? ''));
+  if (!data) return;
+  p.sugestoes.unshift({ id: `WA-S-${mensagem.id}`, mensagemId: mensagem.id, tipo: 'NOVA_DATA_COMBINADA', valor: data,
+    resumo: 'A oficina informou uma nova data de entrega.', evidencia: String(mensagem.texto).slice(0, 80), confianca: 0.9,
+    status: 'PENDENTE', criadoEm: agoraIso(), versao: p.versao });
+}
+
 function associarWhatsapp(c, usuario) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
@@ -682,6 +707,7 @@ function associarWhatsapp(c, usuario) {
   if (mensagem.oficinaId !== p.oficinaId) throw new Erro(409, 'A mensagem e a OS precisam pertencer ao mesmo grupo.');
   estado.mensagensWhatsappSemAssociacao.splice(indice, 1);
   p.mensagens.unshift({ ...mensagem, associacao: 'MANUAL' });
+  simularInterpretacao(p, mensagem);
   const h = historicoProducao(p, usuario, `${usuario} associou manualmente uma mensagem do WhatsApp à OS ${p.os}.`);
   return { ok: true, versao: p.versao, historico: h, historicos: [h] };
 }
