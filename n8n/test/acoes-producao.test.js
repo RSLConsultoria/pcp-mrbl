@@ -57,7 +57,7 @@ test('alterar_producao valida allowlist, versao e motivo e prepara planilha/Ploo
   assert.equal(ctx.preValidarAcao(estado, cab, corpo, T0).ok, true);
   const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'HIST-1'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.deepEqual(r.operacoes, [{ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: '700001', oficina_id: 'of-2', oficina_nome: 'OFICINA B', data_combinada: '2026-10-20' } }]);
+  assert.deepEqual(r.operacoes, [{ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: '700001', atualizado_em_ploomes: '2026-10-13T14:00:00.000Z', oficina_id: 'of-2', oficina_nome: 'OFICINA B', data_combinada: '2026-10-20' } }]);
   assert.equal(r.ploomes.dealId, '700001');
   assert.deepEqual(r.ploomes.campos, { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': 'of-2', 'deal_E53BDEC3-F829-413D-9421-91D5D7411349': '2026-10-20' });
   assert.equal(r.historicos[0].acao, 'PRODUCAO_ALTERAR_COMBINADO');
@@ -171,4 +171,39 @@ test('reenviar whatsapp exige confirmação e cria nova tentativa sem apagar o e
   assert.equal(ctx.processarAcao(estado, cab, { ...corpo, confirmou: false }, dados, T0, () => 'X').status, 400);
   dados.whatsappMensagens[0].status_envio = 'ENVIADA';
   assert.equal(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'X').status, 409);
+});
+
+test('versão da produção: duas alterações seguidas com a versão devolvida passam e versão antiga dá 409', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  // Aplica as operações devolvidas nas linhas, como a planilha faria.
+  const aplicar = (r) => r.operacoes.filter((o) => o.aba === 'PRODUCAO').forEach((o) => {
+    const linha = dados.producao.find((p) => p.deal_id === o.linha.deal_id);
+    Object.assign(linha, o.linha);
+  });
+  const T1 = T0 + 60000;
+  const primeira = limpo(ctx.processarAcao(estado, cab, { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-1', dataCombinada: '2026-10-20', motivo: 'Oficina pediu.' }, dados, T1, () => 'H1'));
+  assert.equal(primeira.status, 200, JSON.stringify(primeira.body));
+  assert.equal(primeira.operacoes[0].linha.atualizado_em_ploomes, primeira.body.versao);
+  aplicar(primeira);
+  const segunda = limpo(ctx.processarAcao(estado, cab, { tipo: 'alterar_producao', dealId: '700001', versao: primeira.body.versao, oficinaId: 'of-1', dataCombinada: '2026-10-22', motivo: 'Mudou de novo.' }, dados, T1 + 60000, () => 'H2'));
+  assert.equal(segunda.status, 200, JSON.stringify(segunda.body));
+  aplicar(segunda);
+  // Edição concorrente com a versão vista antes da primeira alteração.
+  const antiga = ctx.processarAcao(estado, cab, { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-2', dataCombinada: '2026-10-22', motivo: 'Outra pessoa.' }, dados, T1 + 120000, () => 'H3');
+  assert.equal(antiga.status, 409);
+  const ultrapassada = ctx.processarAcao(estado, cab, { tipo: 'enviar_whatsapp', dealId: '700001', versao: primeira.body.versao, modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Cobrança.' }, dados, T1 + 120000, () => 'H4');
+  assert.equal(ultrapassada.status, 409);
+});
+
+test('versão da produção: aceitar nova data grava a versão; ignorar mantém a versão atual', () => {
+  const { ctx, estado, cab } = contexto();
+  const aceitar = limpo(ctx.processarAcao(estado, cab, { tipo: 'aceitar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Oficina confirmou.' }, linhas(), T0, () => 'H'));
+  assert.equal(aceitar.status, 200, JSON.stringify(aceitar.body));
+  const prod = aceitar.operacoes.find((o) => o.aba === 'PRODUCAO');
+  assert.equal(prod.linha.atualizado_em_ploomes, aceitar.body.versao);
+  assert.notEqual(aceitar.body.versao, 'v1');
+  const ignorar = limpo(ctx.processarAcao(estado, cab, { tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1' }, linhas(), T0, () => 'H'));
+  assert.equal(ignorar.status, 200);
+  assert.equal(ignorar.body.versao, 'v1');
 });

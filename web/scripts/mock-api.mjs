@@ -664,8 +664,9 @@ function decidirSugestao(c, usuario, aceitar) {
   if (aceitar && s.tipo === 'NOVA_DATA_COMBINADA') {
     if (!String(c.motivo ?? '').trim()) throw bad('Informe o motivo da alteração da data combinada.');
     p.dataCombinada = s.valor;
+    p.versao = agoraIso(); // como o servidor: a versão só muda quando a linha da PRODUCAO é gravada
   }
-  s.status = destino; p.versao = agoraIso();
+  s.status = destino;
   const h = historicoProducao(p, usuario, `${usuario} ${aceitar ? 'aceitou' : 'ignorou'} a sugestão do WhatsApp.`);
   return { ok: true, versao: p.versao, historico: h, historicos: [h] };
 }

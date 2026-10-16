@@ -2106,7 +2106,9 @@ function processarAlteracaoProducao(corpo, linhas, ctx, permitidos) {
     if (!oficina) return erroAcao(400, 'Oficina inválida.');
     oficinaNome = texto(oficina.nome);
   }
-  var linha = { deal_id: atual.dealId };
+  // atualizado_em_ploomes e a versao da linha: grava a mesma que a resposta
+  // devolve, para a proxima acao passar e a edicao concorrente dar 409.
+  var linha = { deal_id: atual.dealId, atualizado_em_ploomes: ctx.agora };
   var campos = {};
   var partes = [];
   if (v.mudouOficina) {
@@ -2152,7 +2154,9 @@ function processarDecisaoSugestao(corpo, linhas, ctx) {
   if (!r.ok || r.idempotente) return r.ok ? { ok: true, idempotente: true, versao: texto(producao.atualizado_em_ploomes), operacoes: [], historicos: [], ploomes: null } : r;
   var acao = corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'WHATSAPP_SUGESTAO_ACEITA' : 'WHATSAPP_SUGESTAO_IGNORADA';
   r.historicos = [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), acao, r.textoHistorico)];
-  r.versao = ctx.agora;
+  // A versao so muda quando a linha da PRODUCAO e gravada (aceite de nova data).
+  var gravaProducao = (r.operacoes || []).some(function (o) { return o.aba === 'PRODUCAO'; });
+  r.versao = gravaProducao ? ctx.agora : texto(producao.atualizado_em_ploomes);
   return r;
 }
 
@@ -2750,7 +2754,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
     if (!motivo) return erroAcao(400, 'Informe o motivo da alteração da data combinada.');
     var data = texto(sugestao.valor);
     if (!dataValida(data)) return erroAcao(400, 'Data interpretada inválida.');
-    operacoes.push({ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: dealId, data_combinada: data } });
+    operacoes.push({ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: dealId, data_combinada: data, atualizado_em_ploomes: agora } });
     ploomes = { dealId: dealId, campos: {} };
     ploomes.campos[CAMPO_DATA_COMBINADA_PLOOMES] = data;
   }

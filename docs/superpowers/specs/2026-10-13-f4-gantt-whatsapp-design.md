@@ -95,7 +95,7 @@ Chave: `deal_id`.
 | `peca` | Descrição da peça |
 | `referencia` | Referência |
 | `em_costura` | `SIM` ou `NAO` |
-| `atualizado_em_ploomes` | Versão/conflito, quando disponível |
+| `atualizado_em_ploomes` | Versão/conflito: o sync grava o LastUpdateDate do Ploomes; ações que gravam a linha (alterar combinado, aceitar nova data) gravam o instante da ação, que é a versão devolvida ao site |
 | `sincronizado_em` | ISO da última leitura |
 
 ### `OFICINAS`

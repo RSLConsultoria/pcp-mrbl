@@ -430,7 +430,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
     if (!motivo) return erroAcao(400, 'Informe o motivo da alteração da data combinada.');
     var data = texto(sugestao.valor);
     if (!dataValida(data)) return erroAcao(400, 'Data interpretada inválida.');
-    operacoes.push({ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: dealId, data_combinada: data } });
+    operacoes.push({ aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id', linha: { deal_id: dealId, data_combinada: data, atualizado_em_ploomes: agora } });
     ploomes = { dealId: dealId, campos: {} };
     ploomes.campos[CAMPO_DATA_COMBINADA_PLOOMES] = data;
   }

@@ -46,6 +46,19 @@ describe('criarFila', () => {
     expect(chamadas[1].acao).toMatchObject({ versao: 'v2', valor: 'b' });
   });
 
+  it('produção: qualquer ação da OS segue a versão trocada por uma alteração anterior', async () => {
+    const { fila, chamadas } = montar();
+    void fila.adicionar({ tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-1', dataCombinada: '2026-10-20', motivo: 'Teste.' });
+    void fila.adicionar({ tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Teste.' });
+    void fila.adicionar({ tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 's1', versao: 'v1' });
+    chamadas[0].ok(resposta('v2'));
+    await tique();
+    expect(chamadas[1].acao).toMatchObject({ tipo: 'enviar_whatsapp', versao: 'v2' });
+    chamadas[1].ok(resposta('v2'));
+    await tique();
+    expect(chamadas[2].acao).toMatchObject({ tipo: 'ignorar_sugestao_whatsapp', versao: 'v2' });
+  });
+
   it('relê o board uma vez só, quando a fila esvazia', async () => {
     const { fila, chamadas, esvaziou } = montar();
     void fila.adicionar(obs('a'));

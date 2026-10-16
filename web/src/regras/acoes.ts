@@ -150,14 +150,12 @@ export function ordenarHistorico<T extends EntradaHistorico>(h: T[]): T[] {
 
 // Alvo da versão de uma ação: o item (linha da FALTANTES) ou a caixa (linha da CAIXAS_PCP).
 export function chaveDaAcao(acao: Acao): string {
-  // Aceitar uma nova data também altera a versão da produção. Usar o mesmo
-  // alvo faz a fila encadear essa versão com uma edição feita logo antes.
-  if (acao.tipo === 'aceitar_sugestao_whatsapp') return `producao:${acao.dealId}`;
-  if (acao.tipo === 'ignorar_sugestao_whatsapp') return `sugestao:${acao.sugestaoId}`;
-  if (acao.tipo === 'associar_whatsapp') return `whatsapp:${acao.mensagemId}`;
-  if (acao.tipo === 'enviar_whatsapp') return `whatsapp:${acao.dealId}`;
-  if (acao.tipo === 'reenviar_whatsapp') return `whatsapp:${acao.dealId}`;
-  if (acao.tipo === 'alterar_producao') return `producao:${acao.dealId}`;
+  // Toda ação da produção confere a mesma versão (atualizado_em_ploomes da OS). Usar o
+  // mesmo alvo faz a fila encadear a versão trocada por uma alteração feita logo antes.
+  if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp' ||
+      acao.tipo === 'associar_whatsapp' || acao.tipo === 'enviar_whatsapp' || acao.tipo === 'reenviar_whatsapp') {
+    return `producao:${acao.dealId}`;
+  }
   if ('itemId' in acao) return `item:${acao.dealId}:${acao.itemId}`;
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
   if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';

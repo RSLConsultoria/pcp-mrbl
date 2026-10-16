@@ -407,7 +407,9 @@ function processarAlteracaoProducao(corpo, linhas, ctx, permitidos) {
     if (!oficina) return erroAcao(400, 'Oficina inválida.');
     oficinaNome = texto(oficina.nome);
   }
-  var linha = { deal_id: atual.dealId };
+  // atualizado_em_ploomes e a versao da linha: grava a mesma que a resposta
+  // devolve, para a proxima acao passar e a edicao concorrente dar 409.
+  var linha = { deal_id: atual.dealId, atualizado_em_ploomes: ctx.agora };
   var campos = {};
   var partes = [];
   if (v.mudouOficina) {
@@ -453,7 +455,9 @@ function processarDecisaoSugestao(corpo, linhas, ctx) {
   if (!r.ok || r.idempotente) return r.ok ? { ok: true, idempotente: true, versao: texto(producao.atualizado_em_ploomes), operacoes: [], historicos: [], ploomes: null } : r;
   var acao = corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'WHATSAPP_SUGESTAO_ACEITA' : 'WHATSAPP_SUGESTAO_IGNORADA';
   r.historicos = [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), acao, r.textoHistorico)];
-  r.versao = ctx.agora;
+  // A versao so muda quando a linha da PRODUCAO e gravada (aceite de nova data).
+  var gravaProducao = (r.operacoes || []).some(function (o) { return o.aba === 'PRODUCAO'; });
+  r.versao = gravaProducao ? ctx.agora : texto(producao.atualizado_em_ploomes);
   return r;
 }
 

@@ -149,7 +149,9 @@ describe('fila de ações', () => {
     expect(chaveDaAcao({ tipo: 'baixa', dealId: '7', itemId: 'a1', valor: 1, versao: '' })).toBe('item:7:a1');
     expect(chaveDaAcao({ tipo: 'obs_caixa', dealId: '7', valor: '', versao: '' })).toBe('caixa:7');
     expect(chaveDaAcao({ tipo: 'aceitar_sugestao_whatsapp', sugestaoId: 's1', dealId: '7', versao: 'v1', motivo: 'Prazo informado pela oficina.' })).toBe('producao:7');
-    expect(chaveDaAcao({ tipo: 'ignorar_sugestao_whatsapp', sugestaoId: 's1', dealId: '7', versao: 'v1' })).toBe('sugestao:s1');
+    expect(chaveDaAcao({ tipo: 'ignorar_sugestao_whatsapp', sugestaoId: 's1', dealId: '7', versao: 'v1' })).toBe('producao:7');
+    expect(chaveDaAcao({ tipo: 'associar_whatsapp', mensagemId: 'm1', dealId: '7', versao: 'v1' })).toBe('producao:7');
+    expect(chaveDaAcao({ tipo: 'reenviar_whatsapp', mensagemId: 'm1', dealId: '7', versao: 'v1', confirmou: true })).toBe('producao:7');
   });
   it('segue as trocas de versão feitas pelas nossas ações', () => {
     const t = new Map([['', 'v1'], ['v1', 'v2']]);
