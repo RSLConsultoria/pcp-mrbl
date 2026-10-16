@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao } from './producao';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, situacaoPrazo, statusProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -85,4 +85,39 @@ it('gera uma chave de envio por clique no formato que o servidor aceita', () => 
   const b = chaveEnvioWhatsapp();
   expect(a).toMatch(/^[A-Za-z0-9-]{8,64}$/);
   expect(a).not.toBe(b);
+});
+
+describe('situação do prazo (filtro geral do Gantt e da tabela)', () => {
+  it('agrupa o status do Gantt em quatro situações com texto e dias', () => {
+    expect(situacaoPrazo(prod({ dataCombinada: '2026-10-10' }), '2026-10-13')).toEqual({ situacao: 'ATRASADA', dias: -3, texto: 'Atrasada · 3 dias' });
+    expect(situacaoPrazo(prod({ dataCombinada: '2026-10-12' }), '2026-10-13').texto).toBe('Atrasada · 1 dia');
+    expect(situacaoPrazo(prod({ dataCombinada: '2026-10-13' }), '2026-10-13')).toEqual({ situacao: 'EM_BREVE', dias: 0, texto: 'Vence em breve · hoje' });
+    expect(situacaoPrazo(prod({ dataCombinada: '2026-10-15' }), '2026-10-13').texto).toBe('Vence em breve · 2 dias');
+    expect(situacaoPrazo(prod({ dataCombinada: '2026-10-20' }), '2026-10-13')).toEqual({ situacao: 'NO_PRAZO', dias: 7, texto: 'No prazo · 7 dias' });
+    expect(situacaoPrazo(prod({ dataCombinada: '', leadTime: '' }), '2026-10-13')).toEqual({ situacao: 'SEM_PRAZO', dias: null, texto: 'Sem prazo' });
+  });
+
+  it('filtra pela situação quando informada com o dia de hoje', () => {
+    const lista = [
+      prod({ dealId: 'a', dataCombinada: '2026-10-10' }),
+      prod({ dealId: 'b', dataCombinada: '2026-10-14' }),
+      prod({ dealId: 'c', dataCombinada: '2026-10-30' }),
+      prod({ dealId: 'd', dataCombinada: '', leadTime: '' })
+    ];
+    const base = { busca: '', oficinaId: '', soComFalta: false, hoje: '2026-10-13' };
+    expect(filtrarProducoes(lista, { ...base, situacao: 'ATRASADA' }).map((p) => p.dealId)).toEqual(['a']);
+    expect(filtrarProducoes(lista, { ...base, situacao: 'EM_BREVE' }).map((p) => p.dealId)).toEqual(['b']);
+    expect(filtrarProducoes(lista, { ...base, situacao: 'NO_PRAZO' }).map((p) => p.dealId)).toEqual(['c']);
+    expect(filtrarProducoes(lista, { ...base, situacao: 'SEM_PRAZO' }).map((p) => p.dealId)).toEqual(['d']);
+    expect(filtrarProducoes(lista, { ...base, situacao: '' })).toHaveLength(4);
+  });
+});
+
+it('agrupa por oficina na ordem em que chegam, como o Gantt mostra', () => {
+  const lista = [
+    prod({ dealId: '1', oficina: 'ALOCAR' }), prod({ dealId: '2', oficina: 'BETA' }),
+    prod({ dealId: '3', oficina: 'ALFA' }), prod({ dealId: '4', oficina: 'BETA' })
+  ];
+  expect(agruparPorOficina(lista).map(([o, itens]) => [o, itens.map((p) => p.dealId)]))
+    .toEqual([['ALOCAR', ['1']], ['BETA', ['2', '4']], ['ALFA', ['3']]]);
 });

@@ -2,7 +2,13 @@ import type { Producao } from '../api/tipos';
 
 export type OrigemPrazo = 'COMBINADA' | 'LEAD_TIME' | 'SEM_PRAZO';
 export type StatusPrazoProducao = 'ATRASADO' | 'HOJE' | 'PROXIMO' | 'NO_PRAZO' | 'SEM_PRAZO';
-export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean }
+// Filtro geral "Situação do prazo": agrupa o status do Gantt (HOJE e PROXIMO viram "vence em breve").
+export type SituacaoPrazo = 'ATRASADA' | 'EM_BREVE' | 'NO_PRAZO' | 'SEM_PRAZO';
+export const SITUACOES_PRAZO: { valor: SituacaoPrazo; rotulo: string }[] = [
+  { valor: 'ATRASADA', rotulo: 'Atrasada' }, { valor: 'EM_BREVE', rotulo: 'Vence em breve' },
+  { valor: 'NO_PRAZO', rotulo: 'No prazo' }, { valor: 'SEM_PRAZO', rotulo: 'Sem prazo' }
+];
+export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean; situacao?: SituacaoPrazo | ''; hoje?: string }
 // Material enviado saiu da F4 por decisão do dono (16/10).
 export type ModeloMensagemProducao = 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA';
 
@@ -31,16 +37,33 @@ export function statusProducao(p: Pick<Producao, 'dataCombinada' | 'leadTime'>, 
   return { status, dias, ...prazo };
 }
 
-function chaveBusca(v: string): string { return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
+export function situacaoPrazo(p: Pick<Producao, 'dataCombinada' | 'leadTime'>, hoje: string): { situacao: SituacaoPrazo; dias: number | null; texto: string } {
+  const { status, dias } = statusProducao(p, hoje);
+  if (status === 'SEM_PRAZO' || dias === null) return { situacao: 'SEM_PRAZO', dias: null, texto: 'Sem prazo' };
+  const situacao: SituacaoPrazo = status === 'ATRASADO' ? 'ATRASADA' : status === 'NO_PRAZO' ? 'NO_PRAZO' : 'EM_BREVE';
+  const rotulo = SITUACOES_PRAZO.find((s) => s.valor === situacao)!.rotulo;
+  const n = Math.abs(dias);
+  return { situacao, dias, texto: `${rotulo} · ${n === 0 ? 'hoje' : `${n} ${n === 1 ? 'dia' : 'dias'}`}` };
+}
+
+export function chaveBusca(v: string): string { return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
 
 export function filtrarProducoes(lista: Producao[], filtros: FiltrosProducao): Producao[] {
   const busca = chaveBusca(filtros.busca.trim());
   return lista.filter((p) => {
     if (filtros.oficinaId && p.oficinaId !== filtros.oficinaId) return false;
     if (filtros.soComFalta && p.faltasCostura.length === 0) return false;
+    if (filtros.situacao && filtros.hoje && situacaoPrazo(p, filtros.hoje).situacao !== filtros.situacao) return false;
     if (!busca) return true;
     return chaveBusca([p.os, p.peca, p.referencia, p.cliente, p.oficina].join(' ')).includes(busca);
   });
+}
+
+// Grupos do Gantt: uma oficina por grupo, na ordem em que a lista chega (o servidor já ordena).
+export function agruparPorOficina(lista: Producao[]): [string, Producao[]][] {
+  const mapa = new Map<string, Producao[]>();
+  for (const p of lista) mapa.set(p.oficina, [...(mapa.get(p.oficina) ?? []), p]);
+  return [...mapa.entries()];
 }
 
 export function indicadoresProducao(lista: Producao[], hoje: string) {
