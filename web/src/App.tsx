@@ -3,7 +3,7 @@ import type { Caixa, Sessao } from './api/tipos';
 import { lerSessao, limparSessao, salvarSessao } from './auth/sessao';
 import { AvisoProvider, useAviso } from './componentes/Aviso';
 import { FaixaOffline } from './componentes/FaixaOffline';
-import { Legenda } from './componentes/Legenda';
+import { Legenda, LegendaProducao } from './componentes/Legenda';
 import { Navbar } from './componentes/Navbar';
 import { AcoesPedidos } from './componentes/pedidos/AcoesPedidos';
 import { Subnav } from './componentes/Subnav';
@@ -66,6 +66,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
           ? <AcoesPedidos filtro={filtro} onFiltro={setFiltro} selecionados={selecionados} podeEditarEtapas={ehAdm}
               onEtapas={() => setJanela('etapas')} onGerar={() => setJanela('gerar')}
               onNovaDemanda={() => setJanela('demanda')} />
+          : tela === 'producao' ? <LegendaProducao />
           : <Legenda />}
       </Subnav>
       {erroDesde && <FaixaOffline desde={erroDesde} temDados={board !== null} />}

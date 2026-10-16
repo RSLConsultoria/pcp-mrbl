@@ -97,7 +97,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
         </section>
         {alertaAviamentos.costura > 0 && <p className="producao-alerta-aviamentos producao-alerta-aviamentos--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.textoCostura}</p>}
         {alertaAviamentos.acabamento > 0 && <p className="producao-alerta-aviamentos producao-alerta-aviamentos--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.textoAcabamento}</p>}
-        <a className="producao-link" href={`https://app.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+        <a className="producao-link" href={`https://app10.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
         <section className="producao-secao producao-edicao">
           <h3>Alterar combinado</h3>
           <div className="producao-edicao__campos">

@@ -59,6 +59,9 @@ test('Gantt mostra ALOCAR, prazo vencido, indicadores e filtro por falta', async
   await entrar(page);
   await expect(page).toHaveURL(/#producao$/);
   await expect(page.getByText('ALOCAR', { exact: true })).toBeVisible();
+  const legenda = page.getByLabel('Legenda do Gantt');
+  await expect(legenda).toContainText('Prazo combinado');
+  await expect(legenda).toContainText('Falta na costura');
   await expect(page.getByText('Passaram do prazo').locator('..')).toContainText('1');
   await page.getByLabel('Só com falta na costura').check();
   await expect(page.getByRole('button', { name: /OS 90002/ })).toBeVisible();
@@ -88,6 +91,7 @@ test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ p
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
   const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
   await expect(painel).toContainText('Sugestões do intérprete');
+  await expect(painel.getByRole('link', { name: 'Abrir card no Ploomes' })).toHaveAttribute('href', 'https://app10.ploomes.com/deal/710002');
   await expect(painel).toContainText('Nova data: 13/10');
   await expect(painel).toContainText('Entregamos dia 13.');
   // A oficina conhece a peça, não o número da OS.
