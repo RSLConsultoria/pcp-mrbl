@@ -2800,6 +2800,117 @@ function concluirEntradaWhatsapp(preparada, interpretacao, contexto) {
   return { ok: true, precisaInterpretar: true, operacoes: operacoes };
 }
 
+// ----- Contexto do intérprete (ajuste de 16/10) -----
+// O modelo recebe a OS inteira (peça, prazo, faltas) e a conversa recente, mas
+// nunca JID, telefone ou nome de participante. Textos são cortados.
+var LIMITE_TEXTO_INTERPRETE = 500;
+var LIMITE_CONVERSA_INTERPRETE = 10;
+var LIMITE_FALTAS_INTERPRETE = 10;
+
+var INSTRUCOES_INTERPRETE_WHATSAPP = 'Interprete a resposta da oficina sem responder ao grupo. ' +
+  'As mensagens enviadas à oficina citam a peça (em negrito), não o número da OS. ' +
+  'Use o contexto da OS (peça, quantidade, prazo vigente, status do prazo e faltas abertas) e a conversa recente ' +
+  'para entender a resposta. Devolva somente o objeto estruturado.';
+
+var SCHEMA_INTERPRETE_WHATSAPP = {
+  tipo: ['NOVA_DATA_COMBINADA', 'PRAZO_CONFIRMADO', 'MOTIVO_ATRASO', 'OBSERVACAO'],
+  valor: 'data ISO, data em dd/mm ou expressão relativa quando houver nova data',
+  resumo: 'resumo curto em português',
+  evidencia: 'trecho curto que sustenta a interpretação',
+  confianca: 'número entre 0 e 1'
+};
+
+function cortarTextoInterprete(valor, limite) {
+  return texto(valor).slice(0, limite || LIMITE_TEXTO_INTERPRETE);
+}
+
+function descricaoFaltaInterprete(item) {
+  var nome = [texto(item.nome), texto(item.cor)].filter(function (x) { return x; }).join(' ');
+  var resta = item.resta === null || item.resta === undefined ? '' : ': falta ' + formatarQtd(Number(item.resta)) + (texto(item.un) ? ' ' + texto(item.un) : '');
+  return cortarTextoInterprete(nome + resta, 120);
+}
+
+function resumoFaltasInterprete(itens) {
+  return {
+    quantidade: (itens || []).length,
+    itens: (itens || []).slice(0, LIMITE_FALTAS_INTERPRETE).map(descricaoFaltaInterprete)
+  };
+}
+
+// Mensagem que a oficina viu: recebida, ou enviada com sucesso (vazio = linha antiga).
+function mensagemVistaPelaOficina(m) {
+  var direcao = semAcento(m.direcao);
+  if (direcao === 'RECEBIDA') return true;
+  var status = semAcento(m.status_envio);
+  return direcao === 'ENVIADA' && (status === '' || status === 'ENVIADA');
+}
+
+function conversaParaInterprete(mensagens, dealId, alvo) {
+  var limite = Date.parse(texto(alvo.quando));
+  var daOs = (mensagens || []).filter(function (m) {
+    if (!m || texto(m.deal_id) !== dealId || texto(m.id) === texto(alvo.mensagemId)) return false;
+    if (!mensagemVistaPelaOficina(m)) return false;
+    var ts = Date.parse(texto(m.quando));
+    return isFinite(ts) && (!isFinite(limite) || ts <= limite);
+  });
+  return linhasWhatsappUnicas(daOs, false).sort(function (a, b) {
+    return Date.parse(texto(a.quando)) - Date.parse(texto(b.quando));
+  }).slice(-LIMITE_CONVERSA_INTERPRETE).map(function (m) {
+    return {
+      direcao: semAcento(m.direcao),
+      quando: texto(m.quando),
+      texto: semAcento(m.tipo_conteudo) === 'NAO_TEXTUAL' ? '[conteúdo não textual]' : cortarTextoInterprete(m.texto)
+    };
+  });
+}
+
+// dados: { producao, mensagens, faltantes, ganhas } (linhas da planilha);
+// alvo: { mensagemId, dealId, texto, quando } (a mensagem a interpretar);
+// hojeISO: dia de referência do status do prazo (America/Sao_Paulo).
+function montarContextoInterpretacao(dados, alvo, hojeISO) {
+  dados = dados || {};
+  alvo = alvo || {};
+  var dealId = texto(alvo.dealId);
+  var linha = (dados.producao || []).filter(function (p) { return p && texto(p.deal_id) === dealId; })[0] || {};
+  var pecas = numero(linha.pecas);
+  var p = {
+    dealId: dealId,
+    dataCombinada: texto(linha.data_combinada),
+    leadTime: texto(linha.lead_time)
+  };
+  var status = statusPrazo(p, hojeISO);
+  var caixas = montarCaixas(dados.faltantes || [], dados.ganhas || [], new Date(texto(hojeISO) + 'T12:00:00Z'), {}).caixas;
+  return {
+    texto: cortarTextoInterprete(alvo.texto),
+    quando: texto(alvo.quando),
+    os: texto(linha.os),
+    peca: texto(linha.peca),
+    referencia: texto(linha.referencia),
+    pecas: pecas === null || isNaN(pecas) ? null : pecas,
+    oficina: texto(linha.oficina_nome),
+    inicioCostura: texto(linha.inicio_costura),
+    dataCombinada: p.dataCombinada,
+    leadTime: p.leadTime,
+    prazoVigente: status.data,
+    origemPrazo: status.origem,
+    statusPrazo: status.status,
+    diasParaPrazo: status.dias,
+    faltasCostura: resumoFaltasInterprete(faltasDaCostura(p, caixas)),
+    faltasAcabamento: resumoFaltasInterprete(faltasDoAcabamento(p, caixas)),
+    conversa: conversaParaInterprete(dados.mensagens, dealId, alvo)
+  };
+}
+
+// Corpo enviado ao subworkflow do intérprete: o contexto no nível de cima
+// (compatível com a versão anterior: texto, quando, os, dataCombinada) mais
+// instruções e schema.
+function entradaInterpreteWhatsapp(contexto) {
+  return Object.assign({}, contexto || {}, {
+    instrucoes: INSTRUCOES_INTERPRETE_WHATSAPP,
+    schema: JSON.parse(JSON.stringify(SCHEMA_INTERPRETE_WHATSAPP))
+  });
+}
+
 function idSugestaoWhatsapp(mensagemId) {
   var id = texto(mensagemId);
   return id.indexOf('WA-R-') === 0 ? 'WA-S-' + id.slice(5) : 'WA-S-' + id;
@@ -3066,6 +3177,9 @@ var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
+// Entrada do WhatsApp (e o workflow Interpretar WhatsApp): FALTANTES e CAIXAS GANHAS
+// dão as faltas abertas da OS ao contexto do intérprete.
+var LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS'];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
 // appendOrUpdate = atualiza se achar a chave, senao inclui; append = inclui.

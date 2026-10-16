@@ -531,8 +531,7 @@ export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp',
 
 posAtual = POS_WHATSAPP_ENTRADA;
 RETRY = RETRY_API;
-const LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
-const urlContextoWhatsapp = lote.urlLeitura(DOC, LEITURAS_WHATSAPP_ENTRADA);
+const urlContextoWhatsapp = lote.urlLeitura(DOC, lote.LEITURAS_WHATSAPP_ENTRADA);
 const whatsappEntrada = IMPORT + [
   `const receberWhatsapp = trigger({
   type: 'n8n-nodes-base.webhook',

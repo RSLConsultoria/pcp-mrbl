@@ -1,8 +1,7 @@
 // ===== adaptador: Preparar Entrada WhatsApp =====
 // O webhook recebe o payload bruto, mas somente a mensagem normalizada segue
 // para a planilha. O ID interno é determinístico para reduzir duplicatas.
-var LEITURAS_ENTRADA_WHATSAPP = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
-var planilhaEntrada = planilhaDoLote($input.first().json || {}, LEITURAS_ENTRADA_WHATSAPP);
+var planilhaEntrada = planilhaDoLote($input.first().json || {}, LEITURAS_WHATSAPP_ENTRADA);
 var recebido = $('Receber WhatsApp').first().json || {};
 var payloadEntrada = recebido.body && typeof recebido.body === 'object' ? recebido.body : recebido;
 var criptoEntrada = require('crypto');

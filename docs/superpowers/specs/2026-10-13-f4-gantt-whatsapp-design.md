@@ -279,7 +279,9 @@ Se existirem duas possibilidades, a mensagem fica `SEM_ASSOCIACAO`. O intérpret
 
 ### Interpretação
 
-Depois de associar a OS, o n8n envia somente o trecho necessário e um contexto curto para um modelo configurado por credencial no n8n. A resposta deve obedecer a um JSON estruturado com intenção, data ISO, motivo, resumo, evidência e confiança.
+Depois de associar a OS, o n8n envia a mensagem e o contexto da OS para um modelo configurado por credencial no n8n. A resposta deve obedecer a um JSON estruturado com intenção, data ISO, motivo, resumo, evidência e confiança.
+
+**Contexto ampliado (ajuste de 16/10): o intérprete fica "ciente de tudo".** A função pura `montarContextoInterpretacao` (`n8n/src/whatsapp.js`) monta, para a OS associada: texto e horário da mensagem; peça, referência, quantidade de peças, oficina, início da costura, data combinada, lead time, prazo vigente, origem do prazo, status do prazo (no prazo, próximo, hoje, atrasado ou sem prazo) e dias até o prazo; contagem e descrição curta das faltas abertas de costura e de acabamento (até 10 de cada, as mesmas do painel); e as últimas 10 mensagens da conversa daquela OS anteriores à mensagem (direção, horário e texto; só as que a oficina viu, sem tentativas com erro). Nada de JID, telefone ou nome de participante. Textos são cortados em 500 caracteres. As instruções avisam o modelo de que as mensagens à oficina citam a peça, não o número da OS. O corpo enviado ao subworkflow mantém os campos antigos (`texto`, `quando`, `os`, `dataCombinada`) no nível de cima, mais `instrucoes` e `schema`. Para isso a entrada passa a ler também `FALTANTES` e `CAIXAS GANHAS`.
 
 - datas relativas usam `America/Sao_Paulo` e a data da mensagem;
 - o texto original continua visível;
@@ -288,6 +290,7 @@ Depois de associar a OS, o n8n envia somente o trecho necessário e um contexto 
 - data `dd/mm` sem ano que cairia a mais de ~6 meses da mensagem também vira observação, em vez de pular para o ano seguinte;
 - só mensagens de grupo (`remoteJid` terminado em `@g.us`) são aceitas; JID vazio nunca casa com oficina sem grupo;
 - o modelo e a credencial serão escolhidos na implementação sem ficarem no repositório.
+- o texto da mensagem e da conversa vai ao modelo cortado em 500 caracteres; faltas e conversa têm no máximo 10 itens.
 
 ### Aceitar e ignorar
 

@@ -16,8 +16,7 @@ if (concluidaEntrada.erroInterpretacao) {
 }
 var sugestoesEntrada = concluidaEntrada.operacoes.filter(function (o) { return o.aba === 'WHATSAPP_SUGESTOES'; });
 if (!sugestoesEntrada.length) return [];
-var planilhaFinal = planilhaDoLote($('Ler Contexto WhatsApp').first().json || {},
-  ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES']);
+var planilhaFinal = planilhaDoLote($('Ler Contexto WhatsApp').first().json || {}, LEITURAS_WHATSAPP_ENTRADA);
 var reqsSugestao = requisicoesDeEscrita(sugestoesEntrada, [], planilhaFinal, PLANILHA_ID);
 if (reqsSugestao.length !== 1) throw new Error('A interpretação deve gerar uma única gravação de sugestão.');
 return [{ json: Object.assign({ gravar: true }, reqsSugestao[0]) }];

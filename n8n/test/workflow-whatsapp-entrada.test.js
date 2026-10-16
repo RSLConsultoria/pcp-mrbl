@@ -61,3 +61,82 @@ test('workflow valida a saída e registra somente erros resumidos', () => {
   assert.equal(no(w, 'Solicitar Reentrega').parameters.options.responseCode, 503);
   assert.deepEqual(destinos(w, 'Registrar Erro de Interpretação'), []);
 });
+
+// ----- Contexto ampliado do intérprete (ajuste de 16/10) -----
+const fs = require('node:fs');
+const vm = require('node:vm');
+const { ARQUIVOS, carregar, limpo } = require('./carregar');
+const RAIZ = path.join(__dirname, '..');
+
+function rodarAdaptador(arq, nodes) {
+  const ctx = vm.createContext({ require });
+  for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8'), ctx, { filename: f });
+  ctx.$ = (nome) => {
+    if (!(nome in nodes)) throw new Error('node inesperado: ' + nome);
+    const itens = nodes[nome].map((json) => ({ json }));
+    return { first: () => itens[0], all: () => itens };
+  };
+  ctx.$input = { first: () => ({ json: nodes.$input[0] }), all: () => nodes.$input.map((json) => ({ json })) };
+  const adaptador = fs.readFileSync(path.join(RAIZ, 'adaptadores', arq + '.js'), 'utf8');
+  return limpo(vm.runInContext('(function () {\n' + adaptador + '\n})()', ctx, { filename: arq + '.js' }));
+}
+
+const vr = (aba, values) => ({ range: "'" + aba + "'!A1:Z100", majorDimension: 'ROWS', values });
+function leituraEntrada() {
+  return { valueRanges: [
+    vr('OFICINAS', [['ploomes_id', 'nome', 'grupo_jid', 'grupo_nome', 'ativo'], ['of-1', 'OFICINA A', 'grupo-ficticio@g.us', 'GRUPO TESTE', 'SIM']]),
+    vr('PRODUCAO', [['deal_id', 'os', 'oficina_id', 'oficina_nome', 'data_combinada', 'lead_time', 'pecas', 'peca', 'referencia', 'em_costura', 'atualizado_em_ploomes'],
+      ['700001', '90001', 'of-1', 'OFICINA A', '2026-10-20', '', 160, 'PECA TESTE B', 'REF-02', 'SIM', 'v1']]),
+    vr('WHATSAPP_MENSAGENS', [['id', 'evolution_id', 'quando', 'grupo_jid', 'grupo_nome', 'participante_jid', 'participante_nome', 'direcao', 'tipo', 'tipo_conteudo', 'texto',
+      'resposta_a_evolution_id', 'deal_id', 'os', 'oficina_id', 'associacao', 'status_envio', 'erro', 'criado_em'],
+      ['WA-E-1', 'EV-1', '2026-10-13T12:00:00.000Z', 'grupo-ficticio@g.us', 'GRUPO TESTE', '', 'Pessoa PCP', 'ENVIADA', 'COBRANCA_PRAZO', 'TEXTO', 'Bom dia. A entrega de *PECA TESTE B* segue?',
+      '', '700001', '90001', 'of-1', 'MANUAL', 'ENVIADA', '', '2026-10-13T12:00:00.000Z']]),
+    vr('WHATSAPP_SUGESTOES', [['id', 'mensagem_id', 'deal_id', 'status']]),
+    vr('FALTANTES', [['id', 'os', 'deal_id', 'secao', 'ciclo', 'descricao_item', 'unidade', 'qtd_falta', 'qtd_baixada', 'status'],
+      ['f1', '90001', '700001', 'COSTURA', 'PEDIDO', 'VIÉS TESTE', 'MT', 4, '', 'ABERTO']]),
+    vr('CAIXAS GANHAS', [['deal_id', 'os']])
+  ] };
+}
+
+test('entrada lê também FALTANTES e CAIXAS GANHAS para o contexto do intérprete', () => {
+  const lote = carregar();
+  assert.deepEqual(limpo(lote.LEITURAS_WHATSAPP_ENTRADA), ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS']);
+  const url = no(workflow(), 'Ler Contexto WhatsApp').parameters.url;
+  assert.equal(url, lote.urlLeitura(lote.PLANILHA_ID, lote.LEITURAS_WHATSAPP_ENTRADA));
+});
+
+test('Montar Contexto do Intérprete manda OS, faltas, conversa e instruções, sem JID nem participante', () => {
+  const preparacao = {
+    ok: true, precisaInterpretar: true, mensagemId: 'WA-R-abc', dealId: '700001', os: '90001', quando: '2026-10-13T13:20:00.000Z',
+    contextoInterpretacao: { texto: 'Fica pronta dia 22.', quando: '2026-10-13T13:20:00.000Z', dealId: '700001', os: '90001', dataCombinada: '2026-10-20' }
+  };
+  const [saida] = rodarAdaptador('montar-contexto-interprete', {
+    'Preparar Entrada WhatsApp': [{ preparacao }],
+    'Ler Contexto WhatsApp': [leituraEntrada()],
+    $input: [{}]
+  });
+  const j = saida.json;
+  assert.equal(j.texto, 'Fica pronta dia 22.');
+  assert.equal(j.os, '90001');
+  assert.equal(j.peca, 'PECA TESTE B');
+  assert.equal(j.pecas, 160);
+  assert.equal(j.dataCombinada, '2026-10-20');
+  assert.deepEqual(j.faltasCostura, { quantidade: 1, itens: ['VIÉS TESTE: falta 4 MT'] });
+  assert.deepEqual(j.conversa, [{ direcao: 'ENVIADA', quando: '2026-10-13T12:00:00.000Z', texto: 'Bom dia. A entrega de *PECA TESTE B* segue?' }]);
+  assert.match(j.instrucoes, /citam a peça/);
+  assert.doesNotMatch(JSON.stringify(j), /@g\.us|Pessoa PCP|participante/);
+});
+
+test('Preparar Entrada WhatsApp continua aceitando a leitura com as abas novas', () => {
+  const [saida] = rodarAdaptador('preparar-whatsapp-entrada', {
+    'Receber WhatsApp': [{ body: {
+      event: 'messages.upsert', instance: 'producao',
+      data: { key: { remoteJid: 'grupo-ficticio@g.us', fromMe: false, id: 'EV-NOVO', participant: 'p@s.whatsapp.net' },
+        pushName: 'Pessoa Teste', messageTimestamp: 1791897600, message: { extendedTextMessage: { text: 'Fica pronta dia 22.', contextInfo: { stanzaId: 'EV-1' } } } }
+    } }],
+    $input: [leituraEntrada()]
+  });
+  assert.equal(saida.json.gravar, true);
+  assert.equal(saida.json.precisaInterpretar, true);
+  assert.equal(saida.json.preparacao.dealId, '700001');
+});
