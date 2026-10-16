@@ -227,6 +227,8 @@ function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var extras = r.mensagemId ? { mensagemId: r.mensagemId } : undefined;
   var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, extras);
   saida.ploomes = r.ploomes;
+  // Só para o workflow (nunca vai ao site): pedido de interpretação da mensagem associada.
+  saida.interpretar = r.interpretar || null;
   saida.gravacao = null;
   saida.historico = null;
   return saida;

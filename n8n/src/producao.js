@@ -352,8 +352,12 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
     id: texto(mensagem.id), deal_id: texto(producao.deal_id), os: texto(producao.os),
     oficina_id: texto(producao.oficina_id), associacao: 'MANUAL'
   };
+  // Depois de gravar, o workflow da API dispara o "Interpretar WhatsApp" sem
+  // esperar; só para texto e só se a mensagem ainda não tem sugestão.
+  var interpretar = mensagemInterpretavelWhatsapp(mensagem) && !mensagemTemSugestaoWhatsapp(mensagem.id, linhas.whatsappSugestoes)
+    ? { mensagemId: texto(mensagem.id), dealId: texto(producao.deal_id) } : null;
   return {
-    ok: true, versao: texto(producao.atualizado_em_ploomes), ploomes: null,
+    ok: true, versao: texto(producao.atualizado_em_ploomes), ploomes: null, interpretar: interpretar,
     operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }],
     historicos: [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), 'WHATSAPP_ASSOCIAR',
       ctx.usuario + ' associou manualmente uma mensagem do WhatsApp à OS ' + texto(producao.os) + '.')]

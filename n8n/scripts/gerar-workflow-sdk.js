@@ -41,6 +41,10 @@ POS['Gravar Anexo'] = [10 * DX, 460];
 POS['Montar Erro'] = [11 * DX, 390];
 POS['Gravar Erro'] = [12 * DX, 390];
 POS['Responder Erro'] = [13 * DX, 390];
+// Associacao manual gravada: dispara o workflow Interpretar WhatsApp sem esperar.
+POS['Pedir Interpretação?'] = [14 * DX, 820];
+POS['Montar Pedido de Interpretação'] = [15 * DX, 900];
+POS['Disparar Interpretação'] = [16 * DX, 900];
 
 const POS_ENVIO = {};
 posAtual = POS_ENVIO;
@@ -70,6 +74,13 @@ const POS_WHATSAPP_ENTRADA = {};
   ['Montar Erro de Recepção', 3, 260], ['Registrar Erro de Recepção', 4, 260], ['Solicitar Reentrega', 5, 260],
   ['Montar Erro de Interpretação', 9, 260], ['Registrar Erro de Interpretação', 10, 260]]
   .forEach(([n, c, y]) => { POS_WHATSAPP_ENTRADA[n] = [c * DX, y]; });
+
+const POS_INTERPRETAR = {};
+[['Receber Pedido de Interpretação', 0, 0], ['Ler Contexto da Interpretação', 1, 0], ['Preparar Interpretação', 2, 0],
+  ['Deve Interpretar?', 3, 0], ['Montar Contexto do Intérprete', 4, 0], ['Interpretar com Modelo', 5, 0],
+  ['Finalizar Interpretação', 6, 0], ['Tem Sugestão?', 7, 0], ['Gravar Sugestão WhatsApp', 8, 0],
+  ['Montar Erro de Interpretação', 6, 260], ['Registrar Erro de Interpretação', 7, 260]]
+  .forEach(([n, c, y]) => { POS_INTERPRETAR[n] = [c * DX, y]; });
 
 const CRED = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
 const OPCOES_RAW = "options: { cellFormat: 'RAW', handlingExtraData: 'insertInNewColumn' }";
@@ -264,6 +275,24 @@ const temEscritas = 'const temEscritas = ' + condicao('Tem Escritas?', '{{ $json
 const temAlteracaoPloomes = 'const temAlteracaoPloomes = ' + condicao('Tem Alteracao Ploomes?', '{{ $json.gravar }}', 'boolean', 'true', "''")
   .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';';
 
+// Execute Workflow: esperar = true devolve a saida do subworkflow; false so dispara.
+const executarWorkflow = (varName, nome, workflowId, esperar, onError) => `const ${varName} = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.2,
+  config: {
+    name: '${nome}',
+    onError: '${onError}',
+    parameters: {
+      source: 'database',
+      workflowId: { __rl: true, value: '${workflowId}', mode: 'id' },
+      mode: 'once',
+      options: { waitForSubWorkflow: ${esperar} }
+    },
+    position: ${posicao(nome)}
+  },
+  output: [${esperar ? '{ interpretacao: {} }' : '{}'}]
+});`;
+
 RETRY = RETRY_API;
 const IMPORT_API = IMPORT.replace('ifElse, expr', 'ifElse, splitInBatches, nextBatch, expr');
 const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
@@ -299,6 +328,12 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   httpGoogle('gravarLote', 'Gravar Lote', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
   httpGoogle('gravarAnexo', 'Gravar Anexo', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
   code('limparCache', 'Limpar Cache', 'limpar-cache'),
+  // Associacao manual gravada: pede a interpretacao ao workflow Interpretar WhatsApp
+  // sem esperar (a resposta ao site nao muda); falha no disparo nao muda a resposta.
+  'const pedirInterpretacao = ' + condicao('Pedir Interpretação?', "{{ !!$('Processar Acao').first().json.interpretar }}", 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  code('montarPedidoInterpretacao', 'Montar Pedido de Interpretação', 'montar-pedido-interpretacao'),
+  executarWorkflow('dispararInterpretacao', 'Disparar Interpretação', 'CONFIGURAR_INTERPRETAR_WHATSAPP', false, 'continueRegularOutput'),
   code('montarErro', 'Montar Erro', 'montar-erro'),
   httpGoogle('gravarErro', 'Gravar Erro', 'POST', "expr('{{ $json.url }}')", true, "onError: 'continueRegularOutput',\n    ", ''),
   responder('responderErro', 'Responder Erro', "{{ $('Montar Erro').first().json.resposta }}", '{{ 500 }}', unico),
@@ -327,7 +362,9 @@ export default workflow('${id}', '${nomeWf}', {
         .onTrue(gravarAlteracaoPloomes.to(validarAlteracaoPloomes).to(alteracaoPloomesOk
           .onTrue(montarEscritas.to(temEscritas
             .onTrue(loopEscritas
-              .onDone(limparCache.to(responderAcao))
+              .onDone(limparCache.to(pedirInterpretacao
+                .onTrue(montarPedidoInterpretacao.to(dispararInterpretacao).to(responderAcao))
+                .onFalse(responderAcao)))
               .onEachBatch(repetir
                 .onTrue(gravarLote.onError(montarErro.to(gravarErro).to(responderErro)).to(nextBatch(loopEscritas)))
                 .onFalse(gravarAnexo.onError(montarErro).to(nextBatch(loopEscritas)))))
@@ -335,7 +372,9 @@ export default workflow('${id}', '${nomeWf}', {
           .onFalse(responderFalhaPloomes)))
         .onFalse(montarEscritas.to(temEscritas
         .onTrue(loopEscritas
-          .onDone(limparCache.to(responderAcao))
+          .onDone(limparCache.to(pedirInterpretacao
+                .onTrue(montarPedidoInterpretacao.to(dispararInterpretacao).to(responderAcao))
+                .onFalse(responderAcao)))
           .onEachBatch(repetir
             .onTrue(gravarLote.onError(montarErro.to(gravarErro).to(responderErro)).to(nextBatch(loopEscritas)))
             .onFalse(gravarAnexo.onError(montarErro).to(nextBatch(loopEscritas)))))
@@ -661,7 +700,73 @@ export default workflow('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsAp
     gravarSugestaoWhatsapp.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp))));
 `;
 
+// Associacao manual (ajuste de 16/10): a API dispara este workflow sem esperar com
+// { mensagemId, dealId }. Ele le a planilha, monta o mesmo contexto da entrada, chama
+// o mesmo interprete (CONFIGURAR_INTERPRETE) e grava a sugestao PENDENTE com id
+// deterministico. Nunca responde nem envia ao grupo.
+posAtual = POS_INTERPRETAR;
+RETRY = RETRY_API;
+const codeComErro = (varName, nome, arq, saida) => `const ${varName} = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: '${nome}',
+    onError: 'continueErrorOutput',
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: ${lerBuild(arq)} },
+    position: ${posicao(nome)}
+  },
+  output: [${saida}]
+});`;
+const interpretarWhatsapp = IMPORT + [
+  `const receberPedidoInterpretacao = trigger({
+  type: 'n8n-nodes-base.executeWorkflowTrigger',
+  version: 1.1,
+  config: {
+    name: 'Receber Pedido de Interpretação',
+    parameters: { inputSource: 'passthrough' },
+    position: ${posicao('Receber Pedido de Interpretação')}
+  },
+  output: [{ mensagemId: 'WA-R-ficticio', dealId: '700001' }]
+});`,
+  httpGoogle('lerContextoInterpretacao', 'Ler Contexto da Interpretação', 'GET', JSON.stringify(urlContextoWhatsapp), false, ERRO_SAIDA + unico),
+  codeComErro('prepararInterpretacao', 'Preparar Interpretação', 'preparar-interpretacao-manual', '{ interpretar: false }'),
+  'const deveInterpretar = ' + condicao('Deve Interpretar?', '{{ $json.interpretar }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  code('montarContextoInterpretacao', 'Montar Contexto do Intérprete', 'montar-contexto-interpretacao-manual'),
+  executarWorkflow('interpretarComModeloManual', 'Interpretar com Modelo', 'CONFIGURAR_INTERPRETE', true, 'continueErrorOutput'),
+  codeComErro('finalizarInterpretacao', 'Finalizar Interpretação', 'finalizar-interpretacao-manual', '{ gravar: true }'),
+  'const temSugestaoManual = ' + condicao('Tem Sugestão?', '{{ $json.gravar }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  httpGoogle('gravarSugestaoManual', 'Gravar Sugestão WhatsApp', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  code('montarErroInterpretacaoManual', 'Montar Erro de Interpretação', 'montar-erro-interpretacao-manual'),
+  httpGoogle('registrarErroInterpretacaoManual', 'Registrar Erro de Interpretação', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", '')
+].join('\n\n') + `
+
+export default workflow('pcp-mrbl-interpretar-whatsapp', 'PCP MRBL - Interpretar WhatsApp', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 120,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none'
+})
+  .add(receberPedidoInterpretacao)
+  .to(lerContextoInterpretacao.onError(montarErroInterpretacaoManual.to(registrarErroInterpretacaoManual)))
+  .add(lerContextoInterpretacao).to(
+    prepararInterpretacao.onError(montarErroInterpretacaoManual.to(registrarErroInterpretacaoManual)))
+  .add(prepararInterpretacao).to(deveInterpretar)
+  .add(deveInterpretar.onTrue(
+    montarContextoInterpretacao.to(
+      interpretarComModeloManual.onError(montarErroInterpretacaoManual.to(registrarErroInterpretacaoManual)))))
+  .add(interpretarComModeloManual).to(
+    finalizarInterpretacao.onError(montarErroInterpretacaoManual.to(registrarErroInterpretacaoManual)))
+  .add(finalizarInterpretacao).to(temSugestaoManual)
+  .add(temSugestaoManual.onTrue(
+    gravarSugestaoManual.onError(montarErroInterpretacaoManual.to(registrarErroInterpretacaoManual))));
+`;
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-interpretar-whatsapp.sdk.js'), interpretarWhatsapp);
+console.log('workflows/pcp-interpretar-whatsapp.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api.sdk.js'), api);
 console.log('workflows/pcp-api.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api-homolog.sdk.js'), apiHomolog);

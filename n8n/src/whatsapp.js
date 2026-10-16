@@ -524,6 +524,53 @@ function entradaInterpreteWhatsapp(contexto) {
   });
 }
 
+// Uma sugestão por mensagem: vale a sugestão com o id determinístico ou
+// qualquer outra que aponte para a mesma mensagem, em qualquer status.
+function mensagemTemSugestaoWhatsapp(mensagemId, sugestoes) {
+  var id = texto(mensagemId);
+  var idSugestao = idSugestaoWhatsapp(id);
+  return (sugestoes || []).some(function (s) {
+    return s && (texto(s.mensagem_id) === id || texto(s.id) === idSugestao);
+  });
+}
+
+function mensagemInterpretavelWhatsapp(m) {
+  return !!m && semAcento(m.direcao) === 'RECEBIDA' && semAcento(m.tipo_conteudo || 'TEXTO') === 'TEXTO' && texto(m.texto) !== '';
+}
+
+// Workflow "Interpretar WhatsApp": depois da associação manual, monta a mesma
+// preparação da entrada (sem operações: a mensagem já está na planilha) e o
+// corpo do intérprete. A conclusão reaproveita concluirEntradaWhatsapp.
+// dados: { producao, mensagens, sugestoes, faltantes, ganhas }; pedido: { mensagemId, dealId }.
+function prepararInterpretacaoManualWhatsapp(dados, pedido, hojeISO) {
+  dados = dados || {};
+  pedido = pedido || {};
+  var mensagemId = texto(pedido.mensagemId);
+  var dealId = texto(pedido.dealId);
+  var nada = function (motivo) { return { ok: true, interpretar: false, motivo: motivo }; };
+  var mensagem = mensagemId ? linhasWhatsappUnicas((dados.mensagens || []).filter(function (m) {
+    return m && texto(m.id) === mensagemId && semAcento(m.direcao) === 'RECEBIDA';
+  }), false)[0] : null;
+  if (!mensagem) return nada('MENSAGEM_NAO_ENCONTRADA');
+  if (!dealId || texto(mensagem.deal_id) !== dealId) return nada('ASSOCIACAO_MUDOU');
+  if (!mensagemInterpretavelWhatsapp(mensagem)) return nada('NAO_TEXTUAL');
+  if (mensagemTemSugestaoWhatsapp(mensagemId, dados.sugestoes)) return nada('JA_TEM_SUGESTAO');
+  var producao = (dados.producao || []).filter(function (p) { return p && texto(p.deal_id) === dealId; })[0];
+  if (!producao) return nada('OS_NAO_ENCONTRADA');
+  var contexto = montarContextoInterpretacao(dados, {
+    mensagemId: mensagemId, dealId: dealId, texto: mensagem.texto, quando: mensagem.quando
+  }, hojeISO);
+  return {
+    ok: true,
+    interpretar: true,
+    preparacao: {
+      ok: true, precisaInterpretar: true, mensagemId: mensagemId, quando: texto(mensagem.quando),
+      dealId: dealId, os: texto(producao.os), versao: texto(producao.atualizado_em_ploomes), operacoes: []
+    },
+    entrada: entradaInterpreteWhatsapp(contexto)
+  };
+}
+
 function idSugestaoWhatsapp(mensagemId) {
   var id = texto(mensagemId);
   return id.indexOf('WA-R-') === 0 ? 'WA-S-' + id.slice(5) : 'WA-S-' + id;

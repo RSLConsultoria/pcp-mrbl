@@ -6,10 +6,12 @@ const { converter } = require('../scripts/sdk-para-json');
 const wf = (n) => converter(path.join(__dirname, '..', 'workflows', n));
 const destinos = (w, de, saida) => ((w.connections[de] || { main: [] }).main[saida] || []).map((c) => c.node);
 
-test('API: loop de escritas liga done ao Limpar Cache (e dele ao Responder Acao) e cada lote ao Gravar Lote', () => {
+test('API: loop de escritas liga done ao Limpar Cache (e dele, pelo pedido de interpretação, ao Responder Acao) e cada lote ao Gravar Lote', () => {
   const w = wf('pcp-api.sdk.js');
   assert.deepStrictEqual(destinos(w, 'Loop Escritas', 0), ['Limpar Cache']);
-  assert.deepStrictEqual(destinos(w, 'Limpar Cache', 0), ['Responder Acao']);
+  assert.deepStrictEqual(destinos(w, 'Limpar Cache', 0), ['Pedir Interpretação?']);
+  assert.deepStrictEqual(destinos(w, 'Pedir Interpretação?', 1), ['Responder Acao']);
+  assert.deepStrictEqual(destinos(w, 'Disparar Interpretação', 0), ['Responder Acao']);
   assert.deepStrictEqual(destinos(w, 'Loop Escritas', 1), ['Repetir?']);
   assert.deepStrictEqual(destinos(w, 'Repetir?', 0), ['Gravar Lote']);
   assert.deepStrictEqual(destinos(w, 'Repetir?', 1), ['Gravar Anexo']);
@@ -27,10 +29,10 @@ test('API: loop de escritas liga done ao Limpar Cache (e dele ao Responder Acao)
   assert.strictEqual(no('Gravar Anexo').retryOnFail, undefined);
   assert.strictEqual(no('Gravar Erro').retryOnFail, undefined);
   assert.strictEqual(w.settings.saveDataErrorExecution, 'none');
-  // Responder Acao: so pelo fim do loop (via Limpar Cache), Tem Escritas? (nao) e Acao OK? (nao)
+  // Responder Acao: so pelo fim do loop (via Limpar Cache e o pedido de interpretação), Tem Escritas? (nao) e Acao OK? (nao)
   const paraResponder = Object.entries(w.connections)
     .flatMap(([de, c]) => c.main.flatMap((saida, i) => saida.filter((x) => x.node === 'Responder Acao').map(() => de + ':' + i)));
-  assert.deepStrictEqual(paraResponder.sort(), ['Acao OK?:1', 'Limpar Cache:0', 'Tem Escritas?:1']);
+  assert.deepStrictEqual(paraResponder.sort(), ['Acao OK?:1', 'Disparar Interpretação:0', 'Pedir Interpretação?:1', 'Tem Escritas?:1']);
   assert.deepStrictEqual(destinos(w, 'Precisa Ler?', 1), ['Responder Board']);
 });
 

@@ -28,7 +28,12 @@ const NODES = {
   'finalizar-whatsapp-entrada': 'Finalizar Entrada WhatsApp',
   'montar-erro-whatsapp-entrada': 'Montar Erro WhatsApp Entrada',
   'sincronizar-producao': 'Montar Sincronização',
-  'montar-erro-producao': 'Montar Erro Produção'
+  'montar-erro-producao': 'Montar Erro Produção',
+  'montar-pedido-interpretacao': 'Montar Pedido de Interpretação',
+  'preparar-interpretacao-manual': 'Preparar Interpretação',
+  'montar-contexto-interpretacao-manual': 'Montar Contexto do Intérprete (Interpretar WhatsApp)',
+  'finalizar-interpretacao-manual': 'Finalizar Interpretação',
+  'montar-erro-interpretacao-manual': 'Montar Erro de Interpretação (Interpretar WhatsApp)'
 };
 
 const corpo = ARQUIVOS

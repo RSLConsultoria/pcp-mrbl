@@ -271,6 +271,15 @@ Ampliar o simulador com dados fictícios e criar cenários Playwright:
 
 Nenhuma publicação ocorre nesta tarefa.
 
+## Ajustes do dono (16/10)
+
+Rodada única de ajustes depois da conferência local (detalhes na spec):
+
+- mensagens à oficina citam a peça em negrito, sem o número da OS; front e servidor geram o mesmo texto; a resposta sem citação volta pela última cobrança ou confirmação de data;
+- modelo de material enviado removido (fora do escopo da F4);
+- intérprete com contexto completo da OS e conversa recente (`montarContextoInterpretacao`);
+- associação manual dispara o workflow novo **PCP MRBL - Interpretar WhatsApp** (criar antes de publicar a API; ver README).
+
 ## Tarefa 13 — Homologação e produção, somente após aceite
 
 1. Pedir ao dono:
