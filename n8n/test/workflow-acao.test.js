@@ -128,8 +128,24 @@ test('alteracao de data monta PATCH do campo de data do Ploomes antes das escrit
   assert.equal(patch.json.url, 'https://public-api2.ploomes.com/Deals(600001)');
   assert.deepEqual(patch.json.registro, { OtherProperties: [{
     FieldKey: 'deal_E53BDEC3-F829-413D-9421-91D5D7411349',
-    DateTimeValue: '2026-10-22T00:00:00'
+    DateTimeValue: '2026-10-22T00:00:00-03:00'
   }] });
+});
+
+test('oficina é gravada no Ploomes pela mesma propriedade da leitura (ObjectValueId)', () => {
+  const [patch] = rodarNode('montar-alteracao-ploomes', { $: cifrao({ 'Processar Acao': [{
+    status: 200,
+    ploomes: { dealId: '600001', campos: { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': '44' } }
+  }] }) });
+  assert.deepEqual(patch.json.registro, { OtherProperties: [{
+    FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4',
+    ObjectValueId: 44
+  }] });
+  const [alocar] = rodarNode('montar-alteracao-ploomes', { $: cifrao({ 'Processar Acao': [{
+    status: 200,
+    ploomes: { dealId: '600001', campos: { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': '' } }
+  }] }) });
+  assert.deepEqual(alocar.json.registro.OtherProperties, [{ FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', ObjectValueId: null }]);
 });
 
 test('acao sem alteracao no Ploomes pula o PATCH', () => {

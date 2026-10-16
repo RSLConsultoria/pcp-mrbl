@@ -3725,12 +3725,15 @@ Object.keys(campos).forEach(function (chave) {
   var valor = texto(campos[chave]);
   if (chave === CAMPO_DATA_COMBINADA_PLOOMES) {
     if (valor && !dataValida(valor)) throw new Error('Data combinada invalida para gravacao no Ploomes.');
-    props.push({ FieldKey: chave, DateTimeValue: valor ? valor + 'T00:00:00' : null });
+    // Meia-noite com o fuso de Sao Paulo explicito: o Ploomes nao desloca o dia.
+    props.push({ FieldKey: chave, DateTimeValue: valor ? valor + 'T00:00:00-03:00' : null });
     return;
   }
   if (chave === CAMPO_OFICINA_PLOOMES) {
     if (valor && !/^\d+$/.test(valor)) throw new Error('Oficina invalida para gravacao no Ploomes.');
-    props.push({ FieldKey: chave, IntegerValue: valor ? Number(valor) : null });
+    // Mesma propriedade da leitura (idObjetoPloomes usa ObjectValueId primeiro).
+    // O tipo do campo sera confirmado na homologacao com o card de teste.
+    props.push({ FieldKey: chave, ObjectValueId: valor ? Number(valor) : null });
     return;
   }
   throw new Error('Campo nao permitido para gravacao no Ploomes: ' + chave);
