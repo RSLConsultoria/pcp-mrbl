@@ -370,3 +370,15 @@ Uma leitura real, somente de leitura, do funil Produção (etapa Costura) e das 
 - **"Será produzido por" é campo de usuário.** A leitura usa `UserValueId`/`UserValueName` e a alteração grava `UserValueId`. "ALOCAR" é um usuário do Ploomes; quando ele vem na lista de oficinas, a tela não mostra a opção vazia repetida, e escolher ALOCAR grava esse usuário.
 
 O simulador local aceita `MOCK_FOTO=<arquivo>` com `{ producao, oficinas, caixas }` montado pelas funções do servidor. O arquivo fica fora do repositório, porque contém dados reais.
+
+## Visão em tabela (16/10)
+
+Aprovada pelo dono. O Controle de produção ganha o alternador **Gantt | Tabela** ao lado dos filtros; a escolha fica lembrada no navegador (padrão: Gantt).
+
+- **Filtros gerais valem para as duas visões:** oficina, "Só com falta na costura", busca do topo e o filtro novo **Situação do prazo** (Todas, Atrasada, Vence em breve, No prazo, Sem prazo). A situação agrupa o mesmo status das barras do Gantt: "vence em breve" é prazo hoje ou nos próximos 3 dias.
+- **Colunas:** OS, Peça, Referência, Cliente, Oficina, Peças, Início da costura, Data combinada, Lead time, Prazo vigente, Situação (texto e dias, ex.: "Atrasada · 3 dias"), Faltas costura (🚫 n), Faltas acabamento (⚠️ n) e Sugestão pendente. Datas em dd/mm/aaaa.
+- **Ordenação:** clique no título ordena crescente, o segundo clique decrescente. Sem escolha, vale a ordem do Gantt (ALOCAR primeiro, depois oficina e prazo). Vazios ficam no fim nas duas direções; números como número; textos em pt-BR ignorando acentos.
+- **Filtro por coluna:** linha de filtros sob o cabeçalho, texto "contém" sem acento; Oficina e Situação por lista. "Limpar filtros" aparece quando há algum.
+- **Colunas:** menu "Colunas" para esconder colunas (a OS fica sempre), lembrado no navegador.
+- Clique ou Enter na linha abre o mesmo painel da OS. Cabeçalho fixo, rolagem horizontal dentro da tabela e contagem "N OS".
+- Regras puras em `web/src/regras/producaoTabela.ts`; situação em `situacaoPrazo` (`web/src/regras/producao.ts`), reaproveitando `statusProducao`.
