@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
-import { chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { TabelaProducao } from './ProducaoTabela';
+import { lerVisao, salvarVisao, type VisaoProducao } from '../regras/producaoTabela';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -174,25 +176,30 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
 export function Producao({ board, q, hoje, executar }: { board: Board; q: string; hoje: Date; executar: Executar }) {
   const [oficinaId, setOficinaId] = useState('');
   const [soComFalta, setSoComFalta] = useState(false);
+  const [situacao, setSituacao] = useState<SituacaoPrazo | ''>('');
+  const [visao, setVisao] = useState<VisaoProducao>(lerVisao);
   const [aberta, setAberta] = useState<string | null>(null);
   const hojeIso = diaIso(hoje);
   const producao = board.producao ?? PRODUCAO_VAZIA;
-  const filtradas = useMemo(() => filtrarProducoes(producao, { busca: q, oficinaId, soComFalta }), [producao, q, oficinaId, soComFalta]);
+  const filtradas = useMemo(() => filtrarProducoes(producao, { busca: q, oficinaId, soComFalta, situacao, hoje: hojeIso }), [producao, q, oficinaId, soComFalta, situacao, hojeIso]);
   const indicadores = useMemo(() => indicadoresProducao(filtradas, hojeIso), [filtradas, hojeIso]);
   const janela = useMemo(() => janelaGantt(filtradas, hojeIso), [filtradas, hojeIso]);
   const dias = useMemo(() => diasEntre(janela.inicio, janela.dias), [janela]);
-  const grupos = useMemo(() => {
-    const mapa = new Map<string, ProducaoItem[]>();
-    for (const p of filtradas) mapa.set(p.oficina, [...(mapa.get(p.oficina) ?? []), p]);
-    return [...mapa.entries()];
-  }, [filtradas]);
+  const grupos = useMemo(() => agruparPorOficina(filtradas), [filtradas]);
+  // A tabela parte da mesma ordem do Gantt: grupo a grupo.
+  const ordemGantt = useMemo(() => grupos.flatMap(([, itens]) => itens), [grupos]);
+  const trocarVisao = (v: VisaoProducao) => { setVisao(v); salvarVisao(v); };
   const selecionada = producao.find((p) => p.dealId === aberta) ?? null;
   const semAssociacao = board.mensagensWhatsappSemAssociacao ?? [];
 
   return <div className="producao-tela">
     <div className="producao-filtros">
       <label>Oficina<select value={oficinaId} onChange={(e) => setOficinaId(e.target.value)}><option value="">Todas</option>{(board.oficinas ?? []).map((o) => <option key={o.ploomesId} value={o.ploomesId}>{o.nome}</option>)}</select></label>
+      <label>Situação do prazo<select value={situacao} onChange={(e) => setSituacao(e.target.value as SituacaoPrazo | '')}><option value="">Todas</option>{SITUACOES_PRAZO.map((s) => <option key={s.valor} value={s.valor}>{s.rotulo}</option>)}</select></label>
       <label className="producao-check"><input type="checkbox" checked={soComFalta} onChange={(e) => setSoComFalta(e.target.checked)} /> Só com falta na costura</label>
+      <div className="producao-visao" role="group" aria-label="Visão">
+        {(['GANTT', 'TABELA'] as const).map((v) => <button key={v} type="button" aria-pressed={visao === v} onClick={() => trocarVisao(v)}>{v === 'GANTT' ? 'Gantt' : 'Tabela'}</button>)}
+      </div>
     </div>
     <div className="producao-kpis">
       <article><span>OS na Costura</span><strong>{indicadores.os}</strong><small>{indicadores.pecas} peças · {indicadores.oficinas} oficinas</small></article>
@@ -205,7 +212,7 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
       <ul>{semAssociacao.map((m) => <MensagemPendente key={m.id} mensagem={m} producao={producao}
         editaveis={board.dealsProducaoEditaveis} executar={executar} />)}</ul>
     </details>}
-    <div className="gantt__rolagem">
+    {visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} onAbrir={setAberta} /> : <div className="gantt__rolagem">
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>
         <div className="gantt__cabecalho gantt__fixo"><strong>Oficina / OS</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>
         <div className="gantt__dias" style={{ width: janela.dias * LARGURA_DIA }}>{dias.map((d) => <div key={d} className={`${d === hojeIso ? 'gantt__dia--hoje' : ''} ${[0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()) ? 'gantt__dia--fim' : ''}`}><span>{d.slice(8)}</span></div>)}</div>
@@ -233,7 +240,7 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
         </div>)}
         {filtradas.length === 0 && <p className="gantt__vazio">Nenhuma OS encontrada com estes filtros.</p>}
       </div>
-    </div>
+    </div>}
     {selecionada && <PainelProducao key={selecionada.dealId} item={selecionada} board={board} hojeIso={hojeIso} executar={executar} onFechar={() => setAberta(null)} />}
   </div>;
 }

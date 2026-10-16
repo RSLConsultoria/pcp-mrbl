@@ -231,3 +231,73 @@ test('conversa mostra nova tentativa automática de envio e interpretação que 
   await expect(painel.getByText('Não foi possível interpretar esta mensagem.')).toBeVisible();
   await expect(painel.getByRole('button', { name: 'Reenviar' })).toHaveCount(0);
 });
+
+const linhasTabela = (page: Page) => page.locator('.producao-tabela tbody tr');
+const osDaTabela = (page: Page) => linhasTabela(page).locator('td:first-child');
+
+test('visão em tabela: alterna, ordena pela data combinada e lembra a escolha', async ({ page }) => {
+  await entrar(page);
+  await expect(page.getByRole('button', { name: 'Gantt' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Tabela' }).click();
+  await expect(page.getByRole('button', { name: 'Tabela' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('4 OS', { exact: true })).toBeVisible();
+  // Ordem padrão = a do Gantt: ALOCAR primeiro.
+  await expect(osDaTabela(page)).toHaveText(['90001', '90002', '90003', '90004']);
+  await expect(linhasTabela(page).first()).toContainText('05/10/2026');
+  await expect(linhasTabela(page).first()).toContainText('Atrasada · 2 dias');
+
+  const cabecalho = page.getByRole('columnheader', { name: 'Data combinada' });
+  await cabecalho.getByRole('button').click();
+  await expect(cabecalho).toHaveAttribute('aria-sort', 'ascending');
+  await expect(osDaTabela(page)).toHaveText(['90001', '90002', '90004', '90003']);
+  await cabecalho.getByRole('button').click();
+  await expect(cabecalho).toHaveAttribute('aria-sort', 'descending');
+  // Sem data combinada fica no fim nas duas direções.
+  await expect(osDaTabela(page)).toHaveText(['90004', '90002', '90001', '90003']);
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Tabela' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.producao-tabela')).toBeVisible();
+});
+
+test('visão em tabela: filtro por coluna, filtro de situação e colunas escolhidas', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Tabela' }).click();
+  await page.getByLabel('Filtrar Peça', { exact: true }).fill('colete');
+  await expect(osDaTabela(page)).toHaveText(['90002']);
+  await expect(page.getByText('1 OS', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Limpar filtros' }).click();
+  await expect(osDaTabela(page)).toHaveCount(4);
+  await expect(page.getByRole('button', { name: 'Limpar filtros' })).toHaveCount(0);
+  await page.getByLabel('Filtrar Situação').selectOption('ATRASADA');
+  await expect(osDaTabela(page)).toHaveText(['90001']);
+  await page.getByRole('button', { name: 'Limpar filtros' }).click();
+
+  // Filtro geral vale para as duas visões.
+  await page.getByLabel('Situação do prazo').selectOption('ATRASADA');
+  await expect(osDaTabela(page)).toHaveText(['90001']);
+  await page.getByRole('button', { name: 'Gantt' }).click();
+  await expect(page.getByRole('button', { name: /OS 90001/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /OS 90002/ })).toHaveCount(0);
+  await page.getByLabel('Situação do prazo').selectOption('');
+  await page.getByRole('button', { name: 'Tabela' }).click();
+
+  await page.getByText('Colunas', { exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'OS', exact: true })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'Cliente' }).uncheck();
+  await expect(page.getByRole('columnheader', { name: 'Cliente' })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('columnheader', { name: 'Peça', exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Cliente' })).toHaveCount(0);
+});
+
+test('visão em tabela: clique ou Enter na linha abre o painel da OS', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Tabela' }).click();
+  await linhasTabela(page).filter({ hasText: '90002' }).click();
+  await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90002' })).toBeVisible();
+  await page.getByRole('button', { name: 'Fechar painel' }).click();
+  await linhasTabela(page).filter({ hasText: '90003' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90003' })).toBeVisible();
+});
