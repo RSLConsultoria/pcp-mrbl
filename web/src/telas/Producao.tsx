@@ -101,7 +101,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
         <section className="producao-secao producao-edicao">
           <h3>Alterar combinado</h3>
           <div className="producao-edicao__campos">
-            <label>Oficina<select value={oficinaId} disabled={!editavel} onChange={(e) => setOficinaId(e.target.value)}><option value="">ALOCAR</option>{(board.oficinas ?? []).map((o) => <option key={o.ploomesId} value={o.ploomesId}>{o.nome}</option>)}</select></label>
+            <label>Oficina<select value={oficinaId} disabled={!editavel} onChange={(e) => setOficinaId(e.target.value)}>{/* No Ploomes "ALOCAR" é um usuário: quando ele vem na lista, a opção vazia sai para não repetir. */}{!(board.oficinas ?? []).some((o) => o.nome.trim().toUpperCase() === 'ALOCAR') && <option value="">ALOCAR</option>}{(board.oficinas ?? []).map((o) => <option key={o.ploomesId} value={o.ploomesId}>{o.nome}</option>)}</select></label>
             <label>Data combinada<input type="date" value={dataCombinada} disabled={!editavel} onChange={(e) => setDataCombinada(e.target.value)} /></label>
             <label>Motivo {dataCombinada !== item.dataCombinada && <span className="obrigatorio">*</span>}<textarea rows={2} maxLength={500} value={motivo} disabled={!editavel} onChange={(e) => setMotivo(e.target.value)} /></label>
           </div>

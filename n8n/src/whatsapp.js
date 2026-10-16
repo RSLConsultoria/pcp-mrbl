@@ -561,6 +561,7 @@ function montarContextoInterpretacao(dados, alvo, hojeISO) {
   var pecas = numero(linha.pecas);
   var p = {
     dealId: dealId,
+    os: texto(linha.os),
     dataCombinada: texto(linha.data_combinada),
     leadTime: texto(linha.lead_time)
   };

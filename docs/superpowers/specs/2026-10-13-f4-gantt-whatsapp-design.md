@@ -361,3 +361,12 @@ Depois do aceite local:
 - ~~falha no WhatsApp não desfaz `enviar_oficina`~~: **fora do escopo da F4 por decisão do dono (16/10)**, junto com o aviso de material enviado;
 - nenhum dado real entra no repositório;
 - testes n8n, web, build e Playwright ficam verdes.
+
+## Conferência com dados reais (16/10)
+
+Uma leitura real, somente de leitura, do funil Produção (etapa Costura) e das faltas na planilha mostrou dois pontos, corrigidos:
+
+- **Faltas ligadas pela OS.** O card do funil Produção é outro negócio do Ploomes; cada caixa do Almoxarifado (Costura e Acabamento) tem o próprio card. As faltas da OS no Gantt, no painel e no contexto do intérprete são as das caixas com a mesma OS, nunca pelo `deal_id`.
+- **"Será produzido por" é campo de usuário.** A leitura usa `UserValueId`/`UserValueName` e a alteração grava `UserValueId`. "ALOCAR" é um usuário do Ploomes; quando ele vem na lista de oficinas, a tela não mostra a opção vazia repetida, e escolher ALOCAR grava esse usuário.
+
+O simulador local aceita `MOCK_FOTO=<arquivo>` com `{ producao, oficinas, caixas }` montado pelas funções do servidor. O arquivo fica fora do repositório, porque contém dados reais.

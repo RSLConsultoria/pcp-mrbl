@@ -14,6 +14,7 @@
 // Nova demanda: OS 90006 (Acabamento) ou 90003 (Costura) já saíram; 90001 (Acabamento) ainda não saiu (409).
 // Saídas com falta: 90003 sem pedido; 90004 dividida (A pedir pelo PED-0005 em etapa que saiu do quadro, e Solicitado pelo PED-0001); 90005 dividida (Aguardando entrega e Enviado ao destino final, PED-0003.1 com a baixa); 90006 e 90007 em Enviado ao destino final; 90008 em Concluído (tudo resolvido sem pedido).
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 
 const PORTA = Number(process.env.MOCK_PORT) || 8787;
 const USUARIOS = ['Lucca', 'Maria', 'Renata'];
@@ -152,6 +153,27 @@ const nomeEtapa = (id) => etapas().find((e) => e.id === id)?.nome ?? id;
 const concluidoEm = (p) => p.concluidoEm || (p.etapa === etapaFinal().id && p.baixadoEm ? p.baixadoEm : '');
 const resta = (it) => Math.max(0, it.falta - it.baixada);
 const aberto = (it) => it.status !== 'RESOLVIDO' && resta(it) > 0;
+// Modo foto: MOCK_FOTO aponta para um JSON (fora do repositório, que é público) com
+// { producao, oficinas, caixas } montado pelas funções do servidor a partir de uma
+// leitura real. As gravações continuam só na memória; o WhatsApp segue fictício.
+if (process.env.MOCK_FOTO) {
+  const foto = JSON.parse(readFileSync(process.env.MOCK_FOTO, 'utf8'));
+  estado.caixas = foto.caixas;
+  estado.pedidos = [];
+  estado.dealsEditaveis = foto.caixas.map((c) => c.dealId);
+  estado.producao = foto.producao.map(({ faltasCostura, faltasAcabamento, ...p }) => ({ ...p, mensagens: [], sugestoes: [], historico: [] }));
+  estado.dealsProducaoEditaveis = estado.producao.map((p) => p.dealId);
+  estado.oficinas = foto.oficinas;
+  const comOficina = estado.producao.find((p) => p.oficinaId && p.oficina.toUpperCase() !== 'ALOCAR');
+  estado.mensagensWhatsappSemAssociacao = comOficina ? [{
+    id: 'MSG-SEM-FOTO', quando: new Date(Date.now() - 600_000).toISOString(), participanteNome: 'Pessoa da oficina (simulada)',
+    direcao: 'RECEBIDA', texto: `A ${comOficina.peca} fica pronta dia ${diaIso(5).slice(8, 10)}/${diaIso(5).slice(5, 7)}.`,
+    associacao: 'SEM_ASSOCIACAO', statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: comOficina.oficinaId,
+    oficina: comOficina.oficina, grupoNome: `GRUPO SIMULADO · ${comOficina.oficina}`
+  }] : [];
+  console.log(`[mock] foto carregada: ${estado.producao.length} OS, ${estado.caixas.length} caixas (geradoEm ${foto.geradoEm})`);
+}
+
 const caixaDe = (dealId) => estado.caixas.find((c) => c.dealId === dealId);
 const editavel = (dealId) => estado.dealsEditaveis.includes(dealId);
 const itemDe = (dealId, itemId) => caixaDe(dealId)?.itens.find((i) => i.id === itemId);
@@ -224,12 +246,13 @@ function montarBoard() {
     mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
     producao: estado.producao.map((p) => ({
       ...p,
-      faltasCostura: estado.caixas.filter((c) => c.dealId === p.dealId && c.tipo === 'COSTURA')
+      // Como no servidor: o card da Produção é outro negócio; as caixas se ligam pela OS.
+      faltasCostura: estado.caixas.filter((c) => c.os === p.os && c.tipo === 'COSTURA')
         .flatMap((c) => c.itens.filter((i) => aberto(i)).map((i) => ({
           ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
           editavel: true, pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((x) => x.id), pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''
         }))),
-      faltasAcabamento: estado.caixas.filter((c) => c.dealId === p.dealId && c.tipo === 'ACABAMENTO')
+      faltasAcabamento: estado.caixas.filter((c) => c.os === p.os && c.tipo === 'ACABAMENTO')
         .flatMap((c) => c.itens.filter((i) => aberto(i)).map((i) => ({
           ...i, resta: resta(i), restaG: i.faltaG === null ? null : Math.round((resta(i) / i.falta) * i.faltaG),
           editavel: true, pedidoIds: pedidosAbertosDoItem(c.dealId, i.id).map((x) => x.id), pedidoId: pedidoAbertoDoItem(c.dealId, i.id)?.id ?? ''

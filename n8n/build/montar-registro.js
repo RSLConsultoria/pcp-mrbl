@@ -1736,7 +1736,7 @@ function propriedadeDoDeal(deal, campo) {
 
 function valorPropriedadePloomes(prop) {
   if (!prop) return '';
-  var candidatos = [prop.StringValue, prop.BigStringValue, prop.ObjectValueName, prop.IntegerValue,
+  var candidatos = [prop.StringValue, prop.BigStringValue, prop.UserValueName, prop.ObjectValueName, prop.IntegerValue,
     prop.DecimalValue, prop.DateTimeValue];
   for (var i = 0; i < candidatos.length; i++) {
     if (candidatos[i] !== null && candidatos[i] !== undefined && texto(candidatos[i]) !== '') return candidatos[i];
@@ -1746,7 +1746,7 @@ function valorPropriedadePloomes(prop) {
 
 function idObjetoPloomes(prop) {
   if (!prop) return '';
-  var candidatos = [prop.ObjectValueId, prop.IntegerValue, prop.StringValue];
+  var candidatos = [prop.UserValueId, prop.ObjectValueId, prop.IntegerValue, prop.StringValue];
   for (var i = 0; i < candidatos.length; i++) {
     if (candidatos[i] !== null && candidatos[i] !== undefined && texto(candidatos[i]) !== '') return texto(candidatos[i]);
   }
@@ -1764,7 +1764,8 @@ function normalizarDealProducao(deal) {
     dealId: texto(deal.Id),
     os: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_OS_PRODUCAO))),
     oficinaId: idObjetoPloomes(oficina),
-    oficina: texto(oficina && oficina.ObjectValueName),
+    // "Será produzido por" é campo de usuário no Ploomes; "ALOCAR" é um usuário de lá.
+    oficina: texto(oficina && (oficina.UserValueName || oficina.ObjectValueName)),
     inicioCostura: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_INICIO_COSTURA))),
     dataCombinada: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_DATA_COMBINADA_PLOOMES))),
     leadTime: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_LEAD_TIME))),
@@ -1955,11 +1956,14 @@ function ordenarProducoes(producoes) {
   });
 }
 
+// O card do funil Produção é outro negócio: as caixas do Almoxarifado têm cards
+// próprios (Costura e Acabamento). A ligação é pela OS, nunca pelo deal_id.
 function faltasDaCaixaProducao(producao, caixas, tipo) {
-  var dealId = texto(producao && producao.dealId);
+  var os = texto(producao && producao.os);
   var faltas = [];
+  if (!os) return faltas;
   (caixas || []).forEach(function (c) {
-    if (!c || texto(c.dealId) !== dealId || semAcento(c.tipo) !== tipo) return;
+    if (!c || texto(c.os) !== os || semAcento(c.tipo) !== tipo) return;
     (c.itens || []).forEach(function (i) {
       if (i && STATUS_ITEM_ABERTO_PRODUCAO[semAcento(i.status)] && (i.resta === null || Number(i.resta) > 0)) faltas.push(i);
     });
@@ -2963,6 +2967,7 @@ function montarContextoInterpretacao(dados, alvo, hojeISO) {
   var pecas = numero(linha.pecas);
   var p = {
     dealId: dealId,
+    os: texto(linha.os),
     dataCombinada: texto(linha.data_combinada),
     leadTime: texto(linha.lead_time)
   };

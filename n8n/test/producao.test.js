@@ -29,7 +29,7 @@ test('normalizarDealProducao lê os valores tipados de OtherProperties', () => {
     LastUpdateDate: '2026-10-14T15:20:00Z',
     OtherProperties: [
       { FieldKey: 'deal_C06992BA-FF1E-47A8-9330-5242026E691E', StringValue: '90001' },
-      { FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', IntegerValue: 44, ObjectValueName: 'OFICINA FICTÍCIA' },
+      { FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', IntegerValue: 44, UserValueId: 44, UserValueName: 'OFICINA FICTÍCIA' },
       { FieldKey: 'deal_92FBE0E7-E136-41BF-AE47-1E427B178727', DateTimeValue: '2026-10-01T03:00:00Z' },
       { FieldKey: 'deal_E53BDEC3-F829-413D-9421-91D5D7411349', DateTimeValue: '2026-10-20T03:00:00Z' },
       { FieldKey: 'deal_1B168E7F-E71D-4895-8A37-D7DB6FD3418D', DateTimeValue: '2026-10-18T03:00:00Z' },
@@ -60,6 +60,20 @@ test('normalizarDealProducao tolera oficina e campos ausentes sem inventar dados
   assert.equal(r.oficina, 'OFICINA B');
   assert.equal(r.pecas, '');
   assert.equal(r.peca, 'PEÇA SEM CADASTRO');
+});
+
+// "Será produzido por" é campo de usuário no Ploomes (conferido na foto de 16/10).
+test('normalizarDealProducao lê a oficina do campo de usuário, inclusive o usuário ALOCAR', () => {
+  const deal = (id, nome) => ({ Id: '700009', Title: 'PEÇA', OtherProperties: [
+    { FieldKey: 'deal_C06992BA-FF1E-47A8-9330-5242026E691E', StringValue: '90009' },
+    { FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', IntegerValue: id, UserValueId: id, UserValueName: nome }
+  ] });
+  const r = limpo(ctx.normalizarDealProducao(deal(51, 'OFICINA USUARIO')));
+  assert.equal(r.oficinaId, '51');
+  assert.equal(r.oficina, 'OFICINA USUARIO');
+  const alocar = limpo(ctx.normalizarDealProducao(deal(52, 'ALOCAR')));
+  assert.equal(alocar.oficinaId, '52');
+  assert.equal(alocar.oficina, 'ALOCAR');
 });
 
 test('paginação do Ploomes avança página cheia e para na página vazia', () => {
@@ -135,15 +149,19 @@ test('ordenacao coloca ALOCAR primeiro e usa o prazo mais urgente', () => {
   assert.deepEqual(limpo(ctx.ordenarProducoes(itens)).map((x) => x.dealId), ['1', '4', '2', '3']);
 });
 
-test('faltas de aviamentos separam COSTURA e ACABAMENTO e trazem somente itens abertos', () => {
+// No Ploomes o card do funil Produção é outro negócio: cada caixa do
+// Almoxarifado (Costura e Acabamento) tem o próprio card. A ligação é pela OS.
+test('faltas de aviamentos vêm das caixas da mesma OS, separadas em COSTURA e ACABAMENTO, só itens abertos', () => {
   const caixas = [
-    { dealId: '700001', os: '90001', tipo: 'COSTURA', itens: [{ id: 'a', nome: 'VIÉS', status: 'ABERTO', resta: 3 }, { id: 'b', status: 'RESOLVIDO', resta: 0 }] },
-    { dealId: '700001', os: '90001', tipo: 'ACABAMENTO', itens: [{ id: 'c', status: 'ABERTO', resta: 2 }, { id: 'e', status: 'PARCIAL', resta: 0 }] },
-    { dealId: 'outro-deal', os: '90001', tipo: 'ACABAMENTO', itens: [{ id: 'contaminacao', status: 'ABERTO', resta: 9 }] },
-    { dealId: '700002', os: '90002', tipo: 'COSTURA', itens: [{ id: 'd', status: 'ABERTO', resta: 5 }] }
+    { dealId: '800001', os: '90001', tipo: 'COSTURA', itens: [{ id: 'a', nome: 'VIÉS', status: 'ABERTO', resta: 3 }, { id: 'b', status: 'RESOLVIDO', resta: 0 }] },
+    { dealId: '800002', os: '90001', tipo: 'ACABAMENTO', itens: [{ id: 'c', status: 'ABERTO', resta: 2 }, { id: 'e', status: 'PARCIAL', resta: 0 }] },
+    { dealId: '800003', os: '90002', tipo: 'COSTURA', itens: [{ id: 'd', status: 'ABERTO', resta: 5 }] },
+    { dealId: '800004', os: '', tipo: 'COSTURA', itens: [{ id: 'sem-os', status: 'ABERTO', resta: 1 }] }
   ];
   assert.deepEqual(limpo(ctx.faltasDaCostura(prod({}), caixas)).map((x) => x.id), ['a']);
   assert.deepEqual(limpo(ctx.faltasDoAcabamento(prod({}), caixas)).map((x) => x.id), ['c']);
+  assert.deepEqual(limpo(ctx.faltasDaCostura(prod({ os: '' }), caixas)).map((x) => x.id), []);
+  assert.deepEqual(limpo(ctx.faltasDaCostura(prod({ os: ' 90001 ' }), caixas)).map((x) => x.id), ['a']);
 });
 
 test('validarAlteracaoProducao exige motivo ao mudar data e respeita allowlist/versao', () => {

@@ -19,9 +19,8 @@ Object.keys(campos).forEach(function (chave) {
   }
   if (chave === CAMPO_OFICINA_PLOOMES) {
     if (valor && !/^\d+$/.test(valor)) throw new Error('Oficina invalida para gravacao no Ploomes.');
-    // Mesma propriedade da leitura (idObjetoPloomes usa ObjectValueId primeiro).
-    // O tipo do campo sera confirmado na homologacao com o card de teste.
-    props.push({ FieldKey: chave, ObjectValueId: valor ? Number(valor) : null });
+    // "Sera produzido por" e campo de usuario no Ploomes (conferido na leitura real de 16/10).
+    props.push({ FieldKey: chave, UserValueId: valor ? Number(valor) : null });
     return;
   }
   throw new Error('Campo nao permitido para gravacao no Ploomes: ' + chave);

@@ -17,10 +17,10 @@ const falta = (id, deal, os, secao, nome, qtd, un, extra) => Object.assign({
   id, deal_id: deal, os, secao, ciclo: 'PEDIDO', descricao_item: nome, unidade: un, qtd_falta: qtd, qtd_baixada: '', status: 'ABERTO'
 }, extra);
 const FALTANTES = [
-  falta('f1', '700001', '90001', 'COSTURA', 'VIÉS TESTE', 4, 'MT'),
-  falta('f2', '700001', '90001', 'COSTURA', 'LINHA TESTE', 2, 'UN', { nome_cor: 'AZUL' }),
-  falta('f3', '700001', '90001', 'COSTURA', 'BOTÃO RESOLVIDO', 10, 'UN', { status: 'RESOLVIDO' }),
-  falta('f4', '700002', '90002', 'ACABAMENTO', 'ETIQUETA TESTE', 30, 'UN')
+  falta('f1', '810001', '90001', 'COSTURA', 'VIÉS TESTE', 4, 'MT'),
+  falta('f2', '810001', '90001', 'COSTURA', 'LINHA TESTE', 2, 'UN', { nome_cor: 'AZUL' }),
+  falta('f3', '810001', '90001', 'COSTURA', 'BOTÃO RESOLVIDO', 10, 'UN', { status: 'RESOLVIDO' }),
+  falta('f4', '810002', '90002', 'ACABAMENTO', 'ETIQUETA TESTE', 30, 'UN')
 ];
 const minuto = (n) => new Date(Date.parse('2026-10-13T10:00:00.000Z') + n * 60000).toISOString();
 function conversa() {

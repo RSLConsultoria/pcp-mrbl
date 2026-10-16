@@ -132,20 +132,20 @@ test('alteracao de data monta PATCH do campo de data do Ploomes antes das escrit
   }] });
 });
 
-test('oficina é gravada no Ploomes pela mesma propriedade da leitura (ObjectValueId)', () => {
+test('oficina é gravada no Ploomes no campo de usuário (UserValueId)', () => {
   const [patch] = rodarNode('montar-alteracao-ploomes', { $: cifrao({ 'Processar Acao': [{
     status: 200,
     ploomes: { dealId: '600001', campos: { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': '44' } }
   }] }) });
   assert.deepEqual(patch.json.registro, { OtherProperties: [{
     FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4',
-    ObjectValueId: 44
+    UserValueId: 44
   }] });
   const [alocar] = rodarNode('montar-alteracao-ploomes', { $: cifrao({ 'Processar Acao': [{
     status: 200,
     ploomes: { dealId: '600001', campos: { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': '' } }
   }] }) });
-  assert.deepEqual(alocar.json.registro.OtherProperties, [{ FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', ObjectValueId: null }]);
+  assert.deepEqual(alocar.json.registro.OtherProperties, [{ FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', UserValueId: null }]);
 });
 
 test('acao sem alteracao no Ploomes pula o PATCH', () => {

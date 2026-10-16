@@ -38,7 +38,7 @@ function deal(id, os, oficinaId, oficinaNome) {
     LastUpdateDate: '2026-10-15T12:00:00Z',
     OtherProperties: [
       prop('deal_C06992BA-FF1E-47A8-9330-5242026E691E', { StringValue: os }),
-      prop('deal_89DE05E0-467F-4012-9B82-F1E077F968E4', { ObjectValueId: oficinaId, ObjectValueName: oficinaNome }),
+      prop('deal_89DE05E0-467F-4012-9B82-F1E077F968E4', { IntegerValue: oficinaId, UserValueId: oficinaId, UserValueName: oficinaNome }),
       prop('deal_E53BDEC3-F829-413D-9421-91D5D7411349', { DateTimeValue: '2026-10-25T03:00:00Z' })
     ]
   };
