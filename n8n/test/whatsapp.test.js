@@ -236,3 +236,56 @@ test('processar entrada repassa a instância esperada para a normalização', ()
   });
   assert.deepEqual(limpo(rejeitada), { ok: true, ignorada: true, motivo: 'INSTANCIA_IGNORADA', operacoes: [] });
 });
+
+test('grupo do WhatsApp exige JID de grupo preenchido; JID vazio nunca casa com oficina sem grupo', () => {
+  const grupos = [
+    { ploomes_id: 'of-sem-grupo', nome: 'OFICINA SEM GRUPO', grupo_jid: '', ativo: 'SIM' },
+    { ploomes_id: 'of-contato', nome: 'OFICINA CONTATO', grupo_jid: '5511999999999@s.whatsapp.net', ativo: 'SIM' },
+    { ploomes_id: 'of-1', nome: 'OFICINA A', grupo_jid: 'grupo-ficticio@g.us', ativo: 'SIM' }
+  ];
+  assert.equal(ctx.grupoWhatsappAtivo(grupos, ''), null);
+  assert.equal(ctx.grupoWhatsappAtivo(grupos, undefined), null);
+  assert.equal(ctx.grupoWhatsappAtivo(grupos, '5511999999999@s.whatsapp.net'), null);
+  assert.equal(ctx.grupoWhatsappAtivo(grupos, 'grupo-ficticio@g.us').ploomes_id, 'of-1');
+  const semJid = evento();
+  semJid.data.key.remoteJid = '';
+  assert.equal(ctx.normalizarEventoWhatsapp(semJid, grupos).motivo, 'GRUPO_NAO_CADASTRADO');
+});
+
+test('última cobrança: cobrança já respondida por mensagem recebida posterior da mesma OS não associa', () => {
+  const msg = { grupoJid: 'grupo-ficticio@g.us', texto: 'Fica pronta amanhã.', quando: '2026-10-13T13:20:00.000Z' };
+  const base = { direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', status_envio: 'ENVIADA', grupo_jid: 'grupo-ficticio@g.us', quando: '2026-10-13T12:00:00.000Z' };
+  const c1 = Object.assign({}, base, { id: 'C1', deal_id: '700001', os: '90001' });
+  const c2 = Object.assign({}, base, { id: 'C2', deal_id: '700002', os: '90002', quando: '2026-10-13T12:30:00.000Z' });
+  const resposta1 = { id: 'R1', direcao: 'RECEBIDA', deal_id: '700001', os: '90001', grupo_jid: 'grupo-ficticio@g.us', quando: '2026-10-13T12:10:00.000Z' };
+  // C1 já foi respondida; sobra só a cobrança da OS 90002.
+  assert.deepEqual(limpo(ctx.associarMensagemWhatsapp(msg, PRODUCOES, [c1, c2, resposta1])),
+    { dealId: '700002', os: '90002', associacao: 'ULTIMA_COBRANCA' });
+  // Resposta anterior à cobrança não conta como resposta.
+  const anterior = Object.assign({}, resposta1, { quando: '2026-10-13T11:00:00.000Z' });
+  assert.deepEqual(limpo(ctx.associarMensagemWhatsapp(msg, PRODUCOES, [c1, anterior])),
+    { dealId: '700001', os: '90001', associacao: 'ULTIMA_COBRANCA' });
+  // Todas respondidas: fica sem associação.
+  assert.deepEqual(limpo(ctx.associarMensagemWhatsapp(msg, PRODUCOES, [c1, resposta1])),
+    { dealId: '', os: '', associacao: 'SEM_ASSOCIACAO' });
+});
+
+test('data dd/mm sem ano mais de seis meses à frente vira observação em vez de pular de ano', () => {
+  const quando = '2026-10-13T13:20:00.000Z';
+  // 05/10 já passou: antes virava 2027-10-05.
+  const passada = limpo(ctx.validarInterpretacaoWhatsapp({ tipo: 'NOVA_DATA_COMBINADA', valor: '05/10', resumo: 'Entrega dia 5', evidencia: 'dia 05/10', confianca: 0.95 }, quando));
+  assert.equal(passada.ok, true);
+  assert.equal(passada.tipo, 'OBSERVACAO');
+  assert.equal(passada.valor, '');
+  // Virada de ano próxima continua valendo.
+  const virada = limpo(ctx.validarInterpretacaoWhatsapp({ tipo: 'NOVA_DATA_COMBINADA', valor: '05/01', resumo: 'Entrega dia 5', evidencia: 'dia 05/01', confianca: 0.95 }, '2026-12-28T13:00:00.000Z'));
+  assert.deepEqual([virada.tipo, virada.valor], ['NOVA_DATA_COMBINADA', '2027-01-05']);
+  // Mesmo ano, mas longe demais.
+  const longe = limpo(ctx.validarInterpretacaoWhatsapp({ tipo: 'NOVA_DATA_COMBINADA', valor: '20/10', resumo: 'x', evidencia: 'x', confianca: 0.95 }, '2026-01-10T13:00:00.000Z'));
+  assert.equal(longe.tipo, 'OBSERVACAO');
+  // Ano explícito segue como data.
+  const explicita = limpo(ctx.validarInterpretacaoWhatsapp({ tipo: 'NOVA_DATA_COMBINADA', valor: '20/10/2027', resumo: 'x', evidencia: 'x', confianca: 0.95 }, quando));
+  assert.deepEqual([explicita.tipo, explicita.valor], ['NOVA_DATA_COMBINADA', '2027-10-20']);
+  const curta = limpo(ctx.validarInterpretacaoWhatsapp({ tipo: 'NOVA_DATA_COMBINADA', valor: '20/10', resumo: 'x', evidencia: 'x', confianca: 0.95 }, quando));
+  assert.deepEqual([curta.tipo, curta.valor], ['NOVA_DATA_COMBINADA', '2026-10-20']);
+});

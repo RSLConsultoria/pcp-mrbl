@@ -271,7 +271,7 @@ Ordem:
 
 1. resposta citada a uma mensagem enviada pelo app;
 2. uma única OS válida citada no texto;
-3. uma única cobrança ainda sem resposta recente no mesmo grupo;
+3. uma única cobrança enviada nas últimas 72 horas no mesmo grupo e ainda sem resposta (respondida = já existe mensagem recebida associada à mesma OS depois dela);
 4. associação manual no app.
 
 Se existirem duas possibilidades, a mensagem fica `SEM_ASSOCIACAO`. O intérprete não escolhe uma OS no escuro.
@@ -284,6 +284,8 @@ Depois de associar a OS, o n8n envia somente o trecho necessário e um contexto 
 - o texto original continua visível;
 - conteúdo fora do schema é descartado e registrado em `ERROS_APP`;
 - confiança baixa gera apenas observação, sem sugerir mudança de campo;
+- data `dd/mm` sem ano que cairia a mais de ~6 meses da mensagem também vira observação, em vez de pular para o ano seguinte;
+- só mensagens de grupo (`remoteJid` terminado em `@g.us`) são aceitas; JID vazio nunca casa com oficina sem grupo;
 - o modelo e a credencial serão escolhidos na implementação sem ficarem no repositório.
 
 ### Aceitar e ignorar

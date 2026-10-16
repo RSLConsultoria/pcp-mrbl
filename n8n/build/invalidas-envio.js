@@ -2453,8 +2453,11 @@ function resultadoSaidaWhatsapp(mensagem, resposta) {
   return { id: id, evolution_id: '', status_envio: 'ERRO', erro: erro };
 }
 
+// So JID de grupo (termina em @g.us). JID vazio nunca casa com oficina sem
+// grupo configurado, e conversa individual nao entra.
 function grupoWhatsappAtivo(grupos, jid) {
   var alvo = texto(jid);
+  if (!alvo || !/@g\.us$/.test(alvo)) return null;
   return (grupos || []).filter(function (g) {
     var ativo = semAcento(g && g.ativo);
     return g && texto(g.grupo_jid) === alvo && (ativo === '' || ativo === 'SIM' || ativo === 'S' || ativo === 'TRUE' || ativo === '1');
@@ -2553,7 +2556,7 @@ function associarMensagemWhatsapp(msg, producoes, mensagens) {
   var pendentes = mensagens.filter(function (m) {
     if (!m || semAcento(m.direcao) !== 'ENVIADA' || semAcento(m.tipo) !== 'COBRANCA_PRAZO') return false;
     if (texto(m.status_envio) && semAcento(m.status_envio) !== 'ENVIADA') return false;
-    if (texto(m.grupo_jid) !== texto(msg.grupoJid) || texto(m.respondida)) return false;
+    if (texto(m.grupo_jid) !== texto(msg.grupoJid) || cobrancaRespondidaWhatsapp(m, mensagens)) return false;
     var ts = Date.parse(texto(m.quando));
     return isFinite(ts) && isFinite(agora) && ts <= agora && ts >= limite;
   });
@@ -2565,6 +2568,18 @@ function associarMensagemWhatsapp(msg, producoes, mensagens) {
     return { dealId: texto(unica.deal_id), os: texto(unica.os), associacao: 'ULTIMA_COBRANCA' };
   }
   return resultadoSemAssociacaoWhatsapp();
+}
+
+// Respondida: ja existe mensagem RECEBIDA associada a mesma OS depois da cobranca.
+function cobrancaRespondidaWhatsapp(cobranca, mensagens) {
+  var dealId = texto(cobranca.deal_id);
+  var enviadaEm = Date.parse(texto(cobranca.quando));
+  if (!dealId || !isFinite(enviadaEm)) return false;
+  return (mensagens || []).some(function (m) {
+    if (!m || semAcento(m.direcao) !== 'RECEBIDA' || texto(m.deal_id) !== dealId) return false;
+    var ts = Date.parse(texto(m.quando));
+    return isFinite(ts) && ts > enviadaEm;
+  });
 }
 
 function somarDiasISO(data, dias) {
@@ -2609,6 +2624,14 @@ function resolverDataInterpretada(valor, quando) {
   return dataValida(iso) ? iso : '';
 }
 
+// dd/mm sem ano que cai a mais de ~6 meses (183 dias) da mensagem e ambiguo:
+// vira observacao em vez de virar uma data no ano seguinte.
+function dataSemAnoDistante(valor, data, quando) {
+  if (!/^\d{1,2}\/\d{1,2}$/.test(texto(valor))) return false;
+  var dias = diasEntreISO(dataISOEmSaoPaulo(quando), data);
+  return dias === null || dias > 183;
+}
+
 function interpretarComoObjeto(valor) {
   if (valor && typeof valor === 'object') return valor;
   if (typeof valor !== 'string') return null;
@@ -2626,7 +2649,7 @@ function validarInterpretacaoWhatsapp(valor, quando) {
   var evidencia = texto(o.evidencia).replace(/(\r\n|\n|\r)+/g, ' ').slice(0, 500);
   var data = tipo === 'NOVA_DATA_COMBINADA' ? resolverDataInterpretada(o.valor, quando) : '';
   if (tipo === 'NOVA_DATA_COMBINADA' && !data) return { ok: false, erro: 'Data interpretada inválida.' };
-  if (confianca < 0.7) {
+  if (confianca < 0.7 || (tipo === 'NOVA_DATA_COMBINADA' && dataSemAnoDistante(o.valor, data, quando))) {
     tipo = 'OBSERVACAO';
     data = '';
   }
