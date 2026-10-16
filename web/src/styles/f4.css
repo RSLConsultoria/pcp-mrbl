@@ -49,6 +49,7 @@
 .gantt__pista { position: relative; min-height: 50px; border-bottom: 1px solid var(--borda); background: repeating-linear-gradient(to right, transparent 0, transparent 27px, #eef0f4 27px, #eef0f4 28px); }
 .gantt__barra { position: absolute; top: 10px; height: 29px; min-width: 14px; overflow: hidden; padding: 0 7px; border: 0; border-radius: 4px; background: #466cc8; color: #fff; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
 .gantt__barra span { font: 700 10px var(--font-sans); }
+.gantt__barra > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .gantt__barra .gantt__alerta { margin-right: 4px; font-size: 12px; }
 .gantt__barra--lead { background: repeating-linear-gradient(135deg, #5e7fcf 0, #5e7fcf 6px, #7693d7 6px, #7693d7 12px); }
 .gantt__barra--atrasado { background: #c84949; }
@@ -181,3 +182,4 @@
 .producao-tabela__situacao--sem_prazo { color: var(--leve); }
 @media (max-width: 900px) { .producao-filtros { flex-wrap: wrap; } }
 @media (max-width: 600px) { .producao-filtros .producao-visao { margin-left: 0; align-self: flex-start; } }
+.producao-tabela__totais { color: var(--suave); font-variant-numeric: tabular-nums; }

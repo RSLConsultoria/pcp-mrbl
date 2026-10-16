@@ -25,10 +25,11 @@ describe('linhas da tabela', () => {
     const [l] = linhasTabela([prod({
       dataCombinada: '', leadTime: '2026-10-10',
       faltasCostura: [{ id: 'c' } as never], faltasAcabamento: [{ id: 'a' } as never, { id: 'b' } as never],
-      sugestoes: [{ id: 's', status: 'PENDENTE' } as never]
+      sugestoes: [{ id: 's', status: 'PENDENTE' } as never], valorCorte: 12345.67
     })], HOJE);
     expect(l.valores.os.exibir).toBe('90001');
     expect(l.valores.pecas.exibir).toBe('120');
+    expect(l.valores.valorCorte.exibir).toBe('R$ 12.346');
     expect(l.valores.inicio.exibir).toBe('01/10/2026');
     expect(l.valores.combinada.exibir).toBe('');
     expect(l.valores.leadTime.exibir).toBe('10/10/2026');
@@ -68,6 +69,13 @@ describe('ordenação', () => {
     expect(ids(ordenarLinhas(linhas, { coluna: 'pecas', direcao: 'asc' }))).toEqual(['a', 'b', 'c']);
     expect(ids(ordenarLinhas(linhas, { coluna: 'pecas', direcao: 'desc' }))).toEqual(['b', 'a', 'c']);
     expect(ids(ordenarLinhas(linhas, { coluna: 'os', direcao: 'asc' }))).toEqual(['b', 'c', 'a']);
+  });
+
+  it('valor do corte ordena como número, vazio no fim', () => {
+    const l = linhasTabela([prod({ dealId: 'x', valorCorte: null }), prod({ dealId: 'y', valorCorte: 9000 }), prod({ dealId: 'z', valorCorte: 10000 })], HOJE);
+    expect(ids(ordenarLinhas(l, { coluna: 'valorCorte', direcao: 'asc' }))).toEqual(['y', 'z', 'x']);
+    expect(ids(ordenarLinhas(l, { coluna: 'valorCorte', direcao: 'desc' }))).toEqual(['z', 'y', 'x']);
+    expect(ids(filtrarLinhas(l, { valorCorte: '10.000' }))).toEqual(['z']);
   });
 
   it('textos em pt-BR ignorando acentos e maiúsculas', () => {

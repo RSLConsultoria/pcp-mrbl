@@ -138,6 +138,7 @@ export interface Producao {
   dataCombinada: string;
   leadTime: string;
   pecas: number | null;
+  valorCorte?: number | null; // "Valor Total - Corte Real" do Ploomes, em R$ (API antiga não manda)
   cliente: string;
   peca: string;
   referencia: string;

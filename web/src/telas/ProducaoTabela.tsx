@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Producao } from '../api/tipos';
-import { SITUACOES_PRAZO } from '../regras/producao';
+import { reais, SITUACOES_PRAZO, totaisProducao } from '../regras/producao';
 import {
   COLUNAS_PRODUCAO, colunasVisiveis, filtrarLinhas, lerColunasOcultas, linhasTabela, ordenarLinhas, proximaOrdem,
   salvarColunasOcultas, temFiltroColuna, type ColunaProducao, type FiltrosColuna, type OrdemTabela
@@ -17,6 +17,7 @@ export function TabelaProducao({ lista, hojeIso, onAbrir }: { lista: Producao[];
   const colunas = colunasVisiveis(ocultas);
   const oficinas = useMemo(() => [...new Set(lista.map((p) => p.oficina))], [lista]);
   const algumFiltro = temFiltroColuna(filtros);
+  const totais = useMemo(() => totaisProducao(visiveis.map((l) => l.item)), [visiveis]);
 
   const alternarColuna = (id: ColunaProducao, mostrar: boolean) => {
     const novas = mostrar ? ocultas.filter((c) => c !== id) : [...ocultas, id];
@@ -28,6 +29,7 @@ export function TabelaProducao({ lista, hojeIso, onAbrir }: { lista: Producao[];
   return <section className="producao-tabela__area" aria-label="Tabela de produção">
     <div className="producao-tabela__barra">
       <strong>{visiveis.length} OS</strong>
+      <span className="producao-tabela__totais">{totais.pecas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} peças · {reais(totais.valor)}</span>
       {algumFiltro && <button type="button" className="botao botao--contorno" onClick={() => setFiltros({})}>Limpar filtros</button>}
       <details className="producao-tabela__colunas">
         <summary>Colunas</summary>

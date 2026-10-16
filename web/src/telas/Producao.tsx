@@ -4,7 +4,7 @@ import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { lerVisao, salvarVisao, type VisaoProducao } from '../regras/producaoTabela';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -230,9 +230,9 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
             return <div className="gantt__linha" key={p.dealId}>
               <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong><span>{p.peca || p.referencia || 'Sem descrição'}</span><span className="gantt__alertas">{alertaAviamentos.costura > 0 && <em className="gantt__sinal gantt__sinal--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.costura}</em>}{alertaAviamentos.acabamento > 0 && <em className="gantt__sinal gantt__sinal--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.acabamento}</em>}</span></button>
               <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
-                {prazo.data ? <button type="button" onClick={() => setAberta(p.dealId)} title={`OS ${p.os} · ${ddmm(prazo.data)}`}
+                {prazo.data ? <button type="button" onClick={() => setAberta(p.dealId)} title={tituloBarraProducao(p)}
                   className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${alertaAviamentos.costura ? 'gantt__barra--bloqueio' : alertaAviamentos.acabamento ? 'gantt__barra--falta' : ''}`}
-                  style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.costura > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoCostura}>🚫</span>}{alertaAviamentos.acabamento > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoAcabamento}>⚠️</span>}{p.os}</span></button>
+                  style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.costura > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoCostura}>🚫</span>}{alertaAviamentos.acabamento > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoAcabamento}>⚠️</span>}{textoBarraProducao(p)}</span></button>
                   : <button type="button" className="gantt__sem-prazo" onClick={() => setAberta(p.dealId)}>Sem prazo</button>}
               </div>
             </div>;

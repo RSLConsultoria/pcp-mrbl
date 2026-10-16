@@ -11,8 +11,8 @@ const item = {
   versao: '', editavel: true, pedidoId: '', pedidoIds: []
 };
 const producao = [
-  { dealId: '710001', os: '90001', oficinaId: '', oficina: 'ALOCAR', inicioCostura: '2026-10-01', dataCombinada: '2026-10-05', leadTime: '2026-10-08', pecas: 80, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-A', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] },
-  { dealId: '710002', os: '90002', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-04', dataCombinada: '2026-10-12', leadTime: '2026-10-15', pecas: 120, cliente: 'CLIENTE MODELO', peca: 'COLETE TESTE', referencia: 'REF-B', versao: 'v2', faltasCostura: [item], faltasAcabamento: [{ ...item, id: 'a1', nome: 'BOTÃO TESTE' }],
+  { dealId: '710001', os: '90001', oficinaId: '', oficina: 'ALOCAR', inicioCostura: '2026-10-01', dataCombinada: '2026-10-05', leadTime: '2026-10-08', pecas: 80, valorCorte: 6400, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-A', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] },
+  { dealId: '710002', os: '90002', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-04', dataCombinada: '2026-10-12', leadTime: '2026-10-15', pecas: 120, valorCorte: 12345.67, cliente: 'CLIENTE MODELO', peca: 'COLETE TESTE', referencia: 'REF-B', versao: 'v2', faltasCostura: [item], faltasAcabamento: [{ ...item, id: 'a1', nome: 'BOTÃO TESTE' }],
     mensagens: [
       { id: 'M-ERRO', quando: '2026-10-07T11:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: 'Confirma a entrega de *COLETE TESTE*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
       { id: 'M1', quando: '2026-10-07T12:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Entregamos dia 13.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
@@ -23,7 +23,7 @@ const producao = [
       { id: 'M-FILA', quando: '2026-10-07T10:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: 'Qual a previsão de entrega de *CALCA TESTE*?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 },
       { id: 'M-SEM-LEITURA', quando: '2026-10-07T10:30:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Resposta que o intérprete não leu.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' }
     ], sugestoes: [], historico: [] },
-  { dealId: '710004', os: '90004', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '', dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 40, cliente: 'CLIENTE MODELO', peca: 'JAQUETA TESTE', referencia: 'REF-D', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] }
+  { dealId: '710004', os: '90004', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '', dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 40, valorCorte: 3200, cliente: 'CLIENTE MODELO', peca: 'JAQUETA TESTE', referencia: 'REF-D', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] }
 ];
 
 async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoAcaoMs = 0) {
@@ -77,6 +77,11 @@ test('filtros, busca e barras distinguem prazo combinado, lead time e início au
   await expect(page.getByTitle('OS 90001 · 05/10')).toHaveClass(/gantt__barra--atrasado/);
   await expect(page.getByTitle('OS 90003 · 16/10')).toHaveClass(/gantt__barra--lead/);
   await expect(page.getByTitle('OS 90004 · 18/10')).toHaveClass(/gantt__barra--marco/);
+  // Dentro da barra: peças e valor do corte, sem o número da OS (que já aparece à esquerda).
+  const barra = page.getByTitle('OS 90002 · 12/10 · 120 pç · R$ 12.346');
+  await expect(barra).toContainText('120 pç · R$ 12.346');
+  await expect(barra).not.toContainText('90002');
+  await expect(page.getByTitle('OS 90003 · 16/10 · 50 pç')).toHaveText('50 pç');
 
   await page.getByLabel('Oficina').first().selectOption('OF-1');
   await expect(page.getByRole('button', { name: /OS 90001/ })).toHaveCount(0);
@@ -241,6 +246,8 @@ test('visão em tabela: alterna, ordena pela data combinada e lembra a escolha',
   await page.getByRole('button', { name: 'Tabela' }).click();
   await expect(page.getByRole('button', { name: 'Tabela' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('4 OS', { exact: true })).toBeVisible();
+  await expect(page.getByText('290 peças · R$ 21.946')).toBeVisible();
+  await expect(linhasTabela(page).nth(1)).toContainText('R$ 12.346');
   // Ordem padrão = a do Gantt: ALOCAR primeiro.
   await expect(osDaTabela(page)).toHaveText(['90001', '90002', '90003', '90004']);
   await expect(linhasTabela(page).first()).toContainText('05/10/2026');

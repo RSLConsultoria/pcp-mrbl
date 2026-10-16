@@ -384,3 +384,9 @@ Aprovada pelo dono. O Controle de produção ganha o alternador **Gantt | Tabela
 - **Colunas:** menu "Colunas" para esconder colunas (a OS fica sempre), lembrado no navegador.
 - Clique ou Enter na linha abre o mesmo painel da OS. Cabeçalho fixo, rolagem horizontal dentro da tabela e contagem "N OS".
 - Regras puras em `web/src/regras/producaoTabela.ts`; situação em `situacaoPrazo` (`web/src/regras/producao.ts`), reaproveitando `statusProducao`.
+
+## Valor do corte no Gantt e na tabela (16/10)
+
+- O sync lê "Valor Total - Corte Real" (`deal_A974EF64-47C5-4E6A-B7BD-30B7B15A437C`, moeda) e grava `valor_corte` no fim da PRODUCAO; o board devolve `valorCorte` (número ou `null`).
+- A barra do Gantt deixa de repetir o número da OS (que já está à esquerda) e mostra peças e valor: "160 pç · R$ 12.345" (sem centavos; só o que houver; sem os dois, a barra fica sem texto, e o texto corta com reticências na barra estreita). Os ícones 🚫/⚠️ continuam antes do texto. O título da barra traz OS, prazo, peças e valor.
+- A tabela ganha a coluna "Valor do corte" (ordenável como número, filtrável) e, ao lado da contagem, o total de peças e o total em R$ das OS mostradas.

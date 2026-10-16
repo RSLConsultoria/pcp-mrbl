@@ -1,12 +1,12 @@
 import type { Producao } from '../api/tipos';
-import { chaveBusca, prazoProducao, situacaoPrazo } from './producao';
+import { chaveBusca, prazoProducao, reais, situacaoPrazo } from './producao';
 
 // Visão em tabela do Controle de produção (16/10): mesmas OS do Gantt, com
 // ordenação, filtro por coluna e escolha de colunas. Situação e prazo vêm das
 // regras do Gantt (producao.ts), para as duas visões nunca divergirem.
 
 export type ColunaProducao =
-  | 'os' | 'peca' | 'referencia' | 'cliente' | 'oficina' | 'pecas' | 'inicio' | 'combinada'
+  | 'os' | 'peca' | 'referencia' | 'cliente' | 'oficina' | 'pecas' | 'valorCorte' | 'inicio' | 'combinada'
   | 'leadTime' | 'prazo' | 'situacao' | 'faltasCostura' | 'faltasAcabamento' | 'sugestao';
 
 export interface DefinicaoColuna { id: ColunaProducao; titulo: string; filtro: 'texto' | 'select'; numerica?: boolean }
@@ -18,6 +18,7 @@ export const COLUNAS_PRODUCAO: DefinicaoColuna[] = [
   { id: 'cliente', titulo: 'Cliente', filtro: 'texto' },
   { id: 'oficina', titulo: 'Oficina', filtro: 'select' },
   { id: 'pecas', titulo: 'Peças', filtro: 'texto', numerica: true },
+  { id: 'valorCorte', titulo: 'Valor do corte', filtro: 'texto', numerica: true },
   { id: 'inicio', titulo: 'Início da costura', filtro: 'texto' },
   { id: 'combinada', titulo: 'Data combinada', filtro: 'texto' },
   { id: 'leadTime', titulo: 'Lead time', filtro: 'texto' },
@@ -59,6 +60,7 @@ export function linhasTabela(lista: Producao[], hoje: string): LinhaProducao[] {
         cliente: texto(p.cliente),
         oficina: { ...texto(p.oficina), filtro: p.oficina },
         pecas: { exibir: p.pecas === null ? '' : p.pecas.toLocaleString('pt-BR', { maximumFractionDigits: 3 }), ordem: p.pecas },
+        valorCorte: typeof p.valorCorte === 'number' && Number.isFinite(p.valorCorte) ? { exibir: reais(p.valorCorte), ordem: p.valorCorte } : { exibir: '', ordem: null },
         inicio: data(p.inicioCostura),
         combinada: data(p.dataCombinada),
         leadTime: data(p.leadTime),

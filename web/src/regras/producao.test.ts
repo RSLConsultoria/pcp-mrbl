@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, situacaoPrazo, statusProducao, validarMudancaProducao } from './producao';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -120,4 +120,24 @@ it('agrupa por oficina na ordem em que chegam, como o Gantt mostra', () => {
   ];
   expect(agruparPorOficina(lista).map(([o, itens]) => [o, itens.map((p) => p.dealId)]))
     .toEqual([['ALOCAR', ['1']], ['BETA', ['2', '4']], ['ALFA', ['3']]]);
+});
+
+describe('texto da barra do Gantt: peças e valor do corte', () => {
+  it('mostra peças e valor sem centavos, ou só o que houver', () => {
+    expect(textoBarraProducao(prod({ pecas: 160, valorCorte: 12345.4 }))).toBe('160 pç · R$ 12.345');
+    expect(textoBarraProducao(prod({ pecas: 1600, valorCorte: null }))).toBe('1.600 pç');
+    expect(textoBarraProducao(prod({ pecas: null, valorCorte: 999.6 }))).toBe('R$ 1.000');
+    expect(textoBarraProducao(prod({ pecas: null, valorCorte: undefined }))).toBe('');
+  });
+
+  it('o título da barra traz OS, prazo, peças e valor', () => {
+    expect(tituloBarraProducao(prod({ os: '90001', dataCombinada: '2026-10-05', pecas: 80, valorCorte: 4500 }))).toBe('OS 90001 · 05/10 · 80 pç · R$ 4.500');
+    expect(tituloBarraProducao(prod({ os: '90001', dataCombinada: '2026-10-05', pecas: null, valorCorte: null }))).toBe('OS 90001 · 05/10');
+  });
+
+  it('formata reais sem centavos e soma peças e valor das OS', () => {
+    expect(reais(1234567.89)).toBe('R$ 1.234.568');
+    expect(totaisProducao([prod({ pecas: 100, valorCorte: 1000 }), prod({ pecas: null, valorCorte: 500.5 }), prod({ pecas: 20, valorCorte: null })]))
+      .toEqual({ pecas: 120, valor: 1500.5 });
+  });
 });

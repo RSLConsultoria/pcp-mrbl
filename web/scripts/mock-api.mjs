@@ -116,9 +116,9 @@ const estado = {
     statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
   }],
   producao: [
-    { dealId: '700003', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '700003', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, valorCorte: 7200, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
     {
-      dealId: '700002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
+      dealId: '700002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, valorCorte: 15840.5, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
       mensagens: [
         { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. Pode confirmar a data de entrega de *PECA TESTE B*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
         { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. A entrega de *PECA TESTE B* segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
@@ -127,8 +127,8 @@ const estado = {
       sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
       historico: [{ quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'PCP Teste', texto: 'Data combinada ajustada após contato com a oficina.', ploomes: 'ENVIADO' }]
     },
-    { dealId: '700005', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
-    { dealId: '700008', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1',
+    { dealId: '700005', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, valorCorte: 8550, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '700008', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, valorCorte: 4050, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1',
       // Novas tentativas (16/10): envio que ainda não saiu e resposta que o intérprete não conseguiu ler.
       mensagens: [
         { id: 'MSG-H-SEM-LEITURA', quando: new Date(Date.now() - 2_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Vou ver com a costureira e já aviso.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' },

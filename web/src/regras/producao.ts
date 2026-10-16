@@ -66,6 +66,33 @@ export function agruparPorOficina(lista: Producao[]): [string, Producao[]][] {
   return [...mapa.entries()];
 }
 
+const ehNumero = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
+
+// Reais sem centavos: "R$ 12.345".
+export function reais(v: number): string { return `R$ ${Math.round(v).toLocaleString('pt-BR')}`; }
+
+// Texto dentro da barra do Gantt: peças e valor do corte (a OS já aparece à esquerda).
+export function textoBarraProducao(p: Pick<Producao, 'pecas' | 'valorCorte'>): string {
+  const partes: string[] = [];
+  if (ehNumero(p.pecas)) partes.push(`${p.pecas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} pç`);
+  if (ehNumero(p.valorCorte)) partes.push(reais(p.valorCorte));
+  return partes.join(' · ');
+}
+
+export function tituloBarraProducao(p: Pick<Producao, 'os' | 'pecas' | 'valorCorte' | 'dataCombinada' | 'leadTime'>): string {
+  const prazo = prazoProducao(p).data;
+  return [`OS ${p.os}`, prazo ? `${prazo.slice(8, 10)}/${prazo.slice(5, 7)}` : 'sem prazo', textoBarraProducao(p)].filter(Boolean).join(' · ');
+}
+
+export function totaisProducao(lista: Pick<Producao, 'pecas' | 'valorCorte'>[]): { pecas: number; valor: number } {
+  const total = { pecas: 0, valor: 0 };
+  for (const p of lista) {
+    if (ehNumero(p.pecas)) total.pecas += p.pecas;
+    if (ehNumero(p.valorCorte)) total.valor += p.valorCorte;
+  }
+  return total;
+}
+
 export function indicadoresProducao(lista: Producao[], hoje: string) {
   const oficinas = new Set(lista.filter((p) => p.oficinaId).map((p) => p.oficinaId));
   return {
