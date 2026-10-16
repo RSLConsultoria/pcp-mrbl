@@ -8,6 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { converter } = require('../scripts/sdk-para-json');
 const { ARQUIVOS, carregar, limpo } = require('./carregar');
+const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('../scripts/ids-subworkflows');
 
 const RAIZ = path.join(__dirname, '..');
 const wfInterpretar = () => converter(path.join(RAIZ, 'workflows', 'pcp-interpretar-whatsapp.sdk.js'));
@@ -77,7 +78,8 @@ test('workflow Interpretar WhatsApp: gatilho de subworkflow, intérprete configu
 
   const modelo = no(w, 'Interpretar com Modelo');
   assert.equal(modelo.type, 'n8n-nodes-base.executeWorkflow');
-  assert.match(JSON.stringify(modelo.parameters.workflowId), /CONFIGURAR_INTERPRETE/);
+  assert.equal(modelo.parameters.workflowId.value, IDS_SUBWORKFLOWS.INTERPRETE);
+  assert.ok(idSubworkflowValido(modelo.parameters.workflowId.value));
   assert.equal(modelo.parameters.options.waitForSubWorkflow, true);
   assert.equal(no(w, 'Gravar Sugestão WhatsApp').retryOnFail, undefined);
   assert.equal(no(w, 'Registrar Erro de Interpretação').onError, 'continueRegularOutput');
@@ -142,7 +144,8 @@ for (const arq of ['pcp-api.sdk.js', 'pcp-api-homolog.sdk.js']) {
     assert.deepEqual(destinos(w, 'Disparar Interpretação'), ['Responder Acao']);
     const disparo = no(w, 'Disparar Interpretação');
     assert.equal(disparo.type, 'n8n-nodes-base.executeWorkflow');
-    assert.match(JSON.stringify(disparo.parameters.workflowId), /CONFIGURAR_INTERPRETAR_WHATSAPP/);
+    assert.equal(disparo.parameters.workflowId.value, IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP);
+    assert.ok(idSubworkflowValido(disparo.parameters.workflowId.value));
     assert.equal(disparo.parameters.options.waitForSubWorkflow, false);
     // Falha no disparo não muda a resposta da associação já gravada.
     assert.equal(disparo.onError, 'continueRegularOutput');

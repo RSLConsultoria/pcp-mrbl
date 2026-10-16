@@ -9,6 +9,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { converter } = require('../scripts/sdk-para-json');
 const { ARQUIVOS, carregar, limpo } = require('./carregar');
+const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('../scripts/ids-subworkflows');
 
 const RAIZ = path.join(__dirname, '..');
 const workflow = () => converter(path.join(RAIZ, 'workflows', 'pcp-retentar-interpretacao.sdk.js'));
@@ -46,12 +47,15 @@ test('workflow Retentar Interpretação: a cada 15 min, só pelo Interpretar Wha
     lote.urlLeitura(lote.PLANILHA_ID, ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES']));
   const disparo = no(w, 'Interpretar de Novo');
   assert.equal(disparo.type, 'n8n-nodes-base.executeWorkflow');
-  assert.match(JSON.stringify(disparo.parameters.workflowId), /CONFIGURAR_INTERPRETAR_WHATSAPP/);
+  assert.equal(disparo.parameters.workflowId.value, IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP);
+  assert.ok(idSubworkflowValido(disparo.parameters.workflowId.value));
   assert.equal(disparo.parameters.mode, 'each');
   assert.equal(disparo.parameters.options.waitForSubWorkflow, true);
   assert.equal(disparo.onError, 'continueRegularOutput');
   assert.equal(no(w, 'Gravar Erros Definitivos').onError, 'continueRegularOutput');
-  assert.ok(!w.nodes.some((n) => n.type !== 'n8n-nodes-base.code' && /sendText|evolution|CONFIGURAR_INTERPRETE"/i.test(JSON.stringify(n.parameters))));
+  // Nunca chama o modelo direto: só pelo Interpretar WhatsApp.
+  assert.ok(!w.nodes.some((n) => n.type === 'n8n-nodes-base.executeWorkflow' && n.parameters.workflowId.value === IDS_SUBWORKFLOWS.INTERPRETE));
+  assert.ok(!w.nodes.some((n) => n.type !== 'n8n-nodes-base.code' && /sendText|evolution/i.test(JSON.stringify(n.parameters))));
 });
 
 test('Selecionar Interpretações manda só mensagemId e dealId das vencidas; Marcar Erros grava ERRO nas esgotadas', () => {

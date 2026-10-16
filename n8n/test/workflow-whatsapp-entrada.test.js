@@ -39,7 +39,7 @@ test('workflow grava a mensagem antes de chamar o intérprete configurável', ()
   assert.equal(no(w, 'Gravar Mensagem Recebida').parameters.method, 'POST');
   assert.equal(no(w, 'Gravar Mensagem Recebida').retryOnFail, undefined);
   assert.equal(no(w, 'Interpretar com Modelo').type, 'n8n-nodes-base.executeWorkflow');
-  assert.match(JSON.stringify(no(w, 'Interpretar com Modelo').parameters.workflowId), /CONFIGURAR_INTERPRETE/);
+  assert.equal(no(w, 'Interpretar com Modelo').parameters.workflowId.value, require('../scripts/ids-subworkflows').IDS_SUBWORKFLOWS.INTERPRETE);
   assert.equal(no(w, 'Interpretar com Modelo').parameters.options.waitForSubWorkflow, true);
   assert.equal(no(w, 'Confirmar Recebimento').parameters.options.responseCode, 200);
 });

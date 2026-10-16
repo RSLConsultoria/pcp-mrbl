@@ -9,6 +9,9 @@ const lerBuild = (n) => JSON.stringify(fs.readFileSync(path.join(raiz, 'build', 
 // URLs do lote (batchGet) e id da planilha vem de src/planilhaLote.js.
 const { carregar } = require('../test/carregar');
 const lote = carregar();
+// Ids dos subworkflows (marcador CONFIGURAR_* ou id real): scripts/ids-subworkflows.js.
+const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('./ids-subworkflows');
+Object.keys(IDS_SUBWORKFLOWS).forEach((k) => { if (!idSubworkflowValido(IDS_SUBWORKFLOWS[k])) throw new Error('Id de subworkflow inválido: ' + k); });
 const DOC = lote.PLANILHA_ID;
 const ORIGENS = 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173';
 
@@ -333,7 +336,7 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   'const pedirInterpretacao = ' + condicao('Pedir Interpretação?', "{{ !!$('Processar Acao').first().json.interpretar }}", 'boolean', 'true', "''")
     .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
   code('montarPedidoInterpretacao', 'Montar Pedido de Interpretação', 'montar-pedido-interpretacao'),
-  executarWorkflow('dispararInterpretacao', 'Disparar Interpretação', 'CONFIGURAR_INTERPRETAR_WHATSAPP', false, 'continueRegularOutput'),
+  executarWorkflow('dispararInterpretacao', 'Disparar Interpretação', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, false, 'continueRegularOutput'),
   code('montarErro', 'Montar Erro', 'montar-erro'),
   httpGoogle('gravarErro', 'Gravar Erro', 'POST', "expr('{{ $json.url }}')", true, "onError: 'continueRegularOutput',\n    ", ''),
   responder('responderErro', 'Responder Erro', "{{ $('Montar Erro').first().json.resposta }}", '{{ 500 }}', unico),
@@ -627,7 +630,7 @@ const whatsappEntrada = IMPORT + [
     onError: 'continueErrorOutput',
     parameters: {
       source: 'database',
-      workflowId: { __rl: true, value: 'CONFIGURAR_INTERPRETE', mode: 'id' },
+      workflowId: { __rl: true, value: '${IDS_SUBWORKFLOWS.INTERPRETE}', mode: 'id' },
       mode: 'once',
       options: { waitForSubWorkflow: true }
     },
@@ -735,7 +738,7 @@ const interpretarWhatsapp = IMPORT + [
   // Reserva da tentativa (batchUpdate idempotente, com retry) antes do modelo.
   httpGoogle('gravarTentativaInterpretacao', 'Gravar Tentativa de Interpretação', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
   code('montarContextoInterpretacao', 'Montar Contexto do Intérprete', 'montar-contexto-interpretacao-manual'),
-  executarWorkflow('interpretarComModeloManual', 'Interpretar com Modelo', 'CONFIGURAR_INTERPRETE', true, 'continueErrorOutput'),
+  executarWorkflow('interpretarComModeloManual', 'Interpretar com Modelo', IDS_SUBWORKFLOWS.INTERPRETE, true, 'continueErrorOutput'),
   codeComErro('finalizarInterpretacao', 'Finalizar Interpretação', 'finalizar-interpretacao-manual', '{ gravar: true }'),
   'const temSugestaoManual = ' + condicao('Tem Sugestão?', '{{ $json.gravar }}', 'boolean', 'true', "''")
     .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
@@ -789,7 +792,7 @@ const retentarInterpretacao = IMPORT + [
 });`,
   httpGoogle('lerPendentesInterpretacao', 'Ler Interpretações Pendentes', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_RETENTAR_INTERPRETACAO)), false, unico),
   code('selecionarInterpretacoes', 'Selecionar Interpretações', 'selecionar-interpretacoes-pendentes'),
-  executarWorkflow('interpretarDeNovo', 'Interpretar de Novo', 'CONFIGURAR_INTERPRETAR_WHATSAPP', true, 'continueRegularOutput', 'each'),
+  executarWorkflow('interpretarDeNovo', 'Interpretar de Novo', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, true, 'continueRegularOutput', 'each'),
   code('marcarErrosInterpretacao', 'Marcar Erros Definitivos', 'marcar-erros-interpretacao'),
   httpGoogle('gravarErrosInterpretacao', 'Gravar Erros Definitivos', 'POST', "expr('{{ $json.url }}')", true, "onError: 'continueRegularOutput',\n    ")
 ].join('\n\n') + `
