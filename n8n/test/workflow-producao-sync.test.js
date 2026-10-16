@@ -123,3 +123,35 @@ test('adaptador cancela antes de montar escritas quando o Ploomes devolve format
     /Resposta inválida do Ploomes/
   );
 });
+
+test('card sem OS é pulado com aviso no ERROS_APP (só deal_id) e não cancela nem encerra a OS', () => {
+  const snapshot = { valueRanges: [
+    vr('PRODUCAO', [CAB_PRODUCAO,
+      ['700001', '90001', 'of-1', 'OFICINA A', '', '2026-10-20', '', '', '', '', '', 'SIM', 'v0', 'T0'],
+      ['700002', '90002', 'of-1', 'OFICINA A', '', '2026-10-21', '', '', '', '', '', 'SIM', 'v0', 'T0']]),
+    vr('OFICINAS', [CAB_OFICINAS, ['of-1', 'OFICINA A', 'grupo-ficticio@g.us', 'GRUPO FICTÍCIO', 'SIM', 'T0']])
+  ] };
+  const semOs = deal(700002, '', 'of-1', 'OFICINA A');
+  const reqs = rodarAdaptador(snapshot, [{ statusCode: 200, body: { value: [deal(700001, '90001', 'of-1', 'OFICINA A'), semOs] } }]);
+  const urls = reqs.map((x) => decodeURIComponent(x.json.url));
+  const erros = reqs.filter((x) => /'ERROS_APP'!/.test(decodeURIComponent(x.json.url)));
+  assert.equal(erros.length, 1);
+  assert.equal(erros[0].json.repetir, false);
+  const linha = erros[0].json.body.values[0];
+  assert.equal(linha[2], 'sincronizar_producao');
+  assert.equal(linha[3], '700002');
+  assert.match(linha[6], /sem OS/);
+  assert.doesNotMatch(JSON.stringify(linha), /CLIENTE|PEÇA|OFICINA/);
+  // A OS 700002 continua na Costura: nenhuma escrita marca NAO.
+  const atualizacoes = reqs.flatMap((x) => (x.json.body && x.json.body.data) || []);
+  assert.ok(!atualizacoes.some((x) => x.range === "'PRODUCAO'!L3"));
+  assert.ok(atualizacoes.some((x) => /^'PRODUCAO'!/.test(x.range)), JSON.stringify(urls));
+});
+
+test('só card sem OS: ainda registra o aviso', () => {
+  const snapshot = { valueRanges: [vr('PRODUCAO', [CAB_PRODUCAO]), vr('OFICINAS', [CAB_OFICINAS])] };
+  const reqs = rodarAdaptador(snapshot, [{ statusCode: 200, body: { value: [deal(700009, '', '', '')] } }]);
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].json.vazio, false);
+  assert.match(decodeURIComponent(reqs[0].json.url), /'ERROS_APP'!/);
+});

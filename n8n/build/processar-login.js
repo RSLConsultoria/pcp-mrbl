@@ -1829,7 +1829,33 @@ function avaliarPaginaProducao(resposta, pagina, tamanhoPagina) {
   };
 }
 
-function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm) {
+// Card sem OS nao cancela o sync: e pulado com um aviso (so o deal_id) e,
+// como continua na Costura do Ploomes, entra em dealsMantidos para nao virar NAO.
+function separarCardsSincronizacao(deals) {
+  var cards = [];
+  var mantidos = [];
+  var avisos = [];
+  (deals || []).forEach(function (deal) {
+    var card = normalizarDealProducao(deal);
+    if (!card.dealId) {
+      avisos.push({ dealId: '', erro: 'Negócio da produção sem Id ignorado na sincronização.' });
+      return;
+    }
+    if (!card.os) {
+      mantidos.push(card.dealId);
+      avisos.push({ dealId: card.dealId, erro: 'Negócio da produção sem OS ignorado na sincronização.' });
+      return;
+    }
+    cards.push(card);
+  });
+  return { cards: cards, dealsMantidos: mantidos, avisos: avisos };
+}
+
+// em_costura=NAO so sai daqui, e o adaptador so chega aqui depois de ler todas
+// as paginas do Ploomes sem erro (qualquer pagina invalida cancela o sync).
+function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm, dealsMantidos) {
+  var mantidos = Object.create(null);
+  (dealsMantidos || []).forEach(function (id) { if (texto(id)) mantidos[texto(id)] = 1; });
   var porDeal = Object.create(null);
   var ordemDeals = [];
   (cards || []).forEach(function (card) {
@@ -1846,7 +1872,7 @@ function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincr
   var encerrados = Object.create(null);
   (producaoAtual || []).forEach(function (linha) {
     var dealId = texto(linha && linha.deal_id);
-    if (!dealId || porDeal[dealId] || encerrados[dealId] || !VALORES_ATIVO_PRODUCAO[semAcento(linha.em_costura)]) return;
+    if (!dealId || porDeal[dealId] || mantidos[dealId] || encerrados[dealId] || !VALORES_ATIVO_PRODUCAO[semAcento(linha.em_costura)]) return;
     encerrados[dealId] = 1;
     operacoes.push({
       aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id',

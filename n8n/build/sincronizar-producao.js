@@ -1829,7 +1829,33 @@ function avaliarPaginaProducao(resposta, pagina, tamanhoPagina) {
   };
 }
 
-function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm) {
+// Card sem OS nao cancela o sync: e pulado com um aviso (so o deal_id) e,
+// como continua na Costura do Ploomes, entra em dealsMantidos para nao virar NAO.
+function separarCardsSincronizacao(deals) {
+  var cards = [];
+  var mantidos = [];
+  var avisos = [];
+  (deals || []).forEach(function (deal) {
+    var card = normalizarDealProducao(deal);
+    if (!card.dealId) {
+      avisos.push({ dealId: '', erro: 'Negócio da produção sem Id ignorado na sincronização.' });
+      return;
+    }
+    if (!card.os) {
+      mantidos.push(card.dealId);
+      avisos.push({ dealId: card.dealId, erro: 'Negócio da produção sem OS ignorado na sincronização.' });
+      return;
+    }
+    cards.push(card);
+  });
+  return { cards: cards, dealsMantidos: mantidos, avisos: avisos };
+}
+
+// em_costura=NAO so sai daqui, e o adaptador so chega aqui depois de ler todas
+// as paginas do Ploomes sem erro (qualquer pagina invalida cancela o sync).
+function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm, dealsMantidos) {
+  var mantidos = Object.create(null);
+  (dealsMantidos || []).forEach(function (id) { if (texto(id)) mantidos[texto(id)] = 1; });
   var porDeal = Object.create(null);
   var ordemDeals = [];
   (cards || []).forEach(function (card) {
@@ -1846,7 +1872,7 @@ function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincr
   var encerrados = Object.create(null);
   (producaoAtual || []).forEach(function (linha) {
     var dealId = texto(linha && linha.deal_id);
-    if (!dealId || porDeal[dealId] || encerrados[dealId] || !VALORES_ATIVO_PRODUCAO[semAcento(linha.em_costura)]) return;
+    if (!dealId || porDeal[dealId] || mantidos[dealId] || encerrados[dealId] || !VALORES_ATIVO_PRODUCAO[semAcento(linha.em_costura)]) return;
     encerrados[dealId] = 1;
     operacoes.push({
       aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id',
@@ -3715,7 +3741,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 // resultado em requisicoes idempotentes para PRODUCAO e OFICINAS.
 var LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS'];
 var planilha = planilhaDoLote($('Ler Snapshot Produção').first().json, LEITURAS_SYNC_PRODUCAO);
-var cards = [];
+var deals = [];
 var entradas = $input.all();
 entradas.forEach(function (item, indice) {
   var resposta = item && item.json ? item.json : {};
@@ -3724,15 +3750,21 @@ entradas.forEach(function (item, indice) {
   }
   var pagina = avaliarPaginaProducao(resposta, indice + 1, 100);
   if (!pagina.ok) throw new Error(pagina.erro);
-  pagina.itens.forEach(function (deal) {
-    var card = normalizarDealProducao(deal);
-    if (!card.dealId || !card.os) throw new Error('Negócio da produção sem deal_id ou OS. Sincronização cancelada.');
-    cards.push(card);
-  });
+  deals = deals.concat(pagina.itens);
 });
+// Todas as paginas lidas sem erro: so agora a ausencia de um card encerra a OS.
+var separados = separarCardsSincronizacao(deals);
 var agora = new Date().toISOString();
-var resultado = montarSincronizacaoProducao(cards, planilha.linhas.PRODUCAO, planilha.linhas.OFICINAS, agora);
+var resultado = montarSincronizacaoProducao(separados.cards, planilha.linhas.PRODUCAO, planilha.linhas.OFICINAS, agora, separados.dealsMantidos);
 var reqs = requisicoesDeEscrita(resultado.operacoes, [], planilha, PLANILHA_ID);
+// Avisos de card pulado vao para ERROS_APP (append, sem retry), so com o deal_id.
+separados.avisos.forEach(function (aviso) {
+  var linhaAviso = linhaErroApp({
+    agora: Date.parse(agora), sessao: { nome: 'sistema' },
+    corpo: { tipo: 'sincronizar_producao', dealId: aviso.dealId }, erro: aviso.erro
+  });
+  reqs.push(requisicaoErroApp(linhaAviso, PLANILHA_ID));
+});
 if (!reqs.length) return [{ json: { vazio: true } }];
 return reqs.map(function (r, i) {
   return { json: { vazio: false, passo: i + 1, de: reqs.length, method: r.method, url: r.url, body: r.body, repetir: r.repetir === true } };

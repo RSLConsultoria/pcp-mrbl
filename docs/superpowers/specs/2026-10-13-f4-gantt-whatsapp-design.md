@@ -73,7 +73,7 @@ Antes de implementar a integração, o formato atual desses campos e o payload d
 
 Um workflow agendado, **PCP MRBL — Sincronizar Produção**, lê as OS da etapa Costura e atualiza a aba `PRODUCAO` a cada cinco minutos. O `pcp-board` continua lendo a planilha em lote; não faz uma consulta ao Ploomes a cada navegador aberto.
 
-O sync faz upsert por `deal_id`. Linhas não são apagadas nem ordenadas. Uma OS que saiu da etapa recebe `em_costura = NAO`; o quadro mostra apenas `SIM`. Campos humanos e históricos nunca são sobrescritos pelo sync.
+O sync faz upsert por `deal_id`. Linhas não são apagadas nem ordenadas. Uma OS que saiu da etapa recebe `em_costura = NAO`, e só quando todas as páginas do Ploomes foram lidas sem erro; o quadro mostra apenas `SIM`. Um card sem OS não cancela o sync: é pulado, fica como está na planilha (não vira `NAO`) e gera um aviso em `ERROS_APP` só com o `deal_id`. Campos humanos e históricos nunca são sobrescritos pelo sync.
 
 ## 5. Abas da planilha
 
