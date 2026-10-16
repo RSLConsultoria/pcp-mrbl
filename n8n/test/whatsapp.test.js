@@ -163,7 +163,8 @@ test('entrada associada grava a mensagem e a sugestao, sem criar resposta ao gru
       id: 'ID-1', evolution_id: 'MSG-1', quando: '2026-10-13T13:20:00.000Z', grupo_jid: 'grupo-ficticio@g.us', grupo_nome: 'GRUPO TESTE',
       participante_jid: 'participante@s.whatsapp.net', participante_nome: 'Pessoa Teste', direcao: 'RECEBIDA', tipo: 'RESPOSTA',
       tipo_conteudo: 'TEXTO', texto: 'A OS 90001 fica pronta amanhã.', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
-      associacao: 'OS_NO_TEXTO', status_envio: '', erro: '', criado_em: '2026-10-13T13:21:00.000Z'
+      associacao: 'OS_NO_TEXTO', status_envio: '', erro: '', criado_em: '2026-10-13T13:21:00.000Z',
+      interpretacao_status: 'PENDENTE', interpretacao_tentativas: 1, interpretacao_proxima: '2026-10-13T13:31:00.000Z'
     } },
     { aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id', linha: {
       id: 'ID-2', mensagem_id: 'ID-1', deal_id: '700001', os: '90001', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-14',

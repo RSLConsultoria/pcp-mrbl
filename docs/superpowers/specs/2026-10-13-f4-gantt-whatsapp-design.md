@@ -117,7 +117,9 @@ O número do grupo, seus participantes e qualquer credencial ficam fora do repos
 
 Chave: `id` gerado pelo app antes do envio. `evolution_id` guarda o ID devolvido/recebido da Evolution e é único quando preenchido. Assim, a fila pode existir antes da chamada externa e o webhook continua idempotente.
 
-Campos: `id`, `evolution_id`, `quando`, `grupo_jid`, `grupo_nome`, `participante_jid`, `participante_nome`, `direcao`, `tipo`, `tipo_conteudo`, `texto`, `resposta_a_evolution_id`, `deal_id`, `os`, `oficina_id`, `associacao`, `status_envio`, `erro`, `criado_em`.
+Campos: `id`, `evolution_id`, `quando`, `grupo_jid`, `grupo_nome`, `participante_jid`, `participante_nome`, `direcao`, `tipo`, `tipo_conteudo`, `texto`, `resposta_a_evolution_id`, `deal_id`, `os`, `oficina_id`, `associacao`, `status_envio`, `erro`, `criado_em`, `envio_tentativas`, `envio_proxima`, `interpretacao_status`, `interpretacao_tentativas`, `interpretacao_proxima` (as cinco últimas acrescentadas no fim em 16/10, sem reordenar).
+
+- `interpretacao_status`: vazio (não precisa do intérprete), `PENDENTE` (a interpretar) ou `ERRO` (desistiu depois de 5 tentativas);
 
 - `direcao`: `ENVIADA` ou `RECEBIDA`;
 - `tipo`: `COBRANCA_PRAZO`, `CONFIRMAR_DATA` ou `RESPOSTA` (`AVISO_MATERIAL` saiu da F4 por decisão do dono em 16/10);
@@ -292,6 +294,7 @@ Depois de associar a OS, o n8n envia a mensagem e o contexto da OS para um model
 - data `dd/mm` sem ano que cairia a mais de ~6 meses da mensagem também vira observação, em vez de pular para o ano seguinte;
 - só mensagens de grupo (`remoteJid` terminado em `@g.us`) são aceitas; JID vazio nunca casa com oficina sem grupo;
 - o modelo e a credencial serão escolhidos na implementação sem ficarem no repositório.
+- **novas tentativas do intérprete (aprovadas pelo dono em 16/10):** quando a chamada ao intérprete falha (erro, cota, fora do ar, resposta inválida), a mensagem continua `PENDENTE` com contador e próxima tentativa; cada tentativa é reservada antes de chamar o modelo (tentativas + 1, próxima em 10 min). O workflow **PCP MRBL - Retentar Interpretação**, a cada 15 min, reprocessa pelo mesmo caminho do Interpretar WhatsApp as vencidas sem sugestão (até 10 por rodada); depois de 5 tentativas marca `ERRO`, e a conversa da OS mostra, discreto, "Não foi possível interpretar esta mensagem.". Vale para a entrada automática e para a associação manual. Interpretação válida (inclusive `OBSERVACAO`) gera a sugestão e encerra; uma sugestão por mensagem continua valendo;
 - o texto da mensagem e da conversa vai ao modelo cortado em 500 caracteres; faltas e conversa têm no máximo 10 itens.
 
 ### Aceitar e ignorar

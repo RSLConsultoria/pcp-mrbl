@@ -30,7 +30,8 @@ function rodarAdaptador(arq, nodes) {
 
 const vr = (aba, values) => ({ range: "'" + aba + "'!A1:Z100", majorDimension: 'ROWS', values });
 const CAB_MSG = ['id', 'evolution_id', 'quando', 'grupo_jid', 'grupo_nome', 'participante_jid', 'participante_nome', 'direcao', 'tipo',
-  'tipo_conteudo', 'texto', 'resposta_a_evolution_id', 'deal_id', 'os', 'oficina_id', 'associacao', 'status_envio', 'erro', 'criado_em'];
+  'tipo_conteudo', 'texto', 'resposta_a_evolution_id', 'deal_id', 'os', 'oficina_id', 'associacao', 'status_envio', 'erro', 'criado_em',
+  'envio_tentativas', 'envio_proxima', 'interpretacao_status', 'interpretacao_tentativas', 'interpretacao_proxima'];
 const CAB_SUG = ['id', 'mensagem_id', 'deal_id', 'os', 'tipo', 'valor', 'resumo', 'evidencia', 'confianca', 'status', 'criado_em',
   'decidido_em', 'decidido_por', 'versao'];
 function leitura(sugestoes) {
@@ -40,7 +41,8 @@ function leitura(sugestoes) {
       ['700001', '90001', 'of-1', 'OFICINA A', '2026-10-20', 160, 'PECA TESTE B', 'SIM', 'v1']]),
     vr('WHATSAPP_MENSAGENS', [CAB_MSG,
       ['WA-R-abc', 'EV-9', '2026-10-13T13:20:00.000Z', 'grupo-ficticio@g.us', 'GRUPO TESTE', 'p@s.whatsapp.net', 'Pessoa Ficticia', 'RECEBIDA',
-        'RESPOSTA', 'TEXTO', 'As duas ficam prontas dia 22.', '', '700001', '90001', 'of-1', 'MANUAL', '', '', '2026-10-13T13:20:00.000Z']]),
+        'RESPOSTA', 'TEXTO', 'As duas ficam prontas dia 22.', '', '700001', '90001', 'of-1', 'MANUAL', '', '', '2026-10-13T13:20:00.000Z',
+        '', '', 'PENDENTE', 0, '2026-10-13T13:30:00.000Z']]),
     vr('WHATSAPP_SUGESTOES', [CAB_SUG].concat(sugestoes || [])),
     vr('FALTANTES', [['id', 'os', 'deal_id', 'secao', 'ciclo', 'descricao_item', 'unidade', 'qtd_falta', 'qtd_baixada', 'status']]),
     vr('CAIXAS GANHAS', [['deal_id', 'os']])
@@ -59,7 +61,10 @@ test('workflow Interpretar WhatsApp: gatilho de subworkflow, intérprete configu
   assert.deepEqual(destinos(w, 'Ler Contexto da Interpretação', 1), ['Montar Erro de Interpretação']);
   assert.deepEqual(destinos(w, 'Preparar Interpretação'), ['Deve Interpretar?']);
   assert.deepEqual(destinos(w, 'Preparar Interpretação', 1), ['Montar Erro de Interpretação']);
-  assert.deepEqual(destinos(w, 'Deve Interpretar?', 0), ['Montar Contexto do Intérprete']);
+  // A tentativa é reservada (tentativas + 1, próxima em 10 min) antes de chamar o modelo.
+  assert.deepEqual(destinos(w, 'Deve Interpretar?', 0), ['Gravar Tentativa de Interpretação']);
+  assert.deepEqual(destinos(w, 'Gravar Tentativa de Interpretação'), ['Montar Contexto do Intérprete']);
+  assert.deepEqual(destinos(w, 'Gravar Tentativa de Interpretação', 1), ['Montar Erro de Interpretação']);
   assert.deepEqual(destinos(w, 'Deve Interpretar?', 1), []);
   assert.deepEqual(destinos(w, 'Montar Contexto do Intérprete'), ['Interpretar com Modelo']);
   assert.deepEqual(destinos(w, 'Interpretar com Modelo'), ['Finalizar Interpretação']);
@@ -87,6 +92,10 @@ test('Preparar Interpretação monta o corpo do intérprete e pula mensagem que 
   assert.equal(saida.json.interpretar, true);
   assert.equal(saida.json.entrada.peca, 'PECA TESTE B');
   assert.equal(saida.json.preparacao.mensagemId, 'WA-R-abc');
+  // Pedido da reserva da tentativa: batchUpdate na WHATSAPP_MENSAGENS com tentativas 1.
+  assert.match(saida.json.url, /values:batchUpdate/);
+  assert.match(JSON.stringify(saida.json.body), /PENDENTE/);
+  assert.match(JSON.stringify(saida.json.body), /WHATSAPP_MENSAGENS/);
   assert.doesNotMatch(JSON.stringify(saida.json), /@g\.us|s\.whatsapp\.net|Pessoa Ficticia/);
 
   const ja = rodarAdaptador('preparar-interpretacao-manual', {

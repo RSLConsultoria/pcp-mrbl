@@ -2055,6 +2055,8 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
   // esperar; só para texto e só se a mensagem ainda não tem sugestão.
   var interpretar = mensagemInterpretavelWhatsapp(mensagem) && !mensagemTemSugestaoWhatsapp(mensagem.id, linhas.whatsappSugestoes)
     ? { mensagemId: texto(mensagem.id), dealId: texto(producao.deal_id) } : null;
+  // A interpretar desde já: se o disparo falhar, o agendamento de 15 min pega a mensagem.
+  if (interpretar) Object.assign(linha, camposInterpretacaoPendenteWhatsapp(0, ctx.agora));
   return {
     ok: true, versao: texto(producao.atualizado_em_ploomes), ploomes: null, interpretar: interpretar,
     operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }],
@@ -2799,8 +2801,11 @@ function prepararEntradaWhatsapp(payload, dados, contexto) {
     erro: '',
     criado_em: agora
   };
-  var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linhaMensagem }];
   var precisaInterpretar = msg.tipoConteudo === 'TEXTO' && !!associacao.dealId;
+  // A 1ª tentativa do intérprete já fica reservada na própria linha.
+  Object.assign(linhaMensagem, precisaInterpretar ? camposInterpretacaoPendenteWhatsapp(1, agora)
+    : { interpretacao_status: '', interpretacao_tentativas: '', interpretacao_proxima: '' });
+  var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linhaMensagem }];
   var prod = producoes.filter(function (p) { return p.dealId === associacao.dealId; })[0] || {};
   return {
     ok: true,
@@ -2974,11 +2979,65 @@ function mensagemInterpretavelWhatsapp(m) {
   return !!m && semAcento(m.direcao) === 'RECEBIDA' && semAcento(m.tipo_conteudo || 'TEXTO') === 'TEXTO' && texto(m.texto) !== '';
 }
 
+// ----- Novas tentativas do intérprete (16/10) -----
+// interpretacao_status: '' (não precisa), PENDENTE (a interpretar) ou ERRO
+// (desistiu). Cada tentativa é reservada antes de chamar o modelo (tentativas + 1
+// e próxima em 10 min); se a chamada falhar, nada mais é gravado e o agendamento
+// de 15 min pega a mensagem vencida que ainda não tem sugestão. Sucesso = existe
+// sugestão para a mensagem (uma por mensagem), então não precisa limpar o status.
+var MAX_TENTATIVAS_INTERPRETACAO_WHATSAPP = 5;
+var ESPERA_INTERPRETACAO_WHATSAPP_MIN = 10;
+var LIMITE_RODADA_INTERPRETACAO_WHATSAPP = 10;
+
+function proximaInterpretacaoWhatsapp(agora) {
+  var base = Date.parse(texto(agora));
+  if (!isFinite(base)) base = Date.now();
+  return new Date(base + ESPERA_INTERPRETACAO_WHATSAPP_MIN * 60000).toISOString();
+}
+
+function tentativasInterpretacaoWhatsapp(m) {
+  var n = numero(m && m.interpretacao_tentativas);
+  return n === null || isNaN(n) ? 0 : n;
+}
+
+// Campos da mensagem a interpretar. tentativas = já reservadas (1 na entrada,
+// que chama o modelo logo em seguida; 0 na associação manual, que dispara o
+// workflow Interpretar WhatsApp, que reserva a sua).
+function camposInterpretacaoPendenteWhatsapp(tentativas, agora) {
+  return { interpretacao_status: 'PENDENTE', interpretacao_tentativas: tentativas, interpretacao_proxima: proximaInterpretacaoWhatsapp(agora) };
+}
+
+function selecionarInterpretacoesPendentesWhatsapp(dados, agora) {
+  dados = dados || {};
+  var agoraMs = Date.parse(texto(agora));
+  var producoes = {};
+  (dados.producao || []).forEach(function (p) {
+    var ativa = semAcento(p && p.em_costura);
+    if (p && texto(p.deal_id) && (ativa === '' || ativa === 'SIM')) producoes[texto(p.deal_id)] = 1;
+  });
+  var candidatas = linhasWhatsappUnicas((dados.mensagens || []).filter(function (m) {
+    if (!mensagemInterpretavelWhatsapp(m) || semAcento(m.interpretacao_status) !== 'PENDENTE') return false;
+    if (!producoes[texto(m.deal_id)] || mensagemTemSugestaoWhatsapp(m.id, dados.sugestoes)) return false;
+    var proxima = Date.parse(texto(m.interpretacao_proxima));
+    return !isFinite(proxima) || !isFinite(agoraMs) || proxima <= agoraMs;
+  }), false).sort(function (a, b) { return Date.parse(texto(a.quando)) - Date.parse(texto(b.quando)); });
+  var interpretar = [];
+  var erros = [];
+  candidatas.forEach(function (m) {
+    if (tentativasInterpretacaoWhatsapp(m) >= MAX_TENTATIVAS_INTERPRETACAO_WHATSAPP) {
+      erros.push({ id: texto(m.id), interpretacao_status: 'ERRO', interpretacao_proxima: '' });
+    } else if (interpretar.length < LIMITE_RODADA_INTERPRETACAO_WHATSAPP) {
+      interpretar.push({ mensagemId: texto(m.id), dealId: texto(m.deal_id) });
+    }
+  });
+  return { interpretar: interpretar, erros: erros };
+}
+
 // Workflow "Interpretar WhatsApp": depois da associação manual, monta a mesma
 // preparação da entrada (sem operações: a mensagem já está na planilha) e o
 // corpo do intérprete. A conclusão reaproveita concluirEntradaWhatsapp.
 // dados: { producao, mensagens, sugestoes, faltantes, ganhas }; pedido: { mensagemId, dealId }.
-function prepararInterpretacaoManualWhatsapp(dados, pedido, hojeISO) {
+function prepararInterpretacaoManualWhatsapp(dados, pedido, hojeISO, agora) {
   dados = dados || {};
   pedido = pedido || {};
   var mensagemId = texto(pedido.mensagemId);
@@ -2991,6 +3050,8 @@ function prepararInterpretacaoManualWhatsapp(dados, pedido, hojeISO) {
   if (!dealId || texto(mensagem.deal_id) !== dealId) return nada('ASSOCIACAO_MUDOU');
   if (!mensagemInterpretavelWhatsapp(mensagem)) return nada('NAO_TEXTUAL');
   if (mensagemTemSugestaoWhatsapp(mensagemId, dados.sugestoes)) return nada('JA_TEM_SUGESTAO');
+  var tentativas = tentativasInterpretacaoWhatsapp(mensagem);
+  if (tentativas >= MAX_TENTATIVAS_INTERPRETACAO_WHATSAPP) return nada('LIMITE_TENTATIVAS');
   var producao = (dados.producao || []).filter(function (p) { return p && texto(p.deal_id) === dealId; })[0];
   if (!producao) return nada('OS_NAO_ENCONTRADA');
   var contexto = montarContextoInterpretacao(dados, {
@@ -3003,7 +3064,9 @@ function prepararInterpretacaoManualWhatsapp(dados, pedido, hojeISO) {
       ok: true, precisaInterpretar: true, mensagemId: mensagemId, quando: texto(mensagem.quando),
       dealId: dealId, os: texto(producao.os), versao: texto(producao.atualizado_em_ploomes), operacoes: []
     },
-    entrada: entradaInterpreteWhatsapp(contexto)
+    entrada: entradaInterpreteWhatsapp(contexto),
+    // Gravada antes de chamar o modelo: se a chamada falhar, o agendamento tenta de novo.
+    reserva: Object.assign({ id: mensagemId }, camposInterpretacaoPendenteWhatsapp(tentativas + 1, agora))
   };
 }
 
@@ -3276,6 +3339,8 @@ var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PED
 // Entrada do WhatsApp (e o workflow Interpretar WhatsApp): FALTANTES e CAIXAS GANHAS
 // dão as faltas abertas da OS ao contexto do intérprete.
 var LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS'];
+// Agendamento das novas tentativas do intérprete (workflow Retentar Interpretação).
+var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
 // appendOrUpdate = atualiza se achar a chave, senao inclui; append = inclui.
@@ -3970,7 +4035,12 @@ var preparadaManual = prepararInterpretacaoManualWhatsapp({
 }, {
   mensagemId: texto(pedidoInterpretacao.mensagemId),
   dealId: texto(pedidoInterpretacao.dealId)
-}, dataISOEmSaoPaulo(new Date().toISOString()));
+}, dataISOEmSaoPaulo(new Date().toISOString()), new Date().toISOString());
 if (!preparadaManual.ok) throw new Error(preparadaManual.erro || 'Falha ao preparar a interpretação.');
 if (!preparadaManual.interpretar) return [{ json: { interpretar: false, motivo: preparadaManual.motivo } }];
-return [{ json: { interpretar: true, preparacao: preparadaManual.preparacao, entrada: preparadaManual.entrada } }];
+// Reserva a tentativa (tentativas + 1, próxima em 10 min) antes de chamar o modelo.
+var reqsReserva = requisicoesDeEscrita([{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: preparadaManual.reserva }],
+  [], planilhaInterpretacao, PLANILHA_ID);
+if (reqsReserva.length !== 1) throw new Error('A reserva da tentativa deve gerar uma única gravação.');
+return [{ json: { interpretar: true, preparacao: preparadaManual.preparacao, entrada: preparadaManual.entrada,
+  method: reqsReserva[0].method, url: reqsReserva[0].url, body: reqsReserva[0].body } }];

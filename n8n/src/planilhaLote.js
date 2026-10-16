@@ -22,6 +22,8 @@ var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PED
 // Entrada do WhatsApp (e o workflow Interpretar WhatsApp): FALTANTES e CAIXAS GANHAS
 // dão as faltas abertas da OS ao contexto do intérprete.
 var LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS'];
+// Agendamento das novas tentativas do intérprete (workflow Retentar Interpretação).
+var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
 // appendOrUpdate = atualiza se achar a chave, senao inclui; append = inclui.

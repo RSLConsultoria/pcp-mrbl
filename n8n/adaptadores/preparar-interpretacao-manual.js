@@ -12,7 +12,12 @@ var preparadaManual = prepararInterpretacaoManualWhatsapp({
 }, {
   mensagemId: texto(pedidoInterpretacao.mensagemId),
   dealId: texto(pedidoInterpretacao.dealId)
-}, dataISOEmSaoPaulo(new Date().toISOString()));
+}, dataISOEmSaoPaulo(new Date().toISOString()), new Date().toISOString());
 if (!preparadaManual.ok) throw new Error(preparadaManual.erro || 'Falha ao preparar a interpretação.');
 if (!preparadaManual.interpretar) return [{ json: { interpretar: false, motivo: preparadaManual.motivo } }];
-return [{ json: { interpretar: true, preparacao: preparadaManual.preparacao, entrada: preparadaManual.entrada } }];
+// Reserva a tentativa (tentativas + 1, próxima em 10 min) antes de chamar o modelo.
+var reqsReserva = requisicoesDeEscrita([{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: preparadaManual.reserva }],
+  [], planilhaInterpretacao, PLANILHA_ID);
+if (reqsReserva.length !== 1) throw new Error('A reserva da tentativa deve gerar uma única gravação.');
+return [{ json: { interpretar: true, preparacao: preparadaManual.preparacao, entrada: preparadaManual.entrada,
+  method: reqsReserva[0].method, url: reqsReserva[0].url, body: reqsReserva[0].body } }];

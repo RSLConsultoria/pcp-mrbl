@@ -356,6 +356,8 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
   // esperar; só para texto e só se a mensagem ainda não tem sugestão.
   var interpretar = mensagemInterpretavelWhatsapp(mensagem) && !mensagemTemSugestaoWhatsapp(mensagem.id, linhas.whatsappSugestoes)
     ? { mensagemId: texto(mensagem.id), dealId: texto(producao.deal_id) } : null;
+  // A interpretar desde já: se o disparo falhar, o agendamento de 15 min pega a mensagem.
+  if (interpretar) Object.assign(linha, camposInterpretacaoPendenteWhatsapp(0, ctx.agora));
   return {
     ok: true, versao: texto(producao.atualizado_em_ploomes), ploomes: null, interpretar: interpretar,
     operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }],

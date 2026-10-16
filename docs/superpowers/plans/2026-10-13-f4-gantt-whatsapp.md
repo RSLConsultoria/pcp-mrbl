@@ -279,6 +279,7 @@ Rodada única de ajustes depois da conferência local (detalhes na spec):
 - modelo de material enviado removido (fora do escopo da F4);
 - intérprete com contexto completo da OS e conversa recente (`montarContextoInterpretacao`);
 - associação manual dispara o workflow novo **PCP MRBL - Interpretar WhatsApp** (criar antes de publicar a API; ver README).
+- novas tentativas automáticas: envio com certeza de que não saiu volta para a fila com espera de 5, 15, 30 e 60 min (até 5, depois Reenviar); intérprete que falhou é retomado a cada 15 min pelo **PCP MRBL - Retentar Interpretação** (até 5, depois "Não foi possível interpretar esta mensagem."); colunas novas no fim da `WHATSAPP_MENSAGENS`.
 
 ## Tarefa 13 — Homologação e produção, somente após aceite
 
