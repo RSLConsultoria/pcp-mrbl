@@ -191,3 +191,24 @@ test('mock: item resolvido e caixa somente leitura não dizem "lido da planilha 
   await expect(p2.getByText('Edição liberada em breve para esta caixa.')).toBeVisible();
   await expect(p2.getByText(/lido da planilha de caixas ganhas/)).toHaveCount(0);
 });
+
+// Fetch pela página: o route do fixture leva a chamada ao mock (sem passar pela fila do site).
+async function acaoNoMock(page: Page, corpo: Record<string, unknown>) {
+  return page.evaluate(async (c) => {
+    const r = await fetch('http://api.test/pcp-acao?atraso=0', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${'m'.repeat(64)}` }, body: JSON.stringify(c)
+    });
+    return { status: r.status, corpo: await r.json() };
+  }, corpo);
+}
+
+test('mock: produção só oferece cobrança e confirmação; material enviado é recusado como no servidor', async ({ page, api }) => {
+  void api;
+  await entrar(page, '#producao');
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await expect(painel.getByRole('combobox', { name: /^Modelo/ }).locator('option')).toHaveText(['Cobrança de prazo', 'Confirmar data']);
+  await expect(painel.getByLabel('Mensagem')).toHaveValue(/^Bom dia\. A entrega de \*PECA TESTE B\*, 160 peças, está prevista para/);
+  const r = await acaoNoMock(page, { tipo: 'enviar_whatsapp', dealId: '700002', versao: 'v2', modelo: 'MATERIAL_ENVIADO', texto: 'Material enviado.', chave: 'c-material-0001' });
+  expect(r).toEqual({ status: 400, corpo: { erro: 'Modelo de mensagem inválido.' } });
+});

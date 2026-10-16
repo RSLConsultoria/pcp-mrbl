@@ -163,7 +163,7 @@ Cobrir `alterar_producao`, `associar_whatsapp`, `aceitar_sugestao_whatsapp` e `i
    - grava ID/status;
    - limita repetição e trata timeout incerto sem duplicar automaticamente.
 3. Implementar `enviar_whatsapp` e `reenviar_whatsapp` na API.
-4. Integrar `enviar_oficina` ao modelo **Aviso de material enviado** depois da gravação principal.
+4. ~~Integrar `enviar_oficina` ao modelo **Aviso de material enviado** depois da gravação principal.~~ Fora do escopo da F4 por decisão do dono (16/10); o modelo saiu do site e do servidor.
 5. Testar sucesso, 4xx, 429, 5xx, timeout e execução repetida com servidor falso.
 
 **Revisão da tarefa:** ação de estoque não é revertida por falha do WhatsApp; reenvio exige confirmação humana.
@@ -244,7 +244,7 @@ Ampliar o simulador com dados fictícios e criar cenários Playwright:
 8. Aceitar sugestão e refletir data/histórico.
 9. Ignorar sugestão.
 10. Mensagem ambígua aguardando associação manual.
-11. Falha de WhatsApp após `enviar_oficina` sem desfazer a ação.
+11. ~~Falha de WhatsApp após `enviar_oficina` sem desfazer a ação.~~ Fora do escopo da F4 por decisão do dono (16/10).
 12. Deal não editável sem controles de escrita.
 
 **Revisão da tarefa:** capturas visuais nas larguras usadas pelo dono e nenhuma dependência de serviço externo.

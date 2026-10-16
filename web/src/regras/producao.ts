@@ -3,7 +3,8 @@ import type { Producao } from '../api/tipos';
 export type OrigemPrazo = 'COMBINADA' | 'LEAD_TIME' | 'SEM_PRAZO';
 export type StatusPrazoProducao = 'ATRASADO' | 'HOJE' | 'PROXIMO' | 'NO_PRAZO' | 'SEM_PRAZO';
 export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean }
-export type ModeloMensagemProducao = 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO';
+// Material enviado saiu da F4 por decisão do dono (16/10).
+export type ModeloMensagemProducao = 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA';
 
 // Chave de um clique em "Colocar na fila" (o servidor aceita [A-Za-z0-9-]{8,64}).
 export function chaveEnvioWhatsapp(): string {

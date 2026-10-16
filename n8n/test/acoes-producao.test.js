@@ -273,3 +273,10 @@ test('reenviar whatsapp só uma vez por mensagem original e o board marca a orig
   assert.equal(board.find((m) => m.id === 'MSG-ERRO').reenviada, true);
   assert.equal(board.find((m) => m.id === r.body.mensagemId).reenviada, false);
 });
+
+test('modelo de material enviado saiu da F4 por decisão do dono e é recusado', () => {
+  const { ctx, estado, cab } = contexto();
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'MATERIAL_ENVIADO', texto: 'Bom dia. O material foi enviado.' };
+  assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'X')), { status: 400, body: { erro: 'Modelo de mensagem inválido.' } });
+  assert.equal(ctx.modeloWhatsapp('MATERIAL_ENVIADO', { peca: 'CAMISA TESTE' }, '2026-10-13'), '');
+});

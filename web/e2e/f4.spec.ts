@@ -89,6 +89,8 @@ test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ p
   // A oficina conhece a peça, não o número da OS.
   await expect(painel.getByLabel('Mensagem')).toHaveValue(/\*COLETE TESTE\*, 120 peças/);
   await expect(painel.getByLabel('Mensagem')).not.toHaveValue(/OS 90002/);
+  // Material enviado saiu da F4 por decisão do dono (16/10).
+  await expect(painel.getByRole('combobox', { name: /^Modelo/ }).locator('option')).toHaveText(['Cobrança de prazo', 'Confirmar data']);
   await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toBeVisible();
   await expect(painel.getByRole('button', { name: /^(responder|enviar)$/i })).toHaveCount(0);
 });

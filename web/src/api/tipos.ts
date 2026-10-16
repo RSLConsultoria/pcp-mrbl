@@ -200,7 +200,7 @@ export type Acao =
   | { tipo: 'associar_whatsapp'; dealId: string; mensagemId: string; versao: string }
   // chave: gerada no clique e guardada na fila; o servidor tira dela o id da mensagem, e a
   // mesma ação enviada de novo não cria segunda linha.
-  | { tipo: 'enviar_whatsapp'; dealId: string; versao: string; modelo: 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA' | 'MATERIAL_ENVIADO'; texto: string; chave: string }
+  | { tipo: 'enviar_whatsapp'; dealId: string; versao: string; modelo: 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA'; texto: string; chave: string }
   | { tipo: 'reenviar_whatsapp'; dealId: string; mensagemId: string; versao: string; confirmou: true }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
 

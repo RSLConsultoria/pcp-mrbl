@@ -697,7 +697,7 @@ function enviarWhatsapp(c, usuario) {
   conferirVersao(p.versao, c.versao, 'esta OS');
   const oficina = estado.oficinas.find((o) => o.ploomesId === p.oficinaId);
   if (!oficina?.grupoConfigurado) throw new Erro(409, 'Configure o grupo desta oficina na aba OFICINAS.');
-  if (!['COBRANCA_PRAZO', 'CONFIRMAR_DATA', 'MATERIAL_ENVIADO'].includes(c.modelo)) throw bad('Modelo de mensagem inválido.');
+  if (!['COBRANCA_PRAZO', 'CONFIRMAR_DATA'].includes(c.modelo)) throw bad('Modelo de mensagem inválido.');
   const texto = String(c.texto ?? '').trim();
   if (!texto || texto.length > 1500) throw bad('Mensagem com até 1500 caracteres.');
   p.mensagens.unshift({ id: mensagemId, quando: agoraIso(), participanteNome: usuario, direcao: 'ENVIADA', texto, associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO' });

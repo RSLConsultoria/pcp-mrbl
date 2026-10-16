@@ -130,7 +130,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
             : !oficina?.grupoConfigurado ? <p className="producao-vazio">Configure o grupo desta oficina na aba OFICINAS.</p>
             : <>
               <label>Modelo<select value={modelo} disabled={!editavel} onChange={(e) => trocarModelo(e.target.value as ModeloMensagemProducao)}>
-                <option value="COBRANCA_PRAZO">Cobrança de prazo</option><option value="CONFIRMAR_DATA">Confirmar data</option><option value="MATERIAL_ENVIADO">Material enviado</option>
+                <option value="COBRANCA_PRAZO">Cobrança de prazo</option><option value="CONFIRMAR_DATA">Confirmar data</option>
               </select></label>
               <label>Mensagem<textarea rows={5} maxLength={1500} value={mensagem} disabled={!editavel} onChange={(e) => setMensagem(e.target.value)} /></label>
               <small>Será enviada para {oficina.grupoNome || oficina.nome}. O texto pode ser revisado antes de entrar na fila.</small>

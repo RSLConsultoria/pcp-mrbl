@@ -8,7 +8,7 @@ A F4 acrescenta a tela **Controle de produção** para acompanhar as OS que est�
 
 - alterar a oficina e a data combinada da costura;
 - cobrar a oficina em seu grupo de WhatsApp;
-- avisar no grupo quando o material faltante for enviado;
+- ~~avisar no grupo quando o material faltante for enviado~~: **fora do escopo da F4 por decisão do dono (16/10)**;
 - ler as respostas do grupo com um intérprete silencioso;
 - transformar respostas em sugestões que uma pessoa precisa aceitar antes de qualquer gravação no Ploomes.
 
@@ -36,7 +36,7 @@ O intérprete **não conversa no grupo e não responde automaticamente**. Ele ob
 - registro da alteração no histórico e no card do Ploomes;
 - cadastro de oficina ↔ grupo do WhatsApp;
 - envio manual de cobrança e confirmação de prazo;
-- aviso automático de material enviado, iniciado pela ação já existente em Saídas com falta;
+- ~~aviso automático de material enviado, iniciado pela ação já existente em Saídas com falta~~: **fora do escopo da F4 por decisão do dono (16/10)**;
 - recepção idempotente dos webhooks da Evolution;
 - associação de mensagens do grupo a uma OS;
 - interpretação estruturada de respostas;
@@ -120,7 +120,7 @@ Chave: `id` gerado pelo app antes do envio. `evolution_id` guarda o ID devolvido
 Campos: `id`, `evolution_id`, `quando`, `grupo_jid`, `grupo_nome`, `participante_jid`, `participante_nome`, `direcao`, `tipo`, `tipo_conteudo`, `texto`, `resposta_a_evolution_id`, `deal_id`, `os`, `oficina_id`, `associacao`, `status_envio`, `erro`, `criado_em`.
 
 - `direcao`: `ENVIADA` ou `RECEBIDA`;
-- `tipo`: `COBRANCA_PRAZO`, `AVISO_MATERIAL` ou `RESPOSTA`;
+- `tipo`: `COBRANCA_PRAZO`, `CONFIRMAR_DATA` ou `RESPOSTA` (`AVISO_MATERIAL` saiu da F4 por decisão do dono em 16/10);
 - `tipo_conteudo`: `TEXTO` ou `NAO_TEXTUAL`;
 - `associacao`: `CITACAO`, `OS_NO_TEXTO`, `ULTIMA_COBRANCA`, `MANUAL` ou `SEM_ASSOCIACAO`;
 - `status_envio`: `PENDENTE`, `ENVIANDO`, `ENVIADA`, `ERRO` ou vazio para recebidas.
@@ -243,8 +243,7 @@ A oficina precisa estar ativa e ter `grupo_jid`. Sem grupo configurado, os contr
    - dentro do prazo: pergunta se o prazo permanece confirmado.
 2. **Confirmar data combinada**
    - informa peça, peças e data combinada e pede confirmação.
-3. **Aviso de material enviado**
-   - informa que o material faltante da caixa de costura foi enviado.
+3. ~~**Aviso de material enviado**~~: **fora do escopo da F4 por decisão do dono (16/10)**. O modelo saiu do site e do servidor: `enviar_whatsapp` com `MATERIAL_ENVIADO` responde 400 **Modelo de mensagem inválido.**
 
 **Ajuste do dono (16/10):** as oficinas conhecem a peça, não o número da OS. As mensagens não levam mais o cabeçalho `*OS 90001*`; citam o nome da peça em negrito do WhatsApp, por exemplo: "Bom dia. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?". Sem quantidade, a frase fica sem as vírgulas ("A entrega de *PECA TESTE B* está prevista para 20/10."); 1 peça fica no singular. O site (`web/src/regras/producao.ts`) e o servidor (`modeloWhatsapp` em `n8n/src/producao.js`) geram exatamente o mesmo texto. O texto pode ser editado antes do envio manual, e o servidor não exige mais o número da OS no texto.
 
@@ -259,7 +258,7 @@ O navegador nunca chama a Evolution. Uma ação autenticada cria uma linha `PEND
 - enviar duas vezes a mesma ação com a mesma chave não cria duas linhas: o site gera uma `chave` por clique (`crypto.randomUUID`), guardada na fila junto com a ação, e o servidor usa `id` = `WA-E-<chave>`; se a linha já existe na mesma OS, responde sucesso sem gravar de novo (sem `chave`, o id continua aleatório);
 - cada tentativa com erro aceita um único reenvio: o reenvio tem `id` = `WA-RE-<id da original>`, e a existência dessa linha é o vínculo com a original (sem coluna nova). Um segundo reenvio da mesma original dá 409, e o board marca a original com `reenviada`, escondendo o botão.
 
-O aviso de material enviado entra na mesma fila depois que `enviar_oficina` grava a ação. Se o WhatsApp falhar, o envio físico continua registrado e o app mostra a pendência; a ação de estoque não é desfeita.
+~~O aviso de material enviado entra na mesma fila depois que `enviar_oficina` grava a ação.~~ **fora do escopo da F4 por decisão do dono (16/10)**: por ora não haverá mensagem de material enviado, nem automática nem manual.
 
 ## 10. Recepção e intérprete silencioso
 
@@ -351,6 +350,6 @@ Depois do aceite local:
 - resposta ambígua não altera nem sugere para uma OS aleatória;
 - intérprete não envia respostas ao grupo;
 - sugestão só altera o Ploomes depois de `Aceitar`;
-- falha no WhatsApp não desfaz `enviar_oficina`;
+- ~~falha no WhatsApp não desfaz `enviar_oficina`~~: **fora do escopo da F4 por decisão do dono (16/10)**, junto com o aviso de material enviado;
 - nenhum dado real entra no repositório;
 - testes n8n, web, build e Playwright ficam verdes.
