@@ -85,7 +85,10 @@ test('classifica a resposta da Evolution: enviada, repetir, incerto ou recusada'
   assert.equal(c(DNS), 'REPETIR');
   assert.equal(c({ error: { message: 'connect EHOSTUNREACH 10.0.0.1:8080' } }), 'REPETIR');
   assert.equal(c({ statusCode: 429, body: {} }), 'REPETIR');
-  assert.equal(c(DESCONECTADA), 'REPETIR');
+  // 400 tem texto livre na Evolution v2 (pode embrulhar falha depois de enviar): nunca repete.
+  assert.equal(c(DESCONECTADA), 'RECUSADA');
+  assert.equal(c({ statusCode: 400, body: { response: { message: ['instância indisponível'] } } }), 'RECUSADA');
+  assert.equal(c({ statusCode: 404, body: { message: 'Cannot POST /message/x' } }), 'RECUSADA');
   assert.equal(c(INSTANCIA_AUSENTE), 'REPETIR');
   assert.equal(c({ statusCode: 400, body: { response: { message: ['número inválido'] } } }), 'RECUSADA');
   assert.equal(c({ statusCode: 401, body: {} }), 'RECUSADA');
@@ -137,4 +140,28 @@ test('seleção da saída respeita a próxima tentativa', () => {
   const vencida = mensagem({ id: 'MSG-VENCIDA', criado_em: '2026-10-15T12:30:00.000Z', envio_tentativas: 2, envio_proxima: '2026-10-15T13:59:00.000Z' });
   assert.equal(ctx.selecionarSaidaWhatsapp([futura], AGORA), null);
   assert.equal(ctx.selecionarSaidaWhatsapp([futura, vencida], AGORA).id, 'MSG-VENCIDA');
+});
+
+// ----- Conexão conferida antes do envio (GET /instance/connectionState) -----
+test('avaliarConexaoWhatsapp: só "open" libera o envio', () => {
+  const a = (r) => limpo(ctx.avaliarConexaoWhatsapp(r));
+  assert.deepEqual(a({ statusCode: 200, body: { instance: { instanceName: 'producao', state: 'open' } } }), { aberta: true, motivo: '' });
+  assert.equal(a({ statusCode: 200, body: { instance: { state: 'close' } } }).aberta, false);
+  assert.match(a({ statusCode: 200, body: { instance: { state: 'connecting' } } }).motivo, /desconectad.*connecting/i);
+  assert.match(a(RECUSADA_CONEXAO).motivo, /fora do ar/i);
+  assert.match(a(INSTANCIA_AUSENTE).motivo, /404/);
+  assert.equal(a({ statusCode: 500, body: {} }).aberta, false);
+  assert.equal(a({}).aberta, false);
+});
+
+test('sem conexão aberta a mensagem não é enviada e volta para a fila (certeza de que não saiu)', () => {
+  const fechada = { aberta: false, motivo: 'instância do WhatsApp desconectada (estado: close)' };
+  const r = limpo(ctx.resultadoSemConexaoWhatsapp(mensagem({ envio_tentativas: 1 }), fechada, AGORA));
+  assert.equal(r.status_envio, 'PENDENTE');
+  assert.equal(r.envio_tentativas, 2);
+  assert.equal(r.envio_proxima, new Date(Date.parse(AGORA) + 15 * 60000).toISOString());
+  assert.match(r.erro, /desconectada/);
+  const ultima = limpo(ctx.resultadoSemConexaoWhatsapp(mensagem({ envio_tentativas: 4 }), fechada, AGORA));
+  assert.equal(ultima.status_envio, 'ERRO');
+  assert.equal(ultima.envio_tentativas, 5);
 });

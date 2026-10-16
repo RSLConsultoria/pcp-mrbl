@@ -23,6 +23,8 @@ const NODES = {
   'resultado-envio': 'Resultado Envio',
   'selecionar-whatsapp-saida': 'Selecionar Saida WhatsApp',
   'resultado-whatsapp-saida': 'Resultado WhatsApp',
+  'conferir-conexao-whatsapp': 'Conferir Conexão',
+  'resultado-sem-conexao-whatsapp': 'Resultado sem Conexão',
   'preparar-whatsapp-entrada': 'Preparar Entrada WhatsApp',
   'montar-contexto-interprete': 'Montar Contexto do Intérprete',
   'finalizar-whatsapp-entrada': 'Finalizar Entrada WhatsApp',

@@ -66,7 +66,8 @@ const POS_SYNC_PRODUCAO = {};
 const POS_WHATSAPP_SAIDA = {};
 [['A cada 2 minutos', 0, 0], ['Execucao Agendada?', 1, 0], ['Ler Fila WhatsApp', 2, 0],
   ['Selecionar Saida WhatsApp', 3, 0], ['Gravar Tentativa WhatsApp', 4, 0], ['Deve Enviar?', 5, 0],
-  ['Enviar pela Evolution', 6, 0], ['Resultado WhatsApp', 7, 0], ['Gravar Resultado WhatsApp', 8, 0]]
+  ['Consultar Conexão', 6, 0], ['Conferir Conexão', 7, 0], ['Conectada?', 8, 0],
+  ['Enviar pela Evolution', 9, -100], ['Resultado WhatsApp', 10, -100], ['Resultado sem Conexão', 10, 100], ['Gravar Resultado WhatsApp', 11, 0]]
   .forEach(([n, c, y]) => { POS_WHATSAPP_SAIDA[n] = [c * DX, y]; });
 
 const POS_WHATSAPP_ENTRADA = {};
@@ -555,6 +556,30 @@ const whatsappSaida = IMPORT + [
   output: [{ statusCode: 200, body: { key: { id: 'evolution-ficticio' } } }]
 });`,
   code('resultadoWhatsapp', 'Resultado WhatsApp', 'resultado-whatsapp-saida'),
+  // Instância desconectada: conferida antes do sendText (o 400 do envio tem texto livre
+  // e pode vir depois de a mensagem sair). Fechada ou sem resposta: nem envia.
+  `const consultarConexao = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.4,
+  config: {
+    name: 'Consultar Conexão',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'GET',
+      url: 'http://evolution:8080/instance/connectionState/producao',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      options: { response: { response: { fullResponse: true, neverError: true } }, timeout: 15000 }
+    },
+    credentials: { httpHeaderAuth: { id: 'G24I6UDBgu3Z5X0b', name: 'Evolution API' } },
+    position: ${posicao('Consultar Conexão')}
+  },
+  output: [{ statusCode: 200, body: { instance: { state: 'open' } } }]
+});`,
+  code('conferirConexao', 'Conferir Conexão', 'conferir-conexao-whatsapp'),
+  'const conectada = ' + condicao('Conectada?', '{{ $json.conectada }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  code('resultadoSemConexao', 'Resultado sem Conexão', 'resultado-sem-conexao-whatsapp'),
   escrever('gravarResultadoWhatsapp', 'Gravar Resultado WhatsApp', 'update', 'WHATSAPP_MENSAGENS', ['id'])
 ].join('\n\n') + `
 
@@ -568,7 +593,9 @@ export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp',
   .to(execucaoAgendadaWhatsapp.onTrue(lerFilaWhatsapp
     .to(selecionarWhatsapp)
     .to(gravarTentativaWhatsapp)
-    .to(deveEnviarWhatsapp.onTrue(enviarWhatsapp.to(resultadoWhatsapp).to(gravarResultadoWhatsapp)))));
+    .to(deveEnviarWhatsapp.onTrue(consultarConexao.to(conferirConexao).to(conectada
+      .onTrue(enviarWhatsapp.to(resultadoWhatsapp).to(gravarResultadoWhatsapp))
+      .onFalse(resultadoSemConexao.to(gravarResultadoWhatsapp)))))));
 `;
 
 posAtual = POS_WHATSAPP_ENTRADA;

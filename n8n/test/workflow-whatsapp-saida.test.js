@@ -46,7 +46,13 @@ test('workflow grava ENVIANDO antes da chamada e sempre persiste o resultado', (
   assert.deepEqual(destinos(w, 'Ler Fila WhatsApp'), ['Selecionar Saida WhatsApp']);
   assert.deepEqual(destinos(w, 'Selecionar Saida WhatsApp'), ['Gravar Tentativa WhatsApp']);
   assert.deepEqual(destinos(w, 'Gravar Tentativa WhatsApp'), ['Deve Enviar?']);
-  assert.deepEqual(destinos(w, 'Deve Enviar?', 0), ['Enviar pela Evolution']);
+  // Confere a conexão antes do envio: fechada, nem chama o sendText e volta para a fila.
+  assert.deepEqual(destinos(w, 'Deve Enviar?', 0), ['Consultar Conexão']);
+  assert.deepEqual(destinos(w, 'Consultar Conexão'), ['Conferir Conexão']);
+  assert.deepEqual(destinos(w, 'Conferir Conexão'), ['Conectada?']);
+  assert.deepEqual(destinos(w, 'Conectada?', 0), ['Enviar pela Evolution']);
+  assert.deepEqual(destinos(w, 'Conectada?', 1), ['Resultado sem Conexão']);
+  assert.deepEqual(destinos(w, 'Resultado sem Conexão'), ['Gravar Resultado WhatsApp']);
   assert.deepEqual(destinos(w, 'Enviar pela Evolution'), ['Resultado WhatsApp']);
   assert.deepEqual(destinos(w, 'Resultado WhatsApp'), ['Gravar Resultado WhatsApp']);
   assert.equal(no(w, 'Gravar Tentativa WhatsApp').parameters.operation, 'update');
@@ -97,4 +103,43 @@ test('Resultado WhatsApp usa as tentativas da linha lida e agenda a próxima qua
   assert.equal(r.json.status_envio, 'PENDENTE');
   assert.equal(r.json.envio_tentativas, 3);
   assert.ok(Date.parse(r.json.envio_proxima) > Date.now() + 25 * 60000);
+});
+
+test('Consultar Conexão usa o GET de estado da instância, sem repetir e sem parar o workflow', () => {
+  const consulta = no(workflow(), 'Consultar Conexão');
+  assert.equal(consulta.parameters.method, 'GET');
+  assert.equal(consulta.parameters.url, 'http://evolution:8080/instance/connectionState/producao');
+  assert.equal(consulta.credentials.httpHeaderAuth.id, 'G24I6UDBgu3Z5X0b');
+  assert.equal(consulta.onError, 'continueRegularOutput');
+  assert.equal(consulta.parameters.options.response.response.neverError, true);
+  assert.equal(consulta.retryOnFail, undefined);
+});
+
+function rodarCom(arq, nodes, entrada) {
+  const contexto = vm.createContext({
+    $: (nome) => {
+      if (!(nome in nodes)) throw new Error('node inesperado: ' + nome);
+      const itens = nodes[nome].map((json) => ({ json }));
+      return { first: () => itens[0], all: () => itens };
+    },
+    $input: { first: () => ({ json: entrada }), all: () => [{ json: entrada }] }
+  });
+  for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), contexto);
+  const adaptador = fs.readFileSync(path.join(__dirname, '..', 'adaptadores', arq + '.js'), 'utf8');
+  return limpo(vm.runInContext('(function () {\n' + adaptador + '\n})()', contexto));
+}
+
+test('Conferir Conexão só libera com estado open; Resultado sem Conexão devolve a mensagem para a fila', () => {
+  assert.deepEqual(rodarCom('conferir-conexao-whatsapp', {}, { statusCode: 200, body: { instance: { state: 'open' } } }), [{ json: { conectada: true } }]);
+  assert.deepEqual(rodarCom('conferir-conexao-whatsapp', {}, { statusCode: 200, body: { instance: { state: 'close' } } }), [{ json: { conectada: false } }]);
+  const [r] = rodarCom('resultado-sem-conexao-whatsapp', {
+    'Selecionar Saida WhatsApp': [{ id: 'MSG-1', grupo_jid: 'grupo-ficticio@g.us', texto: 'Teste', status_envio: 'ENVIANDO', erro: '' }],
+    'Ler Fila WhatsApp': [{ id: 'MSG-1', envio_tentativas: '' }],
+    'Consultar Conexão': [{ error: { message: 'The service refused the connection - perhaps it is offline' } }]
+  }, { conectada: false });
+  assert.equal(r.json.id, 'MSG-1');
+  assert.equal(r.json.status_envio, 'PENDENTE');
+  assert.equal(r.json.envio_tentativas, 1);
+  assert.match(r.json.erro, /fora do ar/);
+  assert.deepEqual(Object.keys(r.json).sort(), ['envio_proxima', 'envio_tentativas', 'erro', 'evolution_id', 'id', 'status_envio']);
 });
