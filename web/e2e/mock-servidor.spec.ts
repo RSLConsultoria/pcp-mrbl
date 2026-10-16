@@ -224,7 +224,7 @@ test('mock: associar mensagem com data gera a sugestão do intérprete; sem data
   await page.getByText('2 mensagens aguardando associação').click();
   const comData = page.getByRole('listitem').filter({ hasText: 'A PECA TESTE B fica pronta dia' });
   await comData.getByRole('button', { name: 'Associar', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Mensagem associada. A interpretação aparece em instantes.' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Mensagem associada. A interpretação aparece em até 1 minuto.' })).toBeVisible();
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
   await expect(painel.getByText(/Nova data:/)).toHaveCount(2);
   await painel.getByRole('button', { name: 'Fechar painel' }).click();

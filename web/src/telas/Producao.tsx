@@ -30,7 +30,7 @@ function MensagemPendente({ mensagem, producao, editaveis, executar }: {
         <option value="">Selecione</option>{opcoes.map((p) => <option key={p.dealId} value={p.dealId}>OS {p.os} · {p.peca || p.referencia}</option>)}
       </select></label>
       <button type="button" className="botao botao--contorno" disabled={!escolhida}
-        onClick={() => escolhida && void executar({ tipo: 'associar_whatsapp', dealId: escolhida.dealId, mensagemId: mensagem.id, versao: escolhida.versao }, 'Mensagem associada. A interpretação aparece em instantes.')}>Associar</button>
+        onClick={() => escolhida && void executar({ tipo: 'associar_whatsapp', dealId: escolhida.dealId, mensagemId: mensagem.id, versao: escolhida.versao }, 'Mensagem associada. A interpretação aparece em até 1 minuto.')}>Associar</button>
     </div> : <small>Nenhuma OS editável deste grupo está disponível.</small>}
   </li>;
 }

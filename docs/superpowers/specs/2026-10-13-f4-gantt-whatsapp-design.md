@@ -279,7 +279,7 @@ Como as mensagens enviadas não citam mais a OS (ajuste de 16/10), a associaçã
 
 Se existirem duas possibilidades, a mensagem fica `SEM_ASSOCIACAO`.
 
-**Associação manual também passa pelo intérprete (ajuste de 16/10).** Depois que `associar_whatsapp` grava a associação, o workflow da API dispara, sem esperar, o workflow **PCP MRBL - Interpretar WhatsApp** com `{ mensagemId, dealId }`. Ele monta o mesmo contexto da entrada, chama o mesmo intérprete, valida com `validarInterpretacaoWhatsapp` e grava a sugestão `PENDENTE` com id determinístico (`WA-S-…`). Mensagem associada que já tem sugestão, em qualquer status, não gera outra; conteúdo não textual não é interpretado. A resposta da ação ao site não muda; a tela mostra **Mensagem associada. A interpretação aparece em instantes.** e a sugestão aparece na próxima leitura do quadro. Erros vão resumidos para `ERROS_APP`. O intérprete não escolhe uma OS no escuro.
+**Associação manual também passa pelo intérprete (ajuste de 16/10).** Depois que `associar_whatsapp` grava a associação, o workflow da API dispara, sem esperar, o workflow **PCP MRBL - Interpretar WhatsApp** com `{ mensagemId, dealId }`. Ele monta o mesmo contexto da entrada, chama o mesmo intérprete, valida com `validarInterpretacaoWhatsapp` e grava a sugestão `PENDENTE` com id determinístico (`WA-S-…`). Mensagem associada que já tem sugestão, em qualquer status, não gera outra; conteúdo não textual não é interpretado. A resposta da ação ao site não muda; a tela mostra **Mensagem associada. A interpretação aparece em até 1 minuto.** e a sugestão aparece na próxima leitura do quadro. Erros vão resumidos para `ERROS_APP`. O intérprete não escolhe uma OS no escuro.
 
 ### Interpretação
 
