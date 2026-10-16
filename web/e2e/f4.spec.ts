@@ -18,7 +18,11 @@ const producao = [
       { id: 'M1', quando: '2026-10-07T12:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Entregamos dia 13.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
     ],
     sugestoes: [{ id: 'S1', mensagemId: 'M1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-13', resumo: 'A oficina informou nova data.', evidencia: 'dia 13', confianca: .95, status: 'PENDENTE', criadoEm: '2026-10-07T12:01:00.000Z', versao: 'v2' }], historico: [] },
-  { dealId: '710003', os: '90003', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-06', dataCombinada: '', leadTime: '2026-10-16', pecas: 50, cliente: 'CLIENTE MODELO', peca: 'CALCA TESTE', referencia: 'REF-C', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] },
+  { dealId: '710003', os: '90003', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-06', dataCombinada: '', leadTime: '2026-10-16', pecas: 50, cliente: 'CLIENTE MODELO', peca: 'CALCA TESTE', referencia: 'REF-C', versao: 'v1', faltasCostura: [], faltasAcabamento: [],
+    mensagens: [
+      { id: 'M-FILA', quando: '2026-10-07T10:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: 'Qual a previsão de entrega de *CALCA TESTE*?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 },
+      { id: 'M-SEM-LEITURA', quando: '2026-10-07T10:30:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Resposta que o intérprete não leu.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' }
+    ], sugestoes: [], historico: [] },
   { dealId: '710004', os: '90004', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '', dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 40, cliente: 'CLIENTE MODELO', peca: 'JAQUETA TESTE', referencia: 'REF-D', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] }
 ];
 
@@ -213,4 +217,13 @@ test('colocar na fila fica desabilitado enquanto o envio está em andamento', as
   await botao.click({ force: true });
   await expect(botao).toBeEnabled({ timeout: 5_000 });
   expect(acoes.filter((a) => a.tipo === 'enviar_whatsapp')).toHaveLength(1);
+});
+
+test('conversa mostra nova tentativa automática de envio e interpretação que falhou de vez', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /OS 90003/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90003' });
+  await expect(painel.getByText('Aguardando nova tentativa (2 de 5)')).toBeVisible();
+  await expect(painel.getByText('Não foi possível interpretar esta mensagem.')).toBeVisible();
+  await expect(painel.getByRole('button', { name: 'Reenviar' })).toHaveCount(0);
 });

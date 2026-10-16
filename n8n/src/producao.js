@@ -555,6 +555,15 @@ function linhaAtivaProducao(valor) {
 }
 
 function mensagemProducaoBoard(m, reenviadas) {
+  var base = mensagemProducaoBoardBase(m, reenviadas);
+  // Novas tentativas (16/10): só aparecem quando existem.
+  var tentativas = numero(m.envio_tentativas);
+  if (semAcento(m.status_envio) === 'PENDENTE' && tentativas > 0) base.envioTentativas = tentativas;
+  if (semAcento(m.interpretacao_status) === 'ERRO') base.interpretacao = 'ERRO';
+  return base;
+}
+
+function mensagemProducaoBoardBase(m, reenviadas) {
   return {
     reenviada: !!(reenviadas && reenviadas[idReenvioWhatsapp(m.id)]),
     id: texto(m.id),

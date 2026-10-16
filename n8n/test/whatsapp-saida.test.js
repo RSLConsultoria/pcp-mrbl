@@ -70,18 +70,71 @@ test('sucesso guarda o ID devolvido pela Evolution', () => {
   });
 });
 
-test('4xx, 429, 5xx, timeout e sucesso sem ID ficam para reenvio humano', () => {
+// ----- Novas tentativas automáticas do envio (16/10) -----
+// Certeza de que não saiu: repete sozinho com espera crescente, até 5 tentativas.
+// Incerto (pode ter saído): ERRO e reenvio humano, como antes.
+const RECUSADA_CONEXAO = { error: { message: 'The service refused the connection - perhaps it is offline', code: 'ECONNREFUSED' } };
+const DNS = { error: { message: 'getaddrinfo ENOTFOUND evolution' } };
+const DESCONECTADA = { statusCode: 400, body: { status: 400, error: 'Bad Request', response: { message: ['Connection Closed'] } } };
+const INSTANCIA_AUSENTE = { statusCode: 404, body: { response: { message: ['The "producao" instance does not exist'] } } };
+
+test('classifica a resposta da Evolution: enviada, repetir, incerto ou recusada', () => {
+  const c = (r) => ctx.classificarEnvioWhatsapp(r).tipo;
+  assert.equal(c({ statusCode: 201, body: { key: { id: 'EV-1' } } }), 'ENVIADA');
+  assert.equal(c(RECUSADA_CONEXAO), 'REPETIR');
+  assert.equal(c(DNS), 'REPETIR');
+  assert.equal(c({ error: { message: 'connect EHOSTUNREACH 10.0.0.1:8080' } }), 'REPETIR');
+  assert.equal(c({ statusCode: 429, body: {} }), 'REPETIR');
+  assert.equal(c(DESCONECTADA), 'REPETIR');
+  assert.equal(c(INSTANCIA_AUSENTE), 'REPETIR');
+  assert.equal(c({ statusCode: 400, body: { response: { message: ['número inválido'] } } }), 'RECUSADA');
+  assert.equal(c({ statusCode: 401, body: {} }), 'RECUSADA');
+  assert.equal(c({ statusCode: 503, body: {} }), 'INCERTO');
+  assert.equal(c({ statusCode: 200, body: {} }), 'INCERTO');
+  assert.equal(c({ error: { message: 'timeout of 30000ms exceeded', code: 'ECONNABORTED' } }), 'INCERTO');
+  assert.equal(c({ error: { message: 'The connection to the server was closed unexpectedly', code: 'ECONNRESET' } }), 'INCERTO');
+  assert.equal(c({}), 'INCERTO');
+});
+
+test('certeza de que não saiu volta para PENDENTE com espera crescente (5, 15, 30, 60 min)', () => {
+  const esperas = [5, 15, 30, 60];
+  for (let anteriores = 0; anteriores < 4; anteriores++) {
+    const r = limpo(ctx.resultadoSaidaWhatsapp(mensagem({ envio_tentativas: anteriores || '' }), RECUSADA_CONEXAO, AGORA));
+    assert.equal(r.status_envio, 'PENDENTE');
+    assert.equal(r.evolution_id, '');
+    assert.equal(r.envio_tentativas, anteriores + 1);
+    assert.equal(r.envio_proxima, new Date(Date.parse(AGORA) + esperas[anteriores] * 60000).toISOString());
+    assert.match(r.erro, /nova tentativa autom/i);
+  }
+});
+
+test('na quinta falha certa vira ERRO para reenvio humano', () => {
+  const r = limpo(ctx.resultadoSaidaWhatsapp(mensagem({ envio_tentativas: 4 }), { statusCode: 429, body: {} }, AGORA));
+  assert.equal(r.status_envio, 'ERRO');
+  assert.equal(r.envio_tentativas, 5);
+  assert.equal(r.envio_proxima, '');
+  assert.match(r.erro, /5 tentativas/);
+});
+
+test('incerto, recusado e sucesso sem ID ficam para reenvio humano, sem repetição automática', () => {
   const casos = [
     [{ statusCode: 400, body: {} }, /recusou.*400/i],
-    [{ statusCode: 429, body: {} }, /limite.*429/i],
     [{ statusCode: 503, body: {} }, /incerto.*503/i],
     [{ error: { message: 'timeout ficticio' } }, /incerto.*timeout/i],
     [{ statusCode: 200, body: {} }, /sem ID/i]
   ];
   for (const [resposta, padrao] of casos) {
-    const r = limpo(ctx.resultadoSaidaWhatsapp(mensagem(), resposta));
+    const r = limpo(ctx.resultadoSaidaWhatsapp(mensagem({ envio_tentativas: 2 }), resposta, AGORA));
     assert.equal(r.status_envio, 'ERRO');
     assert.equal(r.evolution_id, '');
     assert.match(r.erro, padrao);
+    assert.equal('envio_proxima' in r, false);
   }
+});
+
+test('seleção da saída respeita a próxima tentativa', () => {
+  const futura = mensagem({ id: 'MSG-ESPERA', criado_em: '2026-10-15T12:00:00.000Z', envio_tentativas: 1, envio_proxima: '2026-10-15T14:05:00.000Z' });
+  const vencida = mensagem({ id: 'MSG-VENCIDA', criado_em: '2026-10-15T12:30:00.000Z', envio_tentativas: 2, envio_proxima: '2026-10-15T13:59:00.000Z' });
+  assert.equal(ctx.selecionarSaidaWhatsapp([futura], AGORA), null);
+  assert.equal(ctx.selecionarSaidaWhatsapp([futura, vencida], AGORA).id, 'MSG-VENCIDA');
 });

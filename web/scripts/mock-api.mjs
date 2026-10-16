@@ -127,7 +127,12 @@ const estado = {
       historico: [{ quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'PCP Teste', texto: 'Data combinada ajustada após contato com a oficina.', ploomes: 'ENVIADO' }]
     },
     { dealId: '700005', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
-    { dealId: '700008', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1', mensagens: [], sugestoes: [], historico: [] }
+    { dealId: '700008', os: '90008', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: diaIso(18), leadTime: diaIso(20), pecas: 45, cliente: 'CLIENTE BETA', peca: 'PECA TESTE H', referencia: 'REF-08', versao: 'v1',
+      // Novas tentativas (16/10): envio que ainda não saiu e resposta que o intérprete não conseguiu ler.
+      mensagens: [
+        { id: 'MSG-H-SEM-LEITURA', quando: new Date(Date.now() - 2_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Vou ver com a costureira e já aviso.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' },
+        { id: 'MSG-H-FILA', quando: new Date(Date.now() - 1_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. A entrega de *PECA TESTE H*, 45 peças, está prevista para a data combinada. Segue dentro do prazo?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 }
+      ], sugestoes: [], historico: [] }
   ]
 };
 

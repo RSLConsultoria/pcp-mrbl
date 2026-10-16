@@ -239,3 +239,12 @@ test('mock: associar mensagem com data gera a sugestão do intérprete; sem data
   await expect(painel).toContainText('As duas ordens ficam prontas na sexta.');
   await expect(painel.getByText(/Nova data:/)).toHaveCount(2);
 });
+
+test('mock: conversa mostra envio aguardando nova tentativa e interpretação que falhou de vez', async ({ page, api }) => {
+  void api;
+  await entrar(page, '#producao');
+  await page.getByRole('button', { name: /OS 90008/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90008' });
+  await expect(painel.getByText('Aguardando nova tentativa (2 de 5)')).toBeVisible();
+  await expect(painel.getByText('Não foi possível interpretar esta mensagem.')).toBeVisible();
+});

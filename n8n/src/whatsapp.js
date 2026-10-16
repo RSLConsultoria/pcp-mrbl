@@ -52,7 +52,10 @@ function selecionarSaidaWhatsapp(mensagens, agora) {
   var pendentes = (mensagens || []).filter(function (m) {
     // Sem ID nao existe chave segura para atualizar a linha; ignora em vez de
     // correr o risco de casar uma linha vazia na planilha.
-    return m && texto(m.id) && semAcento(m.status_envio) === 'PENDENTE';
+    if (!m || !texto(m.id) || semAcento(m.status_envio) !== 'PENDENTE') return false;
+    // Nova tentativa automática agendada: espera a hora marcada.
+    var proxima = Date.parse(texto(m.envio_proxima));
+    return !(isFinite(proxima) && isFinite(agoraMs) && proxima > agoraMs);
   }).sort(ordemFilaWhatsapp);
   if (!pendentes.length) return null;
   var alvo = pendentes[0];
@@ -82,22 +85,55 @@ function idRespostaWhatsapp(resposta) {
     texto(resposta && resposta.key && resposta.key.id) || texto(resposta && resposta.id);
 }
 
-function resultadoSaidaWhatsapp(mensagem, resposta) {
-  mensagem = mensagem || {};
+// ----- Novas tentativas automáticas do envio (16/10) -----
+// REPETIR: há certeza de que a mensagem não saiu (conexão recusada, DNS, host
+// inalcançável, 429, instância desconectada ou inexistente). A linha volta para
+// PENDENTE com espera crescente, até MAX_TENTATIVAS_ENVIO_WHATSAPP falhas.
+// INCERTO (timeout, conexão cortada, 5xx, 2xx sem ID): pode ter saído; vira ERRO
+// para conferência e reenvio humano. RECUSADA: outro 4xx; ERRO sem repetir.
+var MAX_TENTATIVAS_ENVIO_WHATSAPP = 5;
+var ESPERAS_ENVIO_WHATSAPP_MIN = [5, 15, 30, 60];
+var NAO_SAIU_CONEXAO_WHATSAPP = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH|refused the connection|DNS server returned an error/i;
+var INSTANCIA_INDISPONIVEL_WHATSAPP = /connection closed|not connected|disconnected|desconectad|does not exist|instance not found|inst[aâ]ncia/i;
+
+function classificarEnvioWhatsapp(resposta) {
   resposta = resposta || {};
-  var id = texto(mensagem.id);
   var status = Number(resposta.statusCode);
-  var evolutionId = idRespostaWhatsapp(resposta);
-  if (status >= 200 && status < 300 && evolutionId) {
-    return { id: id, evolution_id: evolutionId, status_envio: 'ENVIADA', erro: '' };
+  if (status >= 200 && status < 300) {
+    return idRespostaWhatsapp(resposta) ? { tipo: 'ENVIADA', motivo: '' } :
+      { tipo: 'INCERTO', motivo: 'Envio aceito, mas a Evolution respondeu sem ID. Confira no WhatsApp antes de reenviar.' };
   }
-  var erro;
-  if (status >= 200 && status < 300) erro = 'Envio aceito, mas a Evolution respondeu sem ID. Confira no WhatsApp antes de reenviar.';
-  else if (status === 429) erro = 'Limite da Evolution (HTTP 429). Confirme um reenvio mais tarde.';
-  else if (status >= 400 && status < 500) erro = 'A Evolution recusou o envio (HTTP ' + status + ').';
-  else if (status >= 500) erro = 'Resultado incerto na Evolution (HTTP ' + status + '). Confira no WhatsApp antes de reenviar.';
-  else erro = 'Resultado incerto por timeout ou falha de conexão. Confira no WhatsApp antes de reenviar.';
-  return { id: id, evolution_id: '', status_envio: 'ERRO', erro: erro };
+  if (status === 429) return { tipo: 'REPETIR', motivo: 'limite da Evolution (HTTP 429)' };
+  if (status >= 400 && status < 500) {
+    var corpo = JSON.stringify(corpoRespostaWhatsapp(resposta) || {});
+    if (INSTANCIA_INDISPONIVEL_WHATSAPP.test(corpo)) return { tipo: 'REPETIR', motivo: 'instância do WhatsApp desconectada (HTTP ' + status + ')' };
+    return { tipo: 'RECUSADA', motivo: 'A Evolution recusou o envio (HTTP ' + status + ').' };
+  }
+  if (status >= 500) return { tipo: 'INCERTO', motivo: 'Resultado incerto na Evolution (HTTP ' + status + '). Confira no WhatsApp antes de reenviar.' };
+  var falha = '';
+  try { falha = JSON.stringify(resposta.error || resposta.erro || ''); } catch (e) { falha = ''; }
+  if (NAO_SAIU_CONEXAO_WHATSAPP.test(falha)) return { tipo: 'REPETIR', motivo: 'Evolution fora do ar (conexão não estabelecida)' };
+  return { tipo: 'INCERTO', motivo: 'Resultado incerto por timeout ou falha de conexão. Confira no WhatsApp antes de reenviar.' };
+}
+
+function resultadoSaidaWhatsapp(mensagem, resposta, agora) {
+  mensagem = mensagem || {};
+  var id = texto(mensagem.id);
+  var c = classificarEnvioWhatsapp(resposta);
+  if (c.tipo === 'ENVIADA') return { id: id, evolution_id: idRespostaWhatsapp(resposta), status_envio: 'ENVIADA', erro: '' };
+  if (c.tipo !== 'REPETIR') return { id: id, evolution_id: '', status_envio: 'ERRO', erro: c.motivo };
+  var anteriores = numero(mensagem.envio_tentativas);
+  var tentativas = (anteriores === null || isNaN(anteriores) ? 0 : anteriores) + 1;
+  if (tentativas >= MAX_TENTATIVAS_ENVIO_WHATSAPP) {
+    return { id: id, evolution_id: '', status_envio: 'ERRO', envio_tentativas: tentativas, envio_proxima: '',
+      erro: 'Não saiu após ' + tentativas + ' tentativas: ' + c.motivo + '. Confira e reenvie.' };
+  }
+  var espera = ESPERAS_ENVIO_WHATSAPP_MIN[Math.min(tentativas, ESPERAS_ENVIO_WHATSAPP_MIN.length) - 1];
+  var base = Date.parse(texto(agora));
+  if (!isFinite(base)) base = Date.now();
+  return { id: id, evolution_id: '', status_envio: 'PENDENTE', envio_tentativas: tentativas,
+    envio_proxima: new Date(base + espera * 60000).toISOString(),
+    erro: 'Não saiu: ' + c.motivo + '. Nova tentativa automática (' + tentativas + ' de ' + MAX_TENTATIVAS_ENVIO_WHATSAPP + ').' };
 }
 
 // So JID de grupo (termina em @g.us). JID vazio nunca casa com oficina sem

@@ -158,6 +158,8 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               <span>{m.direcao === 'ENVIADA' ? 'PCP' : m.participanteNome || 'Oficina'} · {dataHora(m.quando)}</span>
               <p>{m.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : m.texto}</p>
               {m.associacao === 'SEM_ASSOCIACAO' && <small>Mensagem ainda sem associação</small>}
+              {m.statusEnvio === 'PENDENTE' && !!m.envioTentativas && <small>Aguardando nova tentativa ({m.envioTentativas} de 5)</small>}
+              {m.interpretacao === 'ERRO' && <small>Não foi possível interpretar esta mensagem.</small>}
               {m.statusEnvio === 'ERRO' && <small>Falha no envio.</small>}
               {m.statusEnvio === 'ERRO' && !m.reenviada && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>}
             </li>)}</ol>}

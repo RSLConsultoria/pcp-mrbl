@@ -77,3 +77,24 @@ test('selecao entrega ao Google somente colunas existentes da fila', () => {
   }]);
   assert.deepEqual(Object.keys(item.json).sort(), ['erro', 'grupo_jid', 'id', 'status_envio', 'texto']);
 });
+
+test('Resultado WhatsApp usa as tentativas da linha lida e agenda a próxima quando não saiu', () => {
+  const contexto = vm.createContext({
+    $: (nome) => {
+      const dados = {
+        'Selecionar Saida WhatsApp': [{ id: 'MSG-1', grupo_jid: 'grupo-ficticio@g.us', texto: 'Teste', status_envio: 'ENVIANDO', erro: '' }],
+        'Ler Fila WhatsApp': [{ id: 'MSG-0', envio_tentativas: 9 }, { id: 'MSG-1', envio_tentativas: 2 }]
+      }[nome];
+      if (!dados) throw new Error('node inesperado: ' + nome);
+      const itens = dados.map((json) => ({ json }));
+      return { first: () => itens[0], all: () => itens };
+    },
+    $input: { first: () => ({ json: { error: { message: 'The service refused the connection - perhaps it is offline' } } }) }
+  });
+  for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), contexto);
+  const adaptador = fs.readFileSync(path.join(__dirname, '..', 'adaptadores', 'resultado-whatsapp-saida.js'), 'utf8');
+  const [r] = limpo(vm.runInContext('(function () {\n' + adaptador + '\n})()', contexto));
+  assert.equal(r.json.status_envio, 'PENDENTE');
+  assert.equal(r.json.envio_tentativas, 3);
+  assert.ok(Date.parse(r.json.envio_proxima) > Date.now() + 25 * 60000);
+});

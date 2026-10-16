@@ -106,6 +106,8 @@ export interface MensagemProducao {
   statusEnvio: '' | 'PENDENTE' | 'ENVIANDO' | 'ENVIADA' | 'ERRO';
   tipoConteudo: 'TEXTO' | 'NAO_TEXTUAL';
   reenviada?: boolean; // tentativa com erro que já ganhou um reenvio (só um por mensagem)
+  envioTentativas?: number; // PENDENTE depois de falha certa: tentativas automáticas já feitas (até 5)
+  interpretacao?: 'ERRO'; // o intérprete falhou nas 5 tentativas
 }
 
 export interface MensagemWhatsappSemAssociacao extends MensagemProducao {

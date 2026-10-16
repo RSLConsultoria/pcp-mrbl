@@ -87,3 +87,24 @@ test('board consolida duplicatas concorrentes pelo ID e prefere sugestão já de
   assert.equal(r.producao[0].sugestoes.length, 1);
   assert.equal(r.producao[0].sugestoes[0].status, 'ACEITA');
 });
+
+test('board mostra a nova tentativa de envio e o erro definitivo de interpretação só quando existem', () => {
+  const e = extras();
+  e.whatsappMensagens.push({
+    id: 'MSG-FILA', quando: '2026-10-13T11:30:00.000Z', direcao: 'ENVIADA', texto: 'Cobrança de *CAMISA TESTE*', deal_id: '700001',
+    associacao: 'MANUAL', status_envio: 'PENDENTE', envio_tentativas: 2, envio_proxima: '2026-10-13T12:20:00.000Z', tipo_conteudo: 'TEXTO'
+  }, {
+    id: 'MSG-SEM-INTERPRETACAO', quando: '2026-10-13T11:40:00.000Z', direcao: 'RECEBIDA', texto: 'Resposta ficticia', deal_id: '700001',
+    associacao: 'CITACAO', status_envio: '', tipo_conteudo: 'TEXTO', interpretacao_status: 'ERRO', interpretacao_tentativas: 5
+  }, {
+    id: 'MSG-INTERPRETANDO', quando: '2026-10-13T11:45:00.000Z', direcao: 'RECEBIDA', texto: 'Outra resposta', deal_id: '700001',
+    associacao: 'CITACAO', status_envio: '', tipo_conteudo: 'TEXTO', interpretacao_status: 'PENDENTE', interpretacao_tentativas: 2
+  });
+  const msgs = limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body.producao[0].mensagens;
+  const por = (id) => msgs.find((m) => m.id === id);
+  assert.equal(por('MSG-FILA').envioTentativas, 2);
+  assert.equal(por('MSG-FILA').statusEnvio, 'PENDENTE');
+  assert.equal(por('MSG-SEM-INTERPRETACAO').interpretacao, 'ERRO');
+  assert.equal('interpretacao' in por('MSG-INTERPRETANDO'), false);
+  assert.equal('envioTentativas' in por('MSG-1'), false);
+});
