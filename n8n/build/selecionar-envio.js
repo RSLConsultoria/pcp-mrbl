@@ -1714,6 +1714,14 @@ var CAMPO_LEAD_TIME = 'deal_1B168E7F-E71D-4895-8A37-D7DB6FD3418D';
 var CAMPO_PECAS_CORTE = 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD';
 var CAMPO_DESCRICAO_PECA = 'deal_B53149A5-FDAB-49C4-85E6-46CC6FB3F0B7';
 var CAMPO_REFERENCIA = 'deal_BDA9B977-176D-48FD-9F4D-6E8869D8286D';
+// "Valor Total - Corte Real": campo de moeda no Ploomes (DecimalValue).
+var CAMPO_VALOR_CORTE = 'deal_A974EF64-47C5-4E6A-B7BD-30B7B15A437C';
+
+// Número ou null (vazio ou inválido): para peças e valores vindos do Ploomes ou da planilha.
+function numeroOuNulo(v) {
+  var n = numero(v);
+  return n === null || isNaN(n) ? null : n;
+}
 
 // Chave do clique no site (crypto.randomUUID): o reenvio da mesma acao pela
 // fila manda a mesma chave, e o id da mensagem sai dela de forma deterministica.
@@ -1773,7 +1781,8 @@ function normalizarDealProducao(deal) {
     cliente: texto(deal.ContactName),
     peca: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_DESCRICAO_PECA))) || texto(deal.Title),
     referencia: texto(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_REFERENCIA))),
-    versao: texto(deal.LastUpdateDate) || texto(deal.UpdatedAt)
+    versao: texto(deal.LastUpdateDate) || texto(deal.UpdatedAt),
+    valorCorte: numeroOuNulo(valorPropriedadePloomes(propriedadeDoDeal(deal, CAMPO_VALOR_CORTE)))
   };
 }
 
@@ -1794,7 +1803,9 @@ function linhaProducao(p, sincronizadoEm) {
     referencia: texto(p.referencia),
     em_costura: 'SIM',
     atualizado_em_ploomes: texto(p.versao),
-    sincronizado_em: texto(sincronizadoEm)
+    sincronizado_em: texto(sincronizadoEm),
+    // Coluna acrescentada no fim do contrato da aba (16/10).
+    valor_corte: numeroOuNulo(p.valorCorte) === null ? '' : numeroOuNulo(p.valorCorte)
   };
 }
 
@@ -2391,7 +2402,8 @@ function producoesBoard(extras, caixas) {
       cliente: texto(l.cliente),
       peca: texto(l.peca),
       referencia: texto(l.referencia),
-      versao: texto(l.atualizado_em_ploomes)
+      versao: texto(l.atualizado_em_ploomes),
+      valorCorte: numeroOuNulo(l.valor_corte)
     };
     if (p.pecas === null || isNaN(p.pecas)) p.pecas = null;
     p.faltasCostura = faltasDaCostura(p, caixas);

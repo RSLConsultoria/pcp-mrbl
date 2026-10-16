@@ -66,6 +66,7 @@ Fonte de verdade da produção:
 - data combinada: `deal_E53BDEC3-F829-413D-9421-91D5D7411349`;
 - lead time: `deal_1B168E7F-E71D-4895-8A37-D7DB6FD3418D`;
 - peças do corte real: `deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD`, com fallback para peças do pedido.
+- valor total do corte real (moeda, `DecimalValue`): `deal_A974EF64-47C5-4E6A-B7BD-30B7B15A437C`.
 
 Antes de implementar a integração, o formato atual desses campos e o payload de atualização serão conferidos em leitura. Não se presume o formato de campo de usuário do Ploomes.
 
@@ -97,6 +98,7 @@ Chave: `deal_id`.
 | `em_costura` | `SIM` ou `NAO` |
 | `atualizado_em_ploomes` | Versão/conflito: o sync grava o LastUpdateDate do Ploomes; ações que gravam a linha (alterar combinado, aceitar nova data) gravam o instante da ação, que é a versão devolvida ao site |
 | `sincronizado_em` | ISO da última leitura |
+| `valor_corte` | "Valor Total - Corte Real" (moeda, R$) do Ploomes, como número; vazio quando o card não tem. Coluna acrescentada no fim (16/10): criar antes de publicar o sync |
 
 ### `OFICINAS`
 

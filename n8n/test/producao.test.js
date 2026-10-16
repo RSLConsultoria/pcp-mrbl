@@ -8,7 +8,7 @@ function prod(extra) {
   return Object.assign({
     dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA A',
     inicioCostura: '2026-10-01', dataCombinada: '2026-10-20', leadTime: '2026-10-18',
-    pecas: 120, cliente: 'CLIENTE FICTÍCIO', peca: 'CAMISA TESTE', referencia: 'REF-001', versao: 'v1'
+    pecas: 120, valorCorte: 12345.67, cliente: 'CLIENTE FICTÍCIO', peca: 'CAMISA TESTE', referencia: 'REF-001', versao: 'v1'
   }, extra);
 }
 
@@ -17,8 +17,12 @@ test('linhaProducao normaliza o snapshot e usa ALOCAR sem oficina', () => {
     deal_id: '700001', os: '90001', oficina_id: '', oficina_nome: 'ALOCAR',
     inicio_costura: '2026-10-01', data_combinada: '2026-10-20', lead_time: '2026-10-18',
     pecas: 120.5, cliente: 'CLIENTE FICTÍCIO', peca: 'CAMISA TESTE', referencia: 'REF-001',
-    em_costura: 'SIM', atualizado_em_ploomes: 'v1', sincronizado_em: '2026-10-13T12:00:00.000Z'
+    em_costura: 'SIM', atualizado_em_ploomes: 'v1', sincronizado_em: '2026-10-13T12:00:00.000Z',
+    valor_corte: 12345.67
   });
+  assert.equal(ctx.linhaProducao(prod({ valorCorte: null }), '2026-10-13T12:00:00.000Z').valor_corte, '');
+  // A coluna nova fica no fim do contrato da aba PRODUCAO.
+  assert.equal(Object.keys(ctx.linhaProducao(prod(), '2026-10-13T12:00:00.000Z')).pop(), 'valor_corte');
 });
 
 test('normalizarDealProducao lê os valores tipados de OtherProperties', () => {
@@ -35,14 +39,15 @@ test('normalizarDealProducao lê os valores tipados de OtherProperties', () => {
       { FieldKey: 'deal_1B168E7F-E71D-4895-8A37-D7DB6FD3418D', DateTimeValue: '2026-10-18T03:00:00Z' },
       { FieldKey: 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD', DecimalValue: 120 },
       { FieldKey: 'deal_B53149A5-FDAB-49C4-85E6-46CC6FB3F0B7', StringValue: 'CAMISA TESTE' },
-      { FieldKey: 'deal_BDA9B977-176D-48FD-9F4D-6E8869D8286D', StringValue: 'REF-001' }
+      { FieldKey: 'deal_BDA9B977-176D-48FD-9F4D-6E8869D8286D', StringValue: 'REF-001' },
+      { FieldKey: 'deal_A974EF64-47C5-4E6A-B7BD-30B7B15A437C', DecimalValue: 12345.67 }
     ]
   };
   assert.deepEqual(limpo(ctx.normalizarDealProducao(deal)), {
     dealId: '700001', os: '90001', oficinaId: '44', oficina: 'OFICINA FICTÍCIA',
     inicioCostura: '2026-10-01T03:00:00Z', dataCombinada: '2026-10-20T03:00:00Z',
     leadTime: '2026-10-18T03:00:00Z', pecas: 120, cliente: 'CLIENTE FICTÍCIO',
-    peca: 'CAMISA TESTE', referencia: 'REF-001', versao: '2026-10-14T15:20:00Z'
+    peca: 'CAMISA TESTE', referencia: 'REF-001', versao: '2026-10-14T15:20:00Z', valorCorte: 12345.67
   });
 });
 
@@ -59,6 +64,7 @@ test('normalizarDealProducao tolera oficina e campos ausentes sem inventar dados
   assert.equal(r.oficinaId, 'of-2');
   assert.equal(r.oficina, 'OFICINA B');
   assert.equal(r.pecas, '');
+  assert.equal(r.valorCorte, null);
   assert.equal(r.peca, 'PEÇA SEM CADASTRO');
 });
 

@@ -11,7 +11,7 @@ function extras() {
       deal_id: '700001', os: '90001', oficina_id: 'of-1', oficina_nome: 'OFICINA MODELO',
       inicio_costura: '2026-10-01', data_combinada: '2026-10-20', lead_time: '2026-10-18',
       pecas: 120, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-001',
-      em_costura: 'SIM', atualizado_em_ploomes: 'v1'
+      em_costura: 'SIM', atualizado_em_ploomes: 'v1', valor_corte: 12345.67
     }, {
       deal_id: '700002', os: '90002', oficina_id: 'of-2', oficina_nome: 'OFICINA ANTIGA',
       em_costura: 'NAO', atualizado_em_ploomes: 'v2'
@@ -47,12 +47,20 @@ test('board inclui somente producao em Costura e relaciona conversa, sugestao e 
   assert.deepEqual(r.producao[0], {
     dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
     inicioCostura: '2026-10-01', dataCombinada: '2026-10-20', leadTime: '2026-10-18',
-    pecas: 120, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-001', versao: 'v1',
+    pecas: 120, valorCorte: 12345.67, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-001', versao: 'v1',
     faltasCostura: [], faltasAcabamento: [],
     mensagens: [{ reenviada: false, id: 'MSG-1', quando: '2026-10-13T10:00:00.000Z', participanteNome: 'Pessoa Teste', direcao: 'RECEBIDA', texto: 'A OS 90001 fica pronta dia 20/10', associacao: 'OS_NO_TEXTO', statusEnvio: '', tipoConteudo: 'TEXTO' }],
     sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-20', resumo: 'Oficina informou nova data.', evidencia: 'dia 20/10', confianca: 0.93, status: 'PENDENTE', criadoEm: '2026-10-13T10:01:00.000Z', versao: 'v1' }],
     historico: [{ quando: '2026-10-12T09:00:00.000Z', usuario: 'PCP Teste', texto: 'Data combinada ajustada.', ploomes: 'ENVIADO' }]
   });
+});
+
+test('board devolve valorCorte nulo sem a coluna ou com valor vazio', () => {
+  const e = extras();
+  delete e.producao[0].valor_corte;
+  assert.equal(limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body.producao[0].valorCorte, null);
+  e.producao[0].valor_corte = '';
+  assert.equal(limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body.producao[0].valorCorte, null);
 });
 
 test('board lista oficinas ativas e informa grupo configurado sem expor JIDs ou IDs da Evolution', () => {

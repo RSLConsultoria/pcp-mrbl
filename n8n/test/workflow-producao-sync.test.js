@@ -26,7 +26,7 @@ function rodarAdaptador(snapshot, paginas) {
 }
 
 const vr = (aba, values) => ({ range: "'" + aba + "'!A1:Z100", majorDimension: 'ROWS', values });
-const CAB_PRODUCAO = ['deal_id', 'os', 'oficina_id', 'oficina_nome', 'inicio_costura', 'data_combinada', 'lead_time', 'pecas', 'cliente', 'peca', 'referencia', 'em_costura', 'atualizado_em_ploomes', 'sincronizado_em'];
+const CAB_PRODUCAO = ['deal_id', 'os', 'oficina_id', 'oficina_nome', 'inicio_costura', 'data_combinada', 'lead_time', 'pecas', 'cliente', 'peca', 'referencia', 'em_costura', 'atualizado_em_ploomes', 'sincronizado_em', 'valor_corte'];
 const CAB_OFICINAS = ['ploomes_id', 'nome', 'grupo_jid', 'grupo_nome', 'ativo', 'atualizado_em'];
 const prop = (FieldKey, dados) => Object.assign({ FieldKey }, dados);
 
