@@ -2115,9 +2115,9 @@ function processarEnvioWhatsapp(corpo, linhas, ctx) {
   })[0];
   if (!oficina || !texto(oficina.grupo_jid)) return erroAcao(409, 'Configure o grupo desta oficina na aba OFICINAS.');
   var os = texto(producao.os);
-  var osRegex = new RegExp('(^|\\D)' + os.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\D|$)');
+  // O texto não precisa citar a OS: a oficina conhece a peça. A resposta volta
+  // para esta OS pela citação desta mensagem ou como resposta à última cobrança.
   var mensagem = corpo.texto.trim();
-  if (!osRegex.test(mensagem)) return erroAcao(400, 'A mensagem precisa identificar a OS ' + os + '.');
   var agora = ctx.agora;
   var modelo = semAcento(corpo.modelo);
   var linha = {
@@ -2218,24 +2218,27 @@ function dataCurtaProducao(iso) {
   return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : 'sem data';
 }
 
+// As oficinas conhecem a peça, não o número da OS: a mensagem cita a peça em
+// negrito do WhatsApp. O mesmo texto sai de web/src/regras/producao.ts.
 function modeloWhatsapp(tipo, p, hojeISO) {
   p = p || {};
-  var cab = '*OS ' + texto(p.os) + '*';
-  var detalhe = texto(p.peca) + (numero(p.pecas) > 0 ? ', ' + formatarQtd(numero(p.pecas)) + ' pç' : '');
+  var nome = '*' + (texto(p.peca) || 'peça') + '*';
+  var qtd = numero(p.pecas);
+  var quantidade = qtd > 0 ? formatarQtd(qtd) + (qtd === 1 ? ' peça' : ' peças') : '';
+  // "de *X*, 160 peças, está" no meio da frase; "de *X*, 160 peças?" no fim.
+  var meio = nome + (quantidade ? ', ' + quantidade + ',' : '');
+  var fim = nome + (quantidade ? ', ' + quantidade : '');
   var prazo = prazoDaProducao(p);
   if (tipo === 'CONFIRMAR_DATA') {
-    return cab + '\nBom dia. Confirmando a entrega de ' + detalhe + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
-  }
-  if (tipo === 'MATERIAL_ENVIADO') {
-    return cab + '\nBom dia. O material que faltava na caixa de costura foi enviado hoje.';
+    return 'Bom dia. Confirmando a entrega de ' + meio + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
   }
   if (tipo === 'COBRANCA_PRAZO') {
     var status = statusPrazo(p, hojeISO);
     if (status.status === 'ATRASADO') {
-      return cab + '\nBom dia. A entrega de ' + detalhe + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
+      return 'Bom dia. A entrega de ' + meio + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
     }
-    if (!prazo.data) return cab + '\nBom dia. Qual a previsão de entrega de ' + detalhe + '?';
-    return cab + '\nBom dia. A entrega de ' + detalhe + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
+    if (!prazo.data) return 'Bom dia. Qual a previsão de entrega de ' + fim + '?';
+    return 'Bom dia. A entrega de ' + meio + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
   }
   return '';
 }
@@ -2391,6 +2394,10 @@ var TIPOS_INTERPRETACAO_WHATSAPP = {
   MOTIVO_ATRASO: 1,
   OBSERVACAO: 1
 };
+
+// Mensagens enviadas que pedem resposta da oficina. Sem o número da OS no
+// texto, a resposta sem citação volta pela última pergunta pendente do grupo.
+var TIPOS_PERGUNTA_WHATSAPP = { COBRANCA_PRAZO: 1, CONFIRMAR_DATA: 1 };
 
 var PREFIXO_TENTATIVA_WHATSAPP = 'Tentativa iniciada em ';
 var ERRO_ENVIO_INCERTO_WHATSAPP = 'Resultado incerto. Confira no WhatsApp antes de confirmar um reenvio.';
@@ -2580,7 +2587,7 @@ function associarMensagemWhatsapp(msg, producoes, mensagens) {
   var agora = Date.parse(texto(msg.quando));
   var limite = agora - 72 * 3600000;
   var pendentes = mensagens.filter(function (m) {
-    if (!m || semAcento(m.direcao) !== 'ENVIADA' || semAcento(m.tipo) !== 'COBRANCA_PRAZO') return false;
+    if (!m || semAcento(m.direcao) !== 'ENVIADA' || !TIPOS_PERGUNTA_WHATSAPP[semAcento(m.tipo)]) return false;
     if (texto(m.status_envio) && semAcento(m.status_envio) !== 'ENVIADA') return false;
     if (texto(m.grupo_jid) !== texto(msg.grupoJid) || cobrancaRespondidaWhatsapp(m, mensagens)) return false;
     var ts = Date.parse(texto(m.quando));

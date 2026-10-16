@@ -9,7 +9,7 @@ function mensagem(extra) {
   return Object.assign({
     id: 'MSG-1', evolution_id: '', quando: '2026-10-15T13:00:00.000Z',
     grupo_jid: 'grupo-ficticio@g.us', grupo_nome: 'GRUPO FICTICIO', participante_jid: '', participante_nome: 'Pessoa PCP',
-    direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO', texto: '*OS 90001* Confirma a entrega?',
+    direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO', texto: 'Confirma a entrega de *CAMISA TESTE*?',
     resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'OF-1', associacao: 'MANUAL',
     status_envio: 'PENDENTE', erro: '', criado_em: '2026-10-15T13:00:00.000Z'
   }, extra || {});
@@ -25,7 +25,7 @@ test('seleciona a pendencia mais antiga e a marca antes do envio externo', () =>
   assert.equal(r.enviar, true);
   assert.equal(r.id, 'MSG-1');
   assert.equal(r.grupo_jid, 'grupo-ficticio@g.us');
-  assert.equal(r.texto, '*OS 90001* Confirma a entrega?');
+  assert.equal(r.texto, 'Confirma a entrega de *CAMISA TESTE*?');
   assert.deepEqual(r.linha, {
     id: 'MSG-1', status_envio: 'ENVIANDO', erro: 'Tentativa iniciada em 2026-10-15T14:00:00.000Z'
   });

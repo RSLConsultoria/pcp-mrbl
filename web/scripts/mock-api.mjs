@@ -115,8 +115,8 @@ const estado = {
     {
       dealId: '700002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
       mensagens: [
-        { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Pode confirmar a data de entrega?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
-        { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: '*OS 90002* Bom dia. A entrega segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. Pode confirmar a data de entrega de *PECA TESTE B*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. A entrega de *PECA TESTE B* segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
         { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
       ],
       sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
@@ -700,7 +700,6 @@ function enviarWhatsapp(c, usuario) {
   if (!['COBRANCA_PRAZO', 'CONFIRMAR_DATA', 'MATERIAL_ENVIADO'].includes(c.modelo)) throw bad('Modelo de mensagem inválido.');
   const texto = String(c.texto ?? '').trim();
   if (!texto || texto.length > 1500) throw bad('Mensagem com até 1500 caracteres.');
-  if (!new RegExp(`(^|\\D)${p.os}(\\D|$)`).test(texto)) throw bad(`A mensagem precisa identificar a OS ${p.os}.`);
   p.mensagens.unshift({ id: mensagemId, quando: agoraIso(), participanteNome: usuario, direcao: 'ENVIADA', texto, associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO' });
   const h = historicoProducao(p, usuario, `${usuario} enfileirou uma mensagem no WhatsApp para ${oficina.grupoNome || oficina.nome}.`);
   return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };

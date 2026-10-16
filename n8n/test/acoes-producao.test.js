@@ -121,7 +121,7 @@ test('ignorar sugestao registra decisao sem tocar no Ploomes', () => {
 test('enviar whatsapp apenas enfileira o texto para o grupo cadastrado', () => {
   const { ctx, estado, cab } = contexto();
   let seq = 0;
-  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nBom dia. Qual a previsão de entrega?' };
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Bom dia. Qual a previsão de entrega de *CAMISA TESTE*?' };
   const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'ID-' + (++seq)));
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.ploomes, null);
@@ -129,22 +129,30 @@ test('enviar whatsapp apenas enfileira o texto para o grupo cadastrado', () => {
   assert.deepEqual(r.operacoes, [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: {
     id: 'ID-1', evolution_id: '', quando: '2026-10-13T14:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
     participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
-    texto: '*OS 90001*\nBom dia. Qual a previsão de entrega?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001',
+    texto: 'Bom dia. Qual a previsão de entrega de *CAMISA TESTE*?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001',
     oficina_id: 'of-1', associacao: 'MANUAL', status_envio: 'PENDENTE', erro: '', criado_em: '2026-10-13T14:00:00.000Z'
   } }]);
   assert.equal(r.historicos[0].acao, 'WHATSAPP_ENFILEIRAR');
   assert.equal('resposta' in r || 'envio' in r, false);
 });
 
-test('enviar whatsapp exige grupo, modelo valido, OS no texto e versao atual', () => {
+test('enviar whatsapp exige grupo, modelo valido e versao atual', () => {
   const { ctx, estado, cab } = contexto();
-  const base = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nCobrança de teste.' };
+  const base = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Bom dia. A entrega de *CAMISA TESTE* segue no prazo?' };
   const semGrupo = linhas();
   semGrupo.oficinas[0].grupo_jid = '';
   assert.equal(ctx.processarAcao(estado, cab, base, semGrupo, T0, () => 'X').status, 409);
   assert.equal(ctx.processarAcao(estado, cab, { ...base, modelo: 'INVENTADO' }, linhas(), T0, () => 'X').status, 400);
-  assert.equal(ctx.processarAcao(estado, cab, { ...base, texto: 'Sem identificação.' }, linhas(), T0, () => 'X').status, 400);
   assert.equal(ctx.processarAcao(estado, cab, { ...base, versao: 'antiga' }, linhas(), T0, () => 'X').status, 409);
+});
+
+test('enviar whatsapp aceita texto sem o número da OS: a oficina conhece a peça', () => {
+  const { ctx, estado, cab } = contexto();
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'CONFIRMAR_DATA', texto: 'Bom dia. Confirmando a entrega de *CAMISA TESTE* para 18/10. Segue combinado?' };
+  const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'ID-1'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.operacoes[0].linha.texto, corpo.texto);
+  assert.equal(r.operacoes[0].linha.os, '90001');
 });
 
 test('reenviar whatsapp exige confirmação e cria nova tentativa sem apagar o erro', () => {
@@ -153,7 +161,7 @@ test('reenviar whatsapp exige confirmação e cria nova tentativa sem apagar o e
   dados.whatsappMensagens = [{
     id: 'MSG-ERRO', evolution_id: '', quando: '2026-10-13T12:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
     participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
-    texto: '*OS 90001*\nQual a previsão?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
+    texto: 'Qual a previsão de entrega de *CAMISA TESTE*?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
     associacao: 'MANUAL', status_envio: 'ERRO', erro: 'Falha simulada', criado_em: '2026-10-13T12:00:00.000Z'
   }];
   const corpo = { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true };
@@ -192,7 +200,7 @@ test('versão da produção: duas alterações seguidas com a versão devolvida 
   // Edição concorrente com a versão vista antes da primeira alteração.
   const antiga = ctx.processarAcao(estado, cab, { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-2', dataCombinada: '2026-10-22', motivo: 'Outra pessoa.' }, dados, T1 + 120000, () => 'H3');
   assert.equal(antiga.status, 409);
-  const ultrapassada = ctx.processarAcao(estado, cab, { tipo: 'enviar_whatsapp', dealId: '700001', versao: primeira.body.versao, modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Cobrança.' }, dados, T1 + 120000, () => 'H4');
+  const ultrapassada = ctx.processarAcao(estado, cab, { tipo: 'enviar_whatsapp', dealId: '700001', versao: primeira.body.versao, modelo: 'COBRANCA_PRAZO', texto: 'Cobrança de *CAMISA TESTE*.' }, dados, T1 + 120000, () => 'H4');
   assert.equal(ultrapassada.status, 409);
 });
 
@@ -212,7 +220,7 @@ test('enviar whatsapp com chave deriva o id e não cria segunda linha no reenvio
   const { ctx, estado, cab } = contexto();
   const dados = linhas();
   const chave = '0b7c2f1e-1111-4222-8333-944455556666';
-  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Cobrança.', chave };
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Cobrança de *CAMISA TESTE*.', chave };
   const r = limpo(ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'ALEATORIO'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.mensagemId, 'WA-E-' + chave);
@@ -228,7 +236,7 @@ test('enviar whatsapp com chave deriva o id e não cria segunda linha no reenvio
   // A mesma chave em outra OS não pode reaproveitar a linha.
   ctx.DEALS_PRODUCAO_EDITAVEIS = ['700001', '700002'];
   dados.oficinas[1].grupo_jid = 'grupo-b@g.us';
-  const outra = ctx.processarAcao(estado, cab, { ...corpo, dealId: '700002', versao: 'v2', texto: '*OS 90002* Cobrança.' }, dados, T0, () => 'X');
+  const outra = ctx.processarAcao(estado, cab, { ...corpo, dealId: '700002', versao: 'v2', texto: 'Cobrança de *CALÇA TESTE*.' }, dados, T0, () => 'X');
   assert.equal(outra.status, 409);
   assert.equal(ctx.processarAcao(estado, cab, { ...corpo, chave: 'x' }, dados, T0, () => 'X').status, 400);
   assert.equal(ctx.processarAcao(estado, cab, { ...corpo, chave: "a'b<c>defgh" }, dados, T0, () => 'X').status, 400);
@@ -236,7 +244,7 @@ test('enviar whatsapp com chave deriva o id e não cria segunda linha no reenvio
 
 test('enviar whatsapp sem chave continua gerando id como antes', () => {
   const { ctx, estado, cab } = contexto();
-  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001* Cobrança.' };
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Cobrança de *CAMISA TESTE*.' };
   const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'UUID-1'));
   assert.equal(r.body.mensagemId, 'UUID-1');
 });
@@ -247,7 +255,7 @@ test('reenviar whatsapp só uma vez por mensagem original e o board marca a orig
   dados.whatsappMensagens = [{
     id: 'MSG-ERRO', evolution_id: '', quando: '2026-10-13T12:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
     participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
-    texto: '*OS 90001*\nQual a previsão?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
+    texto: 'Qual a previsão de entrega de *CAMISA TESTE*?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001', oficina_id: 'of-1',
     associacao: 'MANUAL', status_envio: 'ERRO', erro: 'Falha simulada', criado_em: '2026-10-13T12:00:00.000Z'
   }];
   const corpo = { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true };

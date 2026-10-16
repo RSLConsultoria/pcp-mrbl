@@ -87,16 +87,20 @@ export function validarMudancaProducao(
 
 function dataCurta(iso: string): string { return iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : 'sem data'; }
 
+// As oficinas conhecem a peça, não o número da OS: a mensagem cita a peça em negrito
+// do WhatsApp. O texto é o mesmo de modeloWhatsapp em n8n/src/producao.js.
 export function modeloMensagemProducao(tipo: ModeloMensagemProducao, p: Producao, hoje: string): string {
-  const cabecalho = `*OS ${p.os}*`;
-  const detalhe = `${p.peca || 'peça'}${p.pecas ? `, ${p.pecas} peças` : ''}`;
+  const nome = `*${p.peca || 'peça'}*`;
+  const qtd = p.pecas ?? 0;
+  const quantidade = qtd > 0 ? `${qtd.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${qtd === 1 ? 'peça' : 'peças'}` : '';
+  const meio = quantidade ? `${nome}, ${quantidade},` : nome;
+  const fim = quantidade ? `${nome}, ${quantidade}` : nome;
   const prazo = prazoProducao(p);
   if (tipo === 'CONFIRMAR_DATA') {
-    return `${cabecalho}\nBom dia. Confirmando a entrega de ${detalhe} para ${dataCurta(p.dataCombinada || prazo.data)}. Segue combinado?`;
+    return `Bom dia. Confirmando a entrega de ${meio} para ${dataCurta(p.dataCombinada || prazo.data)}. Segue combinado?`;
   }
-  if (tipo === 'MATERIAL_ENVIADO') return `${cabecalho}\nBom dia. O material que faltava na caixa de costura foi enviado hoje.`;
   const status = statusProducao(p, hoje);
-  if (status.status === 'ATRASADO') return `${cabecalho}\nBom dia. A entrega de ${detalhe} estava prevista para ${dataCurta(prazo.data)}. Qual a nova data de entrega?`;
-  if (!prazo.data) return `${cabecalho}\nBom dia. Qual a previsão de entrega de ${detalhe}?`;
-  return `${cabecalho}\nBom dia. A entrega de ${detalhe} está prevista para ${dataCurta(prazo.data)}. Segue dentro do prazo?`;
+  if (status.status === 'ATRASADO') return `Bom dia. A entrega de ${meio} estava prevista para ${dataCurta(prazo.data)}. Qual a nova data de entrega?`;
+  if (!prazo.data) return `Bom dia. Qual a previsão de entrega de ${fim}?`;
+  return `Bom dia. A entrega de ${meio} está prevista para ${dataCurta(prazo.data)}. Segue dentro do prazo?`;
 }

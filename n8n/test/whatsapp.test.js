@@ -289,3 +289,13 @@ test('data dd/mm sem ano mais de seis meses à frente vira observação em vez d
   const curta = limpo(ctx.validarInterpretacaoWhatsapp({ tipo: 'NOVA_DATA_COMBINADA', valor: '20/10', resumo: 'x', evidencia: 'x', confianca: 0.95 }, quando));
   assert.deepEqual([curta.tipo, curta.valor], ['NOVA_DATA_COMBINADA', '2026-10-20']);
 });
+
+test('última cobrança: confirmar data também conta como pergunta à oficina; outros envios não', () => {
+  // Sem o número da OS no texto enviado, a resposta sem citação volta pela última pergunta.
+  const msg = { grupoJid: 'grupo-ficticio@g.us', texto: 'Confirmado, entregamos dia 20.', quando: '2026-10-13T13:20:00.000Z' };
+  const base = { direcao: 'ENVIADA', status_envio: 'ENVIADA', grupo_jid: 'grupo-ficticio@g.us', quando: '2026-10-13T12:00:00.000Z', deal_id: '700001', os: '90001' };
+  assert.deepEqual(limpo(ctx.associarMensagemWhatsapp(msg, PRODUCOES, [Object.assign({}, base, { tipo: 'CONFIRMAR_DATA' })])),
+    { dealId: '700001', os: '90001', associacao: 'ULTIMA_COBRANCA' });
+  assert.deepEqual(limpo(ctx.associarMensagemWhatsapp(msg, PRODUCOES, [Object.assign({}, base, { tipo: 'RESPOSTA' })])),
+    { dealId: '', os: '', associacao: 'SEM_ASSOCIACAO' });
+});

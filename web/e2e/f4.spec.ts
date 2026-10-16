@@ -14,7 +14,7 @@ const producao = [
   { dealId: '710001', os: '90001', oficinaId: '', oficina: 'ALOCAR', inicioCostura: '2026-10-01', dataCombinada: '2026-10-05', leadTime: '2026-10-08', pecas: 80, cliente: 'CLIENTE FICTICIO', peca: 'CAMISA TESTE', referencia: 'REF-A', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] },
   { dealId: '710002', os: '90002', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-04', dataCombinada: '2026-10-12', leadTime: '2026-10-15', pecas: 120, cliente: 'CLIENTE MODELO', peca: 'COLETE TESTE', referencia: 'REF-B', versao: 'v2', faltasCostura: [item], faltasAcabamento: [{ ...item, id: 'a1', nome: 'BOTÃO TESTE' }],
     mensagens: [
-      { id: 'M-ERRO', quando: '2026-10-07T11:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: '*OS 90002* Confirma a entrega?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
+      { id: 'M-ERRO', quando: '2026-10-07T11:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: 'Confirma a entrega de *COLETE TESTE*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
       { id: 'M1', quando: '2026-10-07T12:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Entregamos dia 13.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
     ],
     sugestoes: [{ id: 'S1', mensagemId: 'M1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-13', resumo: 'A oficina informou nova data.', evidencia: 'dia 13', confianca: .95, status: 'PENDENTE', criadoEm: '2026-10-07T12:01:00.000Z', versao: 'v2' }], historico: [] },
@@ -86,7 +86,9 @@ test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ p
   await expect(painel).toContainText('Sugestões do intérprete');
   await expect(painel).toContainText('Nova data: 13/10');
   await expect(painel).toContainText('Entregamos dia 13.');
-  await expect(painel.getByLabel('Mensagem')).toHaveValue(/\*OS 90002\*/);
+  // A oficina conhece a peça, não o número da OS.
+  await expect(painel.getByLabel('Mensagem')).toHaveValue(/\*COLETE TESTE\*, 120 peças/);
+  await expect(painel.getByLabel('Mensagem')).not.toHaveValue(/OS 90002/);
   await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toBeVisible();
   await expect(painel.getByRole('button', { name: /^(responder|enviar)$/i })).toHaveCount(0);
 });
@@ -122,14 +124,14 @@ test('revisa e coloca uma cobrança padrão na fila', async ({ page }) => {
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
   const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
   const mensagem = painel.getByLabel('Mensagem');
-  await expect(mensagem).toHaveValue(/OS 90002/);
-  await mensagem.fill('*OS 90002* Pode confirmar o prazo atualizado?');
+  await expect(mensagem).toHaveValue(/^Bom dia\. A entrega de \*COLETE TESTE\*/);
+  await mensagem.fill('Pode confirmar o prazo atualizado de *COLETE TESTE*?');
   await painel.getByRole('button', { name: 'Colocar na fila' }).click();
   await expect.poll(() => acoes.at(-1)).toMatchObject({
-    tipo: 'enviar_whatsapp', dealId: '710002', modelo: 'COBRANCA_PRAZO', texto: '*OS 90002* Pode confirmar o prazo atualizado?',
+    tipo: 'enviar_whatsapp', dealId: '710002', modelo: 'COBRANCA_PRAZO', texto: 'Pode confirmar o prazo atualizado de *COLETE TESTE*?',
     chave: expect.stringMatching(/^[A-Za-z0-9-]{8,64}$/)
   });
-  await expect(painel.locator('.producao-conversa p').filter({ hasText: '*OS 90002* Pode confirmar o prazo atualizado?' })).toBeVisible();
+  await expect(painel.locator('.producao-conversa p').filter({ hasText: 'Pode confirmar o prazo atualizado de *COLETE TESTE*?' })).toBeVisible();
 });
 
 test('aceita sugestão com motivo e atualiza a data', async ({ page }) => {
@@ -192,7 +194,7 @@ test('reenvio exige confirmação e mantém a tentativa com erro', async ({ page
   const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
   page.once('dialog', (dialog) => dialog.accept());
   await painel.getByRole('button', { name: 'Reenviar' }).click();
-  await expect(painel.getByText('*OS 90002* Confirma a entrega?', { exact: true })).toHaveCount(2);
+  await expect(painel.getByText('Confirma a entrega de *COLETE TESTE*?', { exact: true })).toHaveCount(2);
   await expect(painel.getByRole('button', { name: 'Reenviar' })).toHaveCount(0);
 });
 

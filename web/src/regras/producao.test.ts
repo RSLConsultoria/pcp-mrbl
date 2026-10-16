@@ -63,11 +63,21 @@ it('mudanca de data exige motivo; mudar somente oficina nao', () => {
   expect(validarMudancaProducao(prod(), { oficinaId: 'of-1', dataCombinada: '2026-10-20', motivo: '' })).toBe('Nada alterado.');
 });
 
-it('modelos de mensagem sempre identificam a OS e podem ser editados antes da fila', () => {
-  expect(modeloMensagemProducao('COBRANCA_PRAZO', prod(), '2026-10-21')).toContain('*OS 90001*');
-  expect(modeloMensagemProducao('COBRANCA_PRAZO', prod(), '2026-10-21')).toContain('estava prevista para 20/10');
-  expect(modeloMensagemProducao('CONFIRMAR_DATA', prod(), '2026-10-13')).toContain('120 peças');
-  expect(modeloMensagemProducao('MATERIAL_ENVIADO', prod(), '2026-10-13')).toContain('material que faltava');
+it('modelos de mensagem citam a peça em negrito, sem o número da OS, com o mesmo texto do servidor', () => {
+  const p = prod({ peca: 'PECA TESTE B', pecas: 160, dataCombinada: '2026-10-20' });
+  expect(modeloMensagemProducao('COBRANCA_PRAZO', p, '2026-10-13'))
+    .toBe('Bom dia. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?');
+  expect(modeloMensagemProducao('COBRANCA_PRAZO', p, '2026-10-21'))
+    .toBe('Bom dia. A entrega de *PECA TESTE B*, 160 peças, estava prevista para 20/10. Qual a nova data de entrega?');
+  expect(modeloMensagemProducao('COBRANCA_PRAZO', prod({ peca: 'PECA TESTE B', pecas: 160, dataCombinada: '', leadTime: '' }), '2026-10-13'))
+    .toBe('Bom dia. Qual a previsão de entrega de *PECA TESTE B*, 160 peças?');
+  expect(modeloMensagemProducao('CONFIRMAR_DATA', p, '2026-10-13'))
+    .toBe('Bom dia. Confirmando a entrega de *PECA TESTE B*, 160 peças, para 20/10. Segue combinado?');
+  expect(modeloMensagemProducao('COBRANCA_PRAZO', prod({ peca: 'PECA TESTE B', pecas: null, dataCombinada: '2026-10-20' }), '2026-10-13'))
+    .toBe('Bom dia. A entrega de *PECA TESTE B* está prevista para 20/10. Segue dentro do prazo?');
+  expect(modeloMensagemProducao('CONFIRMAR_DATA', prod({ pecas: 1 }), '2026-10-13')).toContain(', 1 peça, para');
+  expect(modeloMensagemProducao('CONFIRMAR_DATA', prod({ pecas: 1600 }), '2026-10-13')).toContain('1.600 peças');
+  for (const tipo of ['COBRANCA_PRAZO', 'CONFIRMAR_DATA'] as const) expect(modeloMensagemProducao(tipo, p, '2026-10-13')).not.toMatch(/90001|OS /);
 });
 
 it('gera uma chave de envio por clique no formato que o servidor aceita', () => {

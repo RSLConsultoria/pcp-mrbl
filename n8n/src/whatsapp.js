@@ -9,6 +9,10 @@ var TIPOS_INTERPRETACAO_WHATSAPP = {
   OBSERVACAO: 1
 };
 
+// Mensagens enviadas que pedem resposta da oficina. Sem o número da OS no
+// texto, a resposta sem citação volta pela última pergunta pendente do grupo.
+var TIPOS_PERGUNTA_WHATSAPP = { COBRANCA_PRAZO: 1, CONFIRMAR_DATA: 1 };
+
 var PREFIXO_TENTATIVA_WHATSAPP = 'Tentativa iniciada em ';
 var ERRO_ENVIO_INCERTO_WHATSAPP = 'Resultado incerto. Confira no WhatsApp antes de confirmar um reenvio.';
 
@@ -197,7 +201,7 @@ function associarMensagemWhatsapp(msg, producoes, mensagens) {
   var agora = Date.parse(texto(msg.quando));
   var limite = agora - 72 * 3600000;
   var pendentes = mensagens.filter(function (m) {
-    if (!m || semAcento(m.direcao) !== 'ENVIADA' || semAcento(m.tipo) !== 'COBRANCA_PRAZO') return false;
+    if (!m || semAcento(m.direcao) !== 'ENVIADA' || !TIPOS_PERGUNTA_WHATSAPP[semAcento(m.tipo)]) return false;
     if (texto(m.status_envio) && semAcento(m.status_envio) !== 'ENVIADA') return false;
     if (texto(m.grupo_jid) !== texto(msg.grupoJid) || cobrancaRespondidaWhatsapp(m, mensagens)) return false;
     var ts = Date.parse(texto(m.quando));

@@ -59,9 +59,9 @@ describe('aplicarOtimista: producao e sugestoes', () => {
 
   it('mostra imediatamente a mensagem enfileirada como pendente', () => {
     const b = aplicar(quadro({ producao: [prod()] }), {
-      tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: '*OS 90001*\nQual a previsão?', chave: 'c-0001-teste'
+      tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Qual a previsão de entrega de *CAMISA TESTE*?', chave: 'c-0001-teste'
     });
-    expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: '*OS 90001*\nQual a previsão?', statusEnvio: 'PENDENTE' });
+    expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: 'Qual a previsão de entrega de *CAMISA TESTE*?', statusEnvio: 'PENDENTE' });
   });
 
   it('associa mensagem pendente e a move para a conversa da OS', () => {
@@ -76,11 +76,11 @@ describe('aplicarOtimista: producao e sugestoes', () => {
 
   it('mostra o reenvio como nova tentativa pendente e mantém a tentativa com erro', () => {
     const p = prod();
-    p.mensagens = [{ id: 'MSG-ERRO', quando: '', participanteNome: 'PCP', direcao: 'ENVIADA', texto: '*OS 90001* teste', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' }];
+    p.mensagens = [{ id: 'MSG-ERRO', quando: '', participanteNome: 'PCP', direcao: 'ENVIADA', texto: 'Teste para *CAMISA TESTE*', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' }];
     const b = aplicar(quadro({ producao: [p] }),
       { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true });
     expect(b.producao?.[0].mensagens).toHaveLength(2);
-    expect(b.producao?.[0].mensagens[0]).toMatchObject({ statusEnvio: 'PENDENTE', texto: '*OS 90001* teste' });
+    expect(b.producao?.[0].mensagens[0]).toMatchObject({ statusEnvio: 'PENDENTE', texto: 'Teste para *CAMISA TESTE*' });
     expect(b.producao?.[0].mensagens[1].statusEnvio).toBe('ERRO');
     expect(b.producao?.[0].mensagens[1].reenviada).toBe(true);
     // a tentativa com erro já reenviada não gera outra

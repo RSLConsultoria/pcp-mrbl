@@ -239,14 +239,14 @@ A oficina precisa estar ativa e ter `grupo_jid`. Sem grupo configurado, os contr
 ### Modelos
 
 1. **Cobrança de prazo**
-   - vencida: informa OS, peça, peças, prazo e pergunta a nova data;
+   - vencida: informa peça, peças, prazo e pergunta a nova data;
    - dentro do prazo: pergunta se o prazo permanece confirmado.
 2. **Confirmar data combinada**
-   - informa OS e data combinada e pede confirmação.
+   - informa peça, peças e data combinada e pede confirmação.
 3. **Aviso de material enviado**
    - informa que o material faltante da caixa de costura foi enviado.
 
-Toda mensagem começa com uma identificação inequívoca, por exemplo `*OS 90001*`. O texto pode ser editado antes do envio manual.
+**Ajuste do dono (16/10):** as oficinas conhecem a peça, não o número da OS. As mensagens não levam mais o cabeçalho `*OS 90001*`; citam o nome da peça em negrito do WhatsApp, por exemplo: "Bom dia. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?". Sem quantidade, a frase fica sem as vírgulas ("A entrega de *PECA TESTE B* está prevista para 20/10."); 1 peça fica no singular. O site (`web/src/regras/producao.ts`) e o servidor (`modeloWhatsapp` em `n8n/src/producao.js`) geram exatamente o mesmo texto. O texto pode ser editado antes do envio manual, e o servidor não exige mais o número da OS no texto.
 
 ### Fila de saída
 
@@ -271,8 +271,10 @@ Ordem:
 
 1. resposta citada a uma mensagem enviada pelo app;
 2. uma única OS válida citada no texto;
-3. uma única cobrança enviada nas últimas 72 horas no mesmo grupo e ainda sem resposta (respondida = já existe mensagem recebida associada à mesma OS depois dela);
+3. uma única pergunta (cobrança de prazo ou confirmação de data) enviada nas últimas 72 horas no mesmo grupo e ainda sem resposta (respondida = já existe mensagem recebida associada à mesma OS depois dela);
 4. associação manual no app.
+
+Como as mensagens enviadas não citam mais a OS (ajuste de 16/10), a associação principal passa a ser a **citação da nossa mensagem** (1) e a **última pergunta pendente** (3). A OS escrita no texto (2) continua valendo quando a oficina a escreve, mas deixa de ser o caminho esperado.
 
 Se existirem duas possibilidades, a mensagem fica `SEM_ASSOCIACAO`. O intérprete não escolhe uma OS no escuro.
 
@@ -343,7 +345,7 @@ Depois do aceite local:
 - faltas da caixa de costura aparecem na OS certa;
 - alteração sem motivo quando a data muda é recusada no front e no servidor;
 - alteração aceita atualiza o Ploomes e o histórico uma única vez;
-- mensagens padrão chegam ao grupo de teste com a OS visível;
+- mensagens padrão chegam ao grupo de teste citando a peça em negrito, sem o número da OS;
 - webhook duplicado não duplica mensagem nem sugestão;
 - resposta citada é associada à OS correta;
 - resposta ambígua não altera nem sugere para uma OS aleatória;

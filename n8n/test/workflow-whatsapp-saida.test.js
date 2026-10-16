@@ -71,7 +71,7 @@ test('workflow fica local e le somente a fila necessaria', () => {
 
 test('selecao entrega ao Google somente colunas existentes da fila', () => {
   const [item] = rodarSelecao([{
-    id: 'MSG-1', grupo_jid: 'grupo-ficticio@g.us', texto: '*OS 90001* Teste',
+    id: 'MSG-1', grupo_jid: 'grupo-ficticio@g.us', texto: 'Teste de *CAMISA TESTE*',
     direcao: 'ENVIADA', status_envio: 'PENDENTE', criado_em: '2026-10-15T13:00:00.000Z',
     campo_auxiliar_do_node: 'nao pode ir para a planilha'
   }]);
