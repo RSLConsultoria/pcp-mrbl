@@ -17,16 +17,30 @@ const producao = [
       { id: 'M-ERRO', quando: '2026-10-07T11:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA', texto: '*OS 90002* Confirma a entrega?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
       { id: 'M1', quando: '2026-10-07T12:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Entregamos dia 13.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
     ],
-    sugestoes: [{ id: 'S1', mensagemId: 'M1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-13', resumo: 'A oficina informou nova data.', evidencia: 'dia 13', confianca: .95, status: 'PENDENTE', criadoEm: '2026-10-07T12:01:00.000Z', versao: 'v2' }], historico: [] }
+    sugestoes: [{ id: 'S1', mensagemId: 'M1', tipo: 'NOVA_DATA_COMBINADA', valor: '2026-10-13', resumo: 'A oficina informou nova data.', evidencia: 'dia 13', confianca: .95, status: 'PENDENTE', criadoEm: '2026-10-07T12:01:00.000Z', versao: 'v2' }], historico: [] },
+  { dealId: '710003', os: '90003', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '2026-10-06', dataCombinada: '', leadTime: '2026-10-16', pecas: 50, cliente: 'CLIENTE MODELO', peca: 'CALCA TESTE', referencia: 'REF-C', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] },
+  { dealId: '710004', os: '90004', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '', dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 40, cliente: 'CLIENTE MODELO', peca: 'JAQUETA TESTE', referencia: 'REF-D', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] }
 ];
 
-async function entrar(page: Page) {
+async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoAcaoMs = 0) {
+  const producaoAtual = structuredClone(producao);
   await page.route(LOGIN, (r) => r.fulfill({ json: SESSAO }));
   await page.route(ACAO, async (r) => {
     const corpo = r.request().postDataJSON();
+    acoes.push(corpo);
+    if (atrasoAcaoMs) await new Promise((resolve) => setTimeout(resolve, atrasoAcaoMs));
+    if (corpo.tipo === 'aceitar_sugestao_whatsapp') {
+      const itemAtual = producaoAtual.find((p) => p.dealId === corpo.dealId);
+      const sugestao = itemAtual?.sugestoes.find((s) => s.id === corpo.sugestaoId);
+      if (itemAtual && sugestao) {
+        itemAtual.dataCombinada = sugestao.valor;
+        sugestao.status = 'ACEITA';
+        itemAtual.historico = [{ quando: '2026-10-07T15:01:00.000Z', usuario: 'Pessoa PCP', texto: 'Data combinada atualizada após confirmação da oficina.', ploomes: 'ENVIADO' }];
+      }
+    }
     await r.fulfill({ json: { ok: true, versao: corpo.versao, historico: null, historicos: [], mensagemId: corpo.tipo === 'reenviar_whatsapp' ? 'M-REENVIO' : undefined } });
   });
-  await page.route(BOARD, (r) => r.fulfill({ json: { ...base, producao, oficinas: [{ ploomesId: 'OF-1', nome: 'OFICINA MODELO', grupoConfigurado: true, grupoNome: 'GRUPO MODELO' }],
+  await page.route(BOARD, (r) => r.fulfill({ json: { ...base, producao: producaoAtual, oficinas: [{ ploomesId: 'OF-1', nome: 'OFICINA MODELO', grupoConfigurado: true, grupoNome: 'GRUPO MODELO' }],
     mensagensWhatsappSemAssociacao: [{ id: 'M2', quando: '2026-10-07T13:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'As duas ficam prontas amanhã.', associacao: 'SEM_ASSOCIACAO', statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', grupoNome: 'GRUPO MODELO' }],
     dealsProducaoEditaveis: ['710002'] } }));
   await page.goto('./#producao');
@@ -49,6 +63,22 @@ test('Gantt mostra ALOCAR, prazo vencido, indicadores e filtro por falta', async
   await expect(page.getByRole('button', { name: /OS 90001/ })).toHaveCount(0);
 });
 
+test('filtros, busca e barras distinguem prazo combinado, lead time e início ausente', async ({ page }) => {
+  await entrar(page);
+  const grupos = page.locator('.gantt__grupo-nome strong');
+  await expect(grupos.first()).toHaveText('ALOCAR');
+  await expect(page.getByTitle('OS 90001 · 05/10')).toHaveClass(/gantt__barra--atrasado/);
+  await expect(page.getByTitle('OS 90003 · 16/10')).toHaveClass(/gantt__barra--lead/);
+  await expect(page.getByTitle('OS 90004 · 18/10')).toHaveClass(/gantt__barra--marco/);
+
+  await page.getByLabel('Oficina').first().selectOption('OF-1');
+  await expect(page.getByRole('button', { name: /OS 90001/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /OS 90003/ }).first()).toBeVisible();
+  await page.getByPlaceholder('Buscar OS, peça, referência, cliente ou oficina').fill('calca');
+  await expect(page.getByRole('button', { name: /OS 90003/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /OS 90002/ })).toHaveCount(0);
+});
+
 test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ page }) => {
   await entrar(page);
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
@@ -59,6 +89,81 @@ test('painel mostra a conversa e a sugestão sem responder ao grupo', async ({ p
   await expect(painel.getByLabel('Mensagem')).toHaveValue(/\*OS 90002\*/);
   await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toBeVisible();
   await expect(painel.getByRole('button', { name: /^(responder|enviar)$/i })).toHaveCount(0);
+});
+
+test('altera a data com motivo e mostra o efeito otimista', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes, 1_000);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await painel.getByLabel('Data combinada').fill('2026-10-14');
+  await painel.getByRole('textbox', { name: 'Motivo *', exact: true }).fill('Prazo confirmado com a oficina.');
+  await painel.getByRole('button', { name: 'Salvar combinado' }).click();
+  await expect(painel.locator('.producao-resumo')).toContainText('14/10');
+  await expect.poll(() => acoes.at(-1)).toMatchObject({
+    tipo: 'alterar_producao', dealId: '710002', dataCombinada: '2026-10-14', motivo: 'Prazo confirmado com a oficina.'
+  });
+});
+
+test('bloqueia mudança de data sem motivo', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await painel.getByLabel('Data combinada').fill('2026-10-14');
+  await painel.getByRole('button', { name: 'Salvar combinado' }).click();
+  await expect(painel.getByRole('alert')).toHaveText('Informe o motivo da alteração da data combinada.');
+  expect(acoes).toHaveLength(0);
+});
+
+test('revisa e coloca uma cobrança padrão na fila', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  const mensagem = painel.getByLabel('Mensagem');
+  await expect(mensagem).toHaveValue(/OS 90002/);
+  await mensagem.fill('*OS 90002* Pode confirmar o prazo atualizado?');
+  await painel.getByRole('button', { name: 'Colocar na fila' }).click();
+  await expect.poll(() => acoes.at(-1)).toMatchObject({
+    tipo: 'enviar_whatsapp', dealId: '710002', modelo: 'COBRANCA_PRAZO', texto: '*OS 90002* Pode confirmar o prazo atualizado?'
+  });
+  await expect(painel.locator('.producao-conversa p').filter({ hasText: '*OS 90002* Pode confirmar o prazo atualizado?' })).toBeVisible();
+});
+
+test('aceita sugestão com motivo e atualiza a data', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await painel.getByLabel('Motivo da nova data').fill('Data informada pela oficina.');
+  await painel.getByRole('button', { name: 'Aceitar' }).click();
+  await expect.poll(() => acoes.at(-1)).toMatchObject({
+    tipo: 'aceitar_sugestao_whatsapp', dealId: '710002', sugestaoId: 'S1', motivo: 'Data informada pela oficina.'
+  });
+  await expect(painel.locator('.producao-resumo')).toContainText('13/10');
+  await expect(painel).toContainText('Data combinada atualizada após confirmação da oficina.');
+  await expect(painel.getByRole('button', { name: 'Aceitar' })).toHaveCount(0);
+});
+
+test('ignora sugestão sem mudar a data', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await painel.getByRole('button', { name: 'Ignorar' }).click();
+  await expect.poll(() => acoes.at(-1)).toMatchObject({ tipo: 'ignorar_sugestao_whatsapp', dealId: '710002', sugestaoId: 'S1' });
+  await expect(painel.locator('.producao-resumo')).toContainText('12/10');
+  await expect(painel.getByRole('button', { name: 'Ignorar' })).toHaveCount(0);
+});
+
+test('OS fora da allowlist não mostra controles de escrita', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /OS 90001/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90001' });
+  await expect(painel.getByText('Edição liberada em breve para esta OS.')).toBeVisible();
+  await expect(painel.getByRole('button', { name: 'Salvar combinado' })).toHaveCount(0);
+  await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toHaveCount(0);
 });
 
 test('mensagem ambigua aparece para conferência sem expor identificadores do WhatsApp', async ({ page }) => {
