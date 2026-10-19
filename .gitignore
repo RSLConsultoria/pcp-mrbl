@@ -13,3 +13,6 @@ n8nac-config.json
 /workflows/
 .agents/
 .github/agents/
+
+# Projeto do Power BI do dono (dados reais; nunca versionar)
+/arquivoPBI/
