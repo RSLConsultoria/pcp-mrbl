@@ -390,3 +390,11 @@ Aprovada pelo dono. O Controle de produção ganha o alternador **Gantt | Tabela
 - O sync lê "Valor Total - Corte Real" (`deal_A974EF64-47C5-4E6A-B7BD-30B7B15A437C`, moeda) e grava `valor_corte` no fim da PRODUCAO; o board devolve `valorCorte` (número ou `null`).
 - A barra do Gantt deixa de repetir o número da OS (que já está à esquerda) e mostra peças e valor: "160 pç · R$ 12.345" (sem centavos; só o que houver; sem os dois, a barra fica sem texto, e o texto corta com reticências na barra estreita). Os ícones 🚫/⚠️ continuam antes do texto. O título da barra traz OS, prazo, peças e valor.
 - A tabela ganha a coluna "Valor do corte" (ordenável como número, filtrável) e, ao lado da contagem, o total de peças e o total em R$ das OS mostradas.
+
+## Gantt por ordem de entrega (19/10)
+
+Pedido do dono. A visão Gantt ganha o seletor **Agrupar: Oficina | Entrega** ao lado do alternador Gantt | Tabela; a escolha fica lembrada no navegador (padrão: Oficina). Só aparece no Gantt, porque a tabela já ordena por coluna.
+
+- **Oficina:** o agrupamento de sempre (`agruparPorOficina`).
+- **Entrega:** um bloco só, sem cabeçalhos de oficina, com as OS pela data de entrega vigente (combinada, senão lead time, via `prazoProducao`); empate pela OS; OS sem prazo no fim (`ordenarPorEntrega` em `web/src/regras/producao.ts`). Cada linha mostra OS, peça e uma etiqueta discreta com a oficina (ALOCAR em laranja). Barras, cores, ícones, texto e clique são os mesmos.
+- Todos os filtros (oficina, situação do prazo, só com falta na costura, busca) valem nas duas ordens.
