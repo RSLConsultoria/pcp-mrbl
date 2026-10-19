@@ -811,10 +811,15 @@ function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
   });
 }
 
+// OS prevista (19/10): ainda nas etapas 12 a 16, com a Costura projetada pelo sync.
+function linhaEhPrevista(l) {
+  return !VALORES_ATIVO_PRODUCAO[semAcento(l && l.em_costura)] && !!VALORES_ATIVO_PRODUCAO[semAcento(l && l.prevista)];
+}
+
 function producoesBoard(extras, caixas) {
   extras = extras || {};
   return ordenarProducoes((extras.producao || []).filter(function (l) {
-    return l && VALORES_ATIVO_PRODUCAO[semAcento(l.em_costura)];
+    return l && (VALORES_ATIVO_PRODUCAO[semAcento(l.em_costura)] || linhaEhPrevista(l));
   }).map(function (l) {
     var dealId = texto(l.deal_id);
     var p = {
@@ -833,6 +838,14 @@ function producoesBoard(extras, caixas) {
       valorCorte: numeroOuNulo(l.valor_corte)
     };
     if (p.pecas === null || isNaN(p.pecas)) p.pecas = null;
+    if (linhaEhPrevista(l)) {
+      p.prevista = true;
+      p.etapaOrdem = numeroOuNulo(l.etapa_ordem);
+      p.etapaNome = texto(l.etapa_nome);
+      p.etapaInicio = texto(l.etapa_inicio);
+      p.inicioCosturaPrevisto = texto(l.inicio_costura_previsto);
+      p.fimCosturaPrevisto = texto(l.fim_costura_previsto);
+    }
     p.faltasCostura = faltasDaCostura(p, caixas);
     p.faltasAcabamento = faltasDoAcabamento(p, caixas);
     p.mensagens = mensagensDaProducao(extras.whatsappMensagens, dealId);

@@ -126,7 +126,9 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido,
     fornecedores: fornecedores, responsaveis: responsaveis,
     producao: producao, oficinas: oficinas, mensagensWhatsappSemAssociacao: mensagensWhatsappSemAssociacao,
-    dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice()
+    dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice(),
+    // A PREVISAO_MEDIAS ainda vazia (o workflow diário não rodou): a tela avisa "Previsão sem histórico".
+    previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias))
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };

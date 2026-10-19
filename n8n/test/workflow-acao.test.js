@@ -193,7 +193,8 @@ test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets
       vr('FORNECEDORES', [['id', 'nome', 'ativo'], ['f1', 'TECIDOS BETA', ''], ['f2', 'ANTIGO', 'NAO']]),
       { range: "'RESPONSAVEIS'!A1:Z1000", majorDimension: 'ROWS' }, // aba vazia: a API nao manda values
       vr('PRODUCAO', [['deal_id', 'em_costura']]), vr('OFICINAS', [['ploomes_id', 'nome']]),
-      vr('WHATSAPP_MENSAGENS', [['id']]), vr('WHATSAPP_SUGESTOES', [['id']])
+      vr('WHATSAPP_MENSAGENS', [['id']]), vr('WHATSAPP_SUGESTOES', [['id']]),
+      vr('PREVISAO_MEDIAS', [['tipo', 'etapa', 'faixa', 'oficina_id', 'valor', 'amostra', 'calculado_em', 'chave']])
     ]
   };
   const [saida] = rodarNode('montar-board', { $: cifrao({ 'Ler Planilha': [leitura] }), $getWorkflowStaticData: () => s.estado });
@@ -203,6 +204,7 @@ test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets
   assert.deepEqual(saida.json.body.responsaveis, []);
   assert.equal(saida.json.body.caixas.length, 1);
   assert.equal(saida.json.body.caixas[0].itens.length, 2);
+  assert.equal(saida.json.body.previsaoSemHistorico, true);
 });
 
 test('Limpar Cache: no fim das gravacoes apaga o cache do board (um board lido durante as gravacoes nao fica 55 s)', () => {

@@ -148,6 +148,14 @@ export interface Producao {
   mensagens: MensagemProducao[];
   sugestoes: SugestaoProducao[];
   historico: EntradaHistorico[];
+  // OS prevista (19/10): ainda nas etapas 12 a 16, com a Costura projetada pelo servidor.
+  // Ausentes nas OS que já estão na Costura (e na API antiga).
+  prevista?: boolean;
+  etapaOrdem?: number | null;
+  etapaNome?: string;
+  etapaInicio?: string; // 'aaaa-mm-dd' ou ''
+  inicioCosturaPrevisto?: string; // chegada prevista à Costura, 'aaaa-mm-dd' ou '' (OS sem peças)
+  fimCosturaPrevisto?: string;
 }
 
 export interface OficinaProducao {
@@ -172,6 +180,7 @@ export interface Board {
   oficinas?: OficinaProducao[];
   mensagensWhatsappSemAssociacao?: MensagemWhatsappSemAssociacao[];
   dealsProducaoEditaveis?: string[];
+  previsaoSemHistorico?: boolean; // PREVISAO_MEDIAS ainda vazia: a previsão usa o fallback (duração 1, fila 0)
 }
 
 // Corpo do POST /pcp-acao.

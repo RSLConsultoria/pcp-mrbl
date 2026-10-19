@@ -2933,10 +2933,15 @@ function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
   });
 }
 
+// OS prevista (19/10): ainda nas etapas 12 a 16, com a Costura projetada pelo sync.
+function linhaEhPrevista(l) {
+  return !VALORES_ATIVO_PRODUCAO[semAcento(l && l.em_costura)] && !!VALORES_ATIVO_PRODUCAO[semAcento(l && l.prevista)];
+}
+
 function producoesBoard(extras, caixas) {
   extras = extras || {};
   return ordenarProducoes((extras.producao || []).filter(function (l) {
-    return l && VALORES_ATIVO_PRODUCAO[semAcento(l.em_costura)];
+    return l && (VALORES_ATIVO_PRODUCAO[semAcento(l.em_costura)] || linhaEhPrevista(l));
   }).map(function (l) {
     var dealId = texto(l.deal_id);
     var p = {
@@ -2955,6 +2960,14 @@ function producoesBoard(extras, caixas) {
       valorCorte: numeroOuNulo(l.valor_corte)
     };
     if (p.pecas === null || isNaN(p.pecas)) p.pecas = null;
+    if (linhaEhPrevista(l)) {
+      p.prevista = true;
+      p.etapaOrdem = numeroOuNulo(l.etapa_ordem);
+      p.etapaNome = texto(l.etapa_nome);
+      p.etapaInicio = texto(l.etapa_inicio);
+      p.inicioCosturaPrevisto = texto(l.inicio_costura_previsto);
+      p.fimCosturaPrevisto = texto(l.fim_costura_previsto);
+    }
     p.faltasCostura = faltasDaCostura(p, caixas);
     p.faltasAcabamento = faltasDoAcabamento(p, caixas);
     p.mensagens = mensagensDaProducao(extras.whatsappMensagens, dealId);
@@ -3937,9 +3950,10 @@ var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha d
 // (o ramo acao so precisa do cabecalho do HISTORICO_APP para o append).
 // FORNECEDORES e RESPONSAVEIS (opcoes do pedido) precisam existir na planilha:
 // aba que nao existe derruba o batchGet inteiro (400). Aba vazia tudo bem.
+// PREVISAO_MEDIAS (previsao de futuro) tambem precisa existir antes de publicar.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
   'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
-  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS'];
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
@@ -4465,7 +4479,9 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     dealsEditaveis: DEALS_EDITAVEIS.slice(), pedidos: ped.pedidos, etapasPedido: ped.etapasPedido,
     fornecedores: fornecedores, responsaveis: responsaveis,
     producao: producao, oficinas: oficinas, mensagensWhatsappSemAssociacao: mensagensWhatsappSemAssociacao,
-    dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice()
+    dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice(),
+    // A PREVISAO_MEDIAS ainda vazia (o workflow diário não rodou): a tela avisa "Previsão sem histórico".
+    previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias))
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };

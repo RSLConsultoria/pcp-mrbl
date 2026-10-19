@@ -116,3 +116,34 @@ test('board mostra a nova tentativa de envio e o erro definitivo de interpretaç
   assert.equal('interpretacao' in por('MSG-INTERPRETANDO'), false);
   assert.equal('envioTentativas' in por('MSG-1'), false);
 });
+
+test('board inclui as OS previstas (etapas 12 a 16) com etapa e Costura projetada', () => {
+  const e = extras();
+  e.producao.push({
+    deal_id: '710015', os: '10015', oficina_id: 'of-1', oficina_nome: 'OFICINA MODELO', pecas: 80,
+    cliente: 'CLIENTE FICTICIO', peca: 'PEÇA PREVISTA', referencia: 'REF-P', em_costura: 'NAO', atualizado_em_ploomes: 'v9',
+    etapa_ordem: 15, etapa_nome: '15. Preparação 1', etapa_inicio: '2026-10-15', prevista: 'SIM',
+    inicio_costura_previsto: '2026-10-21', fim_costura_previsto: '2026-10-27'
+  }, { deal_id: '710016', os: '10016', em_costura: 'NAO', prevista: 'NAO', atualizado_em_ploomes: 'v9' });
+  const r = limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body;
+  assert.deepEqual(r.producao.map((p) => p.dealId), ['700001', '710015']);
+  const prevista = r.producao.find((p) => p.dealId === '710015');
+  assert.deepEqual({
+    prevista: prevista.prevista, etapaOrdem: prevista.etapaOrdem, etapaNome: prevista.etapaNome, etapaInicio: prevista.etapaInicio,
+    inicioCosturaPrevisto: prevista.inicioCosturaPrevisto, fimCosturaPrevisto: prevista.fimCosturaPrevisto, pecas: prevista.pecas
+  }, {
+    prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', etapaInicio: '2026-10-15',
+    inicioCosturaPrevisto: '2026-10-21', fimCosturaPrevisto: '2026-10-27', pecas: 80
+  });
+  // A OS na Costura continua sem os campos da previsão (contrato antigo intacto).
+  assert.equal('prevista' in r.producao.find((p) => p.dealId === '700001'), false);
+});
+
+test('board avisa "previsão sem histórico" enquanto a PREVISAO_MEDIAS não tem valores', () => {
+  assert.equal(limpo(ctx.montarRespostaBoard({}, [], [], T0, extras())).body.previsaoSemHistorico, true);
+  const e = extras();
+  e.previsaoMedias = [{ tipo: 'DURACAO_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: '', amostra: 0 }];
+  assert.equal(limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body.previsaoSemHistorico, true);
+  e.previsaoMedias.push({ tipo: 'FILA_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 2, amostra: 9 });
+  assert.equal(limpo(ctx.montarRespostaBoard({}, [], [], T0, e)).body.previsaoSemHistorico, false);
+});

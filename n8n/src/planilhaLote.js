@@ -13,9 +13,10 @@ var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha d
 // (o ramo acao so precisa do cabecalho do HISTORICO_APP para o append).
 // FORNECEDORES e RESPONSAVEIS (opcoes do pedido) precisam existir na planilha:
 // aba que nao existe derruba o batchGet inteiro (400). Aba vazia tudo bem.
+// PREVISAO_MEDIAS (previsao de futuro) tambem precisa existir antes de publicar.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
   'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
-  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS'];
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
