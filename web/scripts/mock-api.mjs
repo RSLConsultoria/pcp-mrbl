@@ -133,8 +133,15 @@ const estado = {
       mensagens: [
         { id: 'MSG-H-SEM-LEITURA', quando: new Date(Date.now() - 2_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Vou ver com a costureira e já aviso.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' },
         { id: 'MSG-H-FILA', quando: new Date(Date.now() - 1_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. A entrega de *PECA TESTE H*, 45 peças, está prevista para a data combinada. Segue dentro do prazo?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 }
-      ], sugestoes: [], historico: [] }
-  ]
+      ], sugestoes: [], historico: [] },
+    // OS previstas (19/10): ainda nas etapas 12 a 16; a Costura projetada vem do servidor.
+    { dealId: '700009', os: '90009', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 200, valorCorte: null, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE I', referencia: 'REF-09', versao: 'v1',
+      prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', etapaInicio: diaIso(-1), inicioCosturaPrevisto: diaIso(5), fimCosturaPrevisto: diaIso(12), mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '700010', os: '90010', oficinaId: '', oficina: 'ALOCAR', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 120, valorCorte: null, cliente: 'CLIENTE ALFA', peca: 'PECA TESTE J', referencia: 'REF-10', versao: 'v1',
+      prevista: true, etapaOrdem: 13, etapaNome: '13. Estratégico 2', etapaInicio: '', inicioCosturaPrevisto: diaIso(9), fimCosturaPrevisto: diaIso(15), mensagens: [], sugestoes: [], historico: [] }
+  ],
+  // MOCK_SEM_HISTORICO=1 simula a PREVISAO_MEDIAS ainda vazia.
+  previsaoSemHistorico: !!process.env.MOCK_SEM_HISTORICO
 };
 
 // ---------- utilidades ----------
@@ -162,16 +169,19 @@ if (process.env.MOCK_FOTO) {
   estado.pedidos = [];
   estado.dealsEditaveis = foto.caixas.map((c) => c.dealId);
   estado.producao = foto.producao.map(({ faltasCostura, faltasAcabamento, ...p }) => ({ ...p, mensagens: [], sugestoes: [], historico: [] }));
-  estado.dealsProducaoEditaveis = estado.producao.map((p) => p.dealId);
+  // As previstas (etapas 12 a 16) vêm na foto com a projeção do servidor; só as da Costura ficam editáveis.
+  estado.dealsProducaoEditaveis = estado.producao.filter((p) => !p.prevista).map((p) => p.dealId);
   estado.oficinas = foto.oficinas;
-  const comOficina = estado.producao.find((p) => p.oficinaId && p.oficina.toUpperCase() !== 'ALOCAR');
+  estado.previsaoSemHistorico = !!foto.previsaoSemHistorico;
+  const comOficina = estado.producao.find((p) => !p.prevista && p.oficinaId && p.oficina.toUpperCase() !== 'ALOCAR');
   estado.mensagensWhatsappSemAssociacao = comOficina ? [{
     id: 'MSG-SEM-FOTO', quando: new Date(Date.now() - 600_000).toISOString(), participanteNome: 'Pessoa da oficina (simulada)',
     direcao: 'RECEBIDA', texto: `A ${comOficina.peca} fica pronta dia ${diaIso(5).slice(8, 10)}/${diaIso(5).slice(5, 7)}.`,
     associacao: 'SEM_ASSOCIACAO', statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: comOficina.oficinaId,
     oficina: comOficina.oficina, grupoNome: `GRUPO SIMULADO · ${comOficina.oficina}`
   }] : [];
-  console.log(`[mock] foto carregada: ${estado.producao.length} OS, ${estado.caixas.length} caixas (geradoEm ${foto.geradoEm})`);
+  const previstas = estado.producao.filter((p) => p.prevista).length;
+  console.log(`[mock] foto carregada: ${estado.producao.length} OS (${previstas} previstas), ${estado.caixas.length} caixas (geradoEm ${foto.geradoEm})`);
 }
 
 const caixaDe = (dealId) => estado.caixas.find((c) => c.dealId === dealId);
@@ -243,6 +253,7 @@ function montarBoard() {
     dealsEditaveis: estado.dealsEditaveis,
     dealsProducaoEditaveis: estado.dealsProducaoEditaveis,
     oficinas: estado.oficinas,
+    previsaoSemHistorico: estado.previsaoSemHistorico,
     mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
     producao: estado.producao.map((p) => ({
       ...p,
@@ -669,6 +680,7 @@ function historicoProducao(p, usuario, texto) {
 function alterarProducao(c, usuario) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (p.prevista) throw new Erro(409, 'Esta OS ainda não chegou na Costura.');
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
   conferirVersao(p.versao, c.versao, 'esta OS');
   validarData(c.dataCombinada);
@@ -700,6 +712,7 @@ function alterarCapacidade(c) {
 function decidirSugestao(c, usuario, aceitar) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (p.prevista) throw new Erro(409, 'Esta OS ainda não chegou na Costura.');
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
   conferirVersao(p.versao, c.versao, 'esta OS');
   const s = p.sugestoes.find((x) => x.id === c.sugestaoId);
@@ -741,6 +754,7 @@ function simularInterpretacao(p, mensagem) {
 function associarWhatsapp(c, usuario) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (p.prevista) throw new Erro(409, 'Esta OS ainda não chegou na Costura.');
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
   conferirVersao(p.versao, c.versao, 'esta OS');
   const indice = estado.mensagensWhatsappSemAssociacao.findIndex((x) => x.id === c.mensagemId);
@@ -757,6 +771,7 @@ function associarWhatsapp(c, usuario) {
 function enviarWhatsapp(c, usuario) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (p.prevista) throw new Erro(409, 'Esta OS ainda não chegou na Costura.');
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
   // como o servidor: o id sai da chave do clique e a mesma ação de novo não cria segunda linha
   if (c.chave !== undefined && !/^[A-Za-z0-9-]{8,64}$/.test(String(c.chave))) throw bad('Chave de envio inválida.');
@@ -777,6 +792,7 @@ function reenviarWhatsapp(c, usuario) {
   if (c.confirmou !== true) throw bad('Confirme o reenvio da mensagem.');
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
+  if (p.prevista) throw new Erro(409, 'Esta OS ainda não chegou na Costura.');
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
   conferirVersao(p.versao, c.versao, 'esta OS');
   const original = p.mensagens.find((x) => x.id === c.mensagemId);

@@ -248,3 +248,22 @@ test('mock: conversa mostra envio aguardando nova tentativa e interpretação qu
   await expect(painel.getByText('Aguardando nova tentativa (2 de 5)')).toBeVisible();
   await expect(painel.getByText('Não foi possível interpretar esta mensagem.')).toBeVisible();
 });
+
+test('mock: Carga com as previstas e capacidade gravada pelo ADM continua depois da recarga', async ({ page, api }) => {
+  await entrar(page, '#producao');
+  await page.getByRole('group', { name: 'Visão' }).getByRole('button', { name: 'Carga' }).click();
+  await expect(page.getByText('300 pç/semana')).toBeVisible();
+  await page.getByRole('button', { name: 'Editar capacidade de OFICINA LUA' }).click();
+  await page.getByLabel('Capacidade de OFICINA LUA (peças por semana)').fill('250');
+  await page.getByRole('button', { name: 'Salvar' }).click();
+  await expect(page.getByText('250 pç/semana')).toBeVisible();
+  await expect.poll(() => api.acoes.length).toBe(1);
+  // Só recarrega depois que o mock respondeu (a resposta demora ATRASO_MS).
+  await expect(page.getByRole('status').filter({ hasText: 'Capacidade da oficina atualizada' })).toBeVisible({ timeout: 10_000 });
+  await page.reload();
+  await expect(page.getByText('250 pç/semana')).toBeVisible();
+  // A prevista sem oficina entra em "A alocar".
+  await expect(page.locator('.carga__alocar')).toContainText('1 OS · 120 pç');
+  expect(await acaoNoMock(page, { tipo: 'alterar_capacidade_oficina', oficinaId: 'OF-02', capacidade: -3 }))
+    .toEqual({ status: 400, corpo: { erro: 'Informe a capacidade em peças por semana: número inteiro, 0 ou mais.' } });
+});
