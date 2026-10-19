@@ -6,7 +6,7 @@ const { carregar, limpo } = require('./carregar');
 
 const T0 = Date.parse('2026-10-19T14:00:00.000Z');
 function contexto(perfil) {
-  const ctx = carregar({ real: true });  // DEALS_PRODUCAO_EDITAVEIS = ['0']: capacidade não depende dela
+  const ctx = carregar({ real: true });  // DEALS_PRODUCAO_EDITAVEIS fica restrita ao card de teste: capacidade não depende dela
   const estado = {};
   const usuario = [{ email: 'pcp@teste.local', nome: 'Pessoa PCP', perfil, senha_hash: ctx.gerarHash(crypto, 'senha-ficticia-forte'), ativo: 'SIM' }];
   const login = ctx.processarLogin(crypto, estado, { email: 'pcp@teste.local', senha: 'senha-ficticia-forte' }, usuario, T0);

@@ -133,3 +133,12 @@ test('edicao restrita: board leva dealsEditaveis e o padrao de producao e a OS d
   assert.equal(real.dealEditavel('607479158'), true);
   assert.equal(real.dealEditavel('1'), false);
 });
+
+test('producao: o card de teste do funil Producao e editavel; outro deal e recusado com 403', () => {
+  const real = carregar({ real: true });
+  assert.deepEqual(limpo(real.DEALS_PRODUCAO_EDITAVEIS), ['607612577']);
+  assert.equal(real.validarAcaoProducaoBasica({ tipo: 'alterar_producao', dealId: '607612577' }, real.DEALS_PRODUCAO_EDITAVEIS).ok, true);
+  const v = real.validarAcaoProducaoBasica({ tipo: 'alterar_producao', dealId: '999' }, real.DEALS_PRODUCAO_EDITAVEIS);
+  assert.equal(v.ok, false);
+  assert.equal(v.status, 403);
+});
