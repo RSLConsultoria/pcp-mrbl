@@ -426,6 +426,45 @@ export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
   .to(selecionarEnvio.to(buscarContato).to(montarRegistro).to(criarRegistro).to(resultadoEnvio).to(gravarEnvio));
 `;
 
+// GET paginado no Ploomes por $skip (100 por página, 700 ms entre páginas), com
+// 3 tentativas a cada 30 s (429/5xx) e saída de erro para o registro no ERROS_APP.
+// extra: executeOnce quando o node vem depois de outro que devolve várias páginas.
+const buscarPloomes = (varName, nome, url, extra) => `const ${varName} = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: '${nome}',
+    ${extra || ''}retryOnFail: true,
+    maxTries: 3,
+    waitBetweenTries: 30000,
+    onError: 'continueErrorOutput',
+    parameters: {
+      method: 'GET',
+      url: '${url}',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      options: {
+        response: { response: { fullResponse: true, neverError: false } },
+        pagination: { pagination: {
+          paginationMode: 'updateAParameterInEachRequest',
+          parameters: { parameters: [{ type: 'qs', name: '$skip', value: expr('{{ $pageCount * 100 }}') }] },
+          paginationCompleteWhen: 'other',
+          completeExpression: expr('{{ !Array.isArray($response.body.value) || $response.body.value.length < 100 }}'),
+          requestInterval: 700
+        } },
+        timeout: 30000
+      }
+    },
+    credentials: { httpHeaderAuth: { id: 'QfXOyNly69oAqwH2', name: 'Header Auth account' } },
+    position: ${posicao(nome)}
+  },
+  output: [{ statusCode: 200, body: { value: [] } }]
+});`;
+
+const PLOOMES = 'https://public-api2.ploomes.com/';
+const FUNIS_PREVISAO = '(PipelineId%20eq%20' + lote.FUNIL_PCP + '%20or%20PipelineId%20eq%20' + lote.FUNIL_PRODUCAO + ')';
+const URL_COSTURA = PLOOMES + 'Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$orderby=Id&$top=100';
+
 posAtual = POS_SYNC_PRODUCAO;
 RETRY = RETRY_API;
 const LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS'];
@@ -442,37 +481,7 @@ const syncProducao = IMPORT_API + [
   output: [{}]
 });`,
   httpGoogle('lerSnapshotProducao', 'Ler Snapshot Produção', 'GET', JSON.stringify(urlSnapshotProducao), false, ERRO_SAIDA),
-  `const buscarProducao = node({
-  type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
-  config: {
-    name: 'Buscar Produção no Ploomes',
-    retryOnFail: true,
-    maxTries: 3,
-    waitBetweenTries: 30000,
-    onError: 'continueErrorOutput',
-    parameters: {
-      method: 'GET',
-      url: 'https://public-api2.ploomes.com/Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$orderby=Id&$top=100',
-      authentication: 'genericCredentialType',
-      genericAuthType: 'httpHeaderAuth',
-      options: {
-        response: { response: { fullResponse: true, neverError: false } },
-        pagination: { pagination: {
-          paginationMode: 'updateAParameterInEachRequest',
-          parameters: { parameters: [{ type: 'qs', name: '$skip', value: expr('{{ $pageCount * 100 }}') }] },
-          paginationCompleteWhen: 'other',
-          completeExpression: expr('{{ !Array.isArray($response.body.value) || $response.body.value.length < 100 }}'),
-          requestInterval: 700
-        } },
-        timeout: 30000
-      }
-    },
-    credentials: { httpHeaderAuth: { id: 'QfXOyNly69oAqwH2', name: 'Header Auth account' } },
-    position: ${posicao('Buscar Produção no Ploomes')}
-  },
-  output: [{ statusCode: 200, body: { value: [] } }]
-});`,
+  buscarPloomes('buscarProducao', 'Buscar Produção no Ploomes', URL_COSTURA),
   code('montarSyncProducao', 'Montar Sincronização', 'sincronizar-producao'),
   'const temEscritasProducao = ' + condicao('Tem Escritas?', '{{ $json.vazio === true }}', 'boolean', 'false', "''")
     .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';',
@@ -840,6 +849,81 @@ export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar 
   .to(interpretarDeNovo);
 `;
 
+// Médias de Previsão (19/10): todo dia às 3h lê os registros de etapa marcados no
+// Ploomes e os negócios dos funis PCP e Produção, calcula durações, filas e a
+// Costura por oficina e grava a PREVISAO_MEDIAS (update por chave, append da chave
+// nova, nunca apaga). Falha de leitura: médias anteriores ficam e vai para ERROS_APP.
+// Todos os registros com o marcador (a média de Costura por oficina não tem janela)
+// e os negócios dos dois funis, em qualquer situação.
+const URL_REGISTROS_PREVISAO = PLOOMES + 'InteractionRecords?$filter=Tags/any(t:%20t/TagId%20eq%20' + lote.MARCADOR_HISTORICO_PREVISAO + ')&$expand=OtherProperties&$select=Id,DealId,Content&$orderby=Id&$top=100';
+const URL_NEGOCIOS_PREVISAO = PLOOMES + 'Deals?$filter=' + FUNIS_PREVISAO + '&$expand=OtherProperties&$select=Id&$orderby=Id&$top=100';
+const POS_MEDIAS = {};
+[['Todo dia às 3h', 0, 0], ['Ler Médias Atuais', 1, 0], ['Buscar Registros no Ploomes', 2, 0],
+  ['Buscar Negócios no Ploomes', 3, 0], ['Montar Médias', 4, 0], ['Tem Escritas?', 5, 0],
+  ['Loop Escritas Médias', 6, 0], ['Repetir Escrita?', 7, 0], ['Gravar Médias', 8, -100], ['Anexar Médias', 8, 100],
+  ['Montar Erro Médias', 7, 260], ['Registrar Erro Médias', 8, 260]]
+  .forEach(([n, c, y]) => { POS_MEDIAS[n] = [c * DX, y]; });
+posAtual = POS_MEDIAS;
+RETRY = RETRY_API;
+const mediasPrevisao = IMPORT_API + [
+  `const agendaMedias = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Todo dia às 3h',
+    parameters: { rule: { interval: [{ field: 'days', daysInterval: 1, triggerAtHour: 3 }] } },
+    position: ${posicao('Todo dia às 3h')}
+  },
+  output: [{}]
+});`,
+  httpGoogle('lerMediasAtuais', 'Ler Médias Atuais', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_MEDIAS_PREVISAO)), false, ERRO_SAIDA),
+  buscarPloomes('buscarRegistros', 'Buscar Registros no Ploomes', URL_REGISTROS_PREVISAO),
+  buscarPloomes('buscarNegocios', 'Buscar Negócios no Ploomes', URL_NEGOCIOS_PREVISAO, unico),
+  code('montarMedias', 'Montar Médias', 'montar-medias-previsao'),
+  'const temEscritasMedias = ' + condicao('Tem Escritas?', '{{ $json.vazio === true }}', 'boolean', 'false', "''")
+    .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';',
+  `const loopEscritasMedias = splitInBatches({
+  version: 3,
+  config: {
+    name: 'Loop Escritas Médias',
+    parameters: { batchSize: 1, options: {} },
+    position: ${posicao('Loop Escritas Médias')}
+  }
+});`,
+  'const repetirEscritaMedias = ' + condicao('Repetir Escrita?', '{{ $json.repetir }}', 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  httpGoogle('gravarMedias', 'Gravar Médias', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
+  httpGoogle('anexarMedias', 'Anexar Médias', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  code('montarErroMedias', 'Montar Erro Médias', 'montar-erro-medias'),
+  httpGoogle('registrarErroMedias', 'Registrar Erro Médias', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", '')
+].join('\n\n') + `
+
+export default workflow('pcp-mrbl-medias-previsao', 'PCP MRBL - Médias de Previsão', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 1800,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'all'
+})
+  .add(agendaMedias)
+  .to(lerMediasAtuais
+    .onError(montarErroMedias.to(registrarErroMedias))
+    .to(buscarRegistros
+      .onError(montarErroMedias.to(registrarErroMedias))
+      .to(buscarNegocios
+        .onError(montarErroMedias.to(registrarErroMedias))
+        .to(montarMedias)
+        .to(temEscritasMedias
+          .onTrue(loopEscritasMedias
+            .onEachBatch(repetirEscritaMedias
+              .onTrue(gravarMedias
+                .onError(montarErroMedias.to(registrarErroMedias))
+                .to(nextBatch(loopEscritasMedias)))
+              .onFalse(anexarMedias
+                .onError(montarErroMedias.to(registrarErroMedias))
+                .to(nextBatch(loopEscritasMedias)))))))));
+`;
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-retentar-interpretacao.sdk.js'), retentarInterpretacao);
 console.log('workflows/pcp-retentar-interpretacao.sdk.js');
@@ -851,6 +935,8 @@ fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api-homolog.sdk.js'), apiHomo
 console.log('workflows/pcp-api-homolog.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-envio.sdk.js'), envio);
 console.log('workflows/pcp-envio.sdk.js');
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-medias-previsao.sdk.js'), mediasPrevisao);
+console.log('workflows/pcp-medias-previsao.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-producao-sync.sdk.js'), syncProducao);
 console.log('workflows/pcp-producao-sync.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-whatsapp-saida.sdk.js'), whatsappSaida);

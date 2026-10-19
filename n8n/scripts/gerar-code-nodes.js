@@ -37,7 +37,9 @@ const NODES = {
   'finalizar-interpretacao-manual': 'Finalizar Interpretação',
   'montar-erro-interpretacao-manual': 'Montar Erro de Interpretação (Interpretar WhatsApp)',
   'selecionar-interpretacoes-pendentes': 'Selecionar Interpretações',
-  'marcar-tentativas-interpretacao': 'Marcar Tentativas'
+  'marcar-tentativas-interpretacao': 'Marcar Tentativas',
+  'montar-medias-previsao': 'Montar Médias',
+  'montar-erro-medias': 'Montar Erro Médias'
 };
 
 const corpo = ARQUIVOS
