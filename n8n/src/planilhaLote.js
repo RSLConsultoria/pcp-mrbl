@@ -24,6 +24,8 @@ var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PED
 var LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS'];
 // Agendamento das novas tentativas do intérprete (workflow Retentar Interpretação).
 var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+// Sync da produção (a cada 5 min): as médias da previsão entram na projeção das OS previstas.
+var LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS', 'PREVISAO_MEDIAS'];
 // Workflow diário "PCP MRBL - Médias de Previsão".
 var LEITURAS_MEDIAS_PREVISAO = ['PREVISAO_MEDIAS'];
 

@@ -18,11 +18,14 @@ test('linhaProducao normaliza o snapshot e usa ALOCAR sem oficina', () => {
     inicio_costura: '2026-10-01', data_combinada: '2026-10-20', lead_time: '2026-10-18',
     pecas: 120.5, cliente: 'CLIENTE FICTÍCIO', peca: 'CAMISA TESTE', referencia: 'REF-001',
     em_costura: 'SIM', atualizado_em_ploomes: 'v1', sincronizado_em: '2026-10-13T12:00:00.000Z',
-    valor_corte: 12345.67
+    valor_corte: 12345.67,
+    etapa_ordem: 17, etapa_nome: '17. Costura', etapa_inicio: '', prevista: 'NAO',
+    inicio_costura_previsto: '', fim_costura_previsto: ''
   });
   assert.equal(ctx.linhaProducao(prod({ valorCorte: null }), '2026-10-13T12:00:00.000Z').valor_corte, '');
-  // A coluna nova fica no fim do contrato da aba PRODUCAO.
-  assert.equal(Object.keys(ctx.linhaProducao(prod(), '2026-10-13T12:00:00.000Z')).pop(), 'valor_corte');
+  // As colunas novas ficam no fim do contrato da aba PRODUCAO, nesta ordem.
+  assert.deepEqual(Object.keys(ctx.linhaProducao(prod(), '2026-10-13T12:00:00.000Z')).slice(-7),
+    ['valor_corte', 'etapa_ordem', 'etapa_nome', 'etapa_inicio', 'prevista', 'inicio_costura_previsto', 'fim_costura_previsto']);
 });
 
 test('normalizarDealProducao lê os valores tipados de OtherProperties', () => {
@@ -205,4 +208,80 @@ test('modelos de WhatsApp citam a peça em negrito, sem o número da OS', () => 
   assert.match(ctx.modeloWhatsapp('CONFIRMAR_DATA', prod({ pecas: 1 }), '2026-10-13'), /\*CAMISA TESTE\*, 1 peça, para/);
   assert.match(ctx.modeloWhatsapp('CONFIRMAR_DATA', prod({ pecas: 1600 }), '2026-10-13'), /1\.600 peças/);
   for (const tipo of ['COBRANCA_PRAZO', 'CONFIRMAR_DATA']) assert.doesNotMatch(ctx.modeloWhatsapp(tipo, p, '2026-10-13'), /90001|OS /);
+});
+
+// ---------- OS previstas (19/10) ----------
+
+const CAMPO_OS = 'deal_C06992BA-FF1E-47A8-9330-5242026E691E';
+const CAMPO_PECAS = 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD';
+const CAMPO_OFICINA = 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4';
+function dealPrevisto(id, etapa, extra) {
+  return Object.assign({
+    Id: id, Title: 'PEÇA PREVISTA', ContactName: 'CLIENTE FICTÍCIO', LastUpdateDate: 'v-' + id,
+    Stage: { Id: 1, Name: etapa },
+    OtherProperties: [
+      { FieldKey: CAMPO_OS, StringValue: String(id).slice(-5) },
+      { FieldKey: CAMPO_PECAS, IntegerValue: 100 },
+      { FieldKey: CAMPO_OFICINA, UserValueId: 501, UserValueName: 'OFICINA FICTÍCIA' }
+    ]
+  }, extra);
+}
+
+test('separarPrevistas: etapas 12 a 16, 12 e 13 só com PCP completo, sem repetir a Costura', () => {
+  const c = carregar();
+  c.CAMPO_PCP_COMPLETO = 'deal_PCP_COMPLETO_FICTICIO';
+  const pcp = (sim) => ({ FieldKey: 'deal_PCP_COMPLETO_FICTICIO', BoolValue: sim });
+  const comPcp = (d, sim) => { d.OtherProperties.push(pcp(sim)); return d; };
+  const deals = [
+    comPcp(dealPrevisto(710012, '12. Encaixe'), true),
+    comPcp(dealPrevisto(710013, '13. Estratégico 2'), false),
+    dealPrevisto(710015, '15. Preparação 1'),
+    dealPrevisto(710016, '16. Primeira Peça'),
+    dealPrevisto(710017, '17. Costura'),
+    dealPrevisto(710011, '11. Ficha técnica'),
+    dealPrevisto(710099, '14. Corte'),
+    Object.assign(dealPrevisto(710014, '14. Corte'), { OtherProperties: [] })
+  ];
+  const r = limpo(c.separarPrevistas(deals, ['710099']));
+  assert.deepEqual(r.cards.map((x) => [x.dealId, x.etapaOrdem]), [['710012', 12], ['710015', 15], ['710016', 16]]);
+  assert.deepEqual(r.dealsMantidos, ['710014']);
+  // Sem a FieldKey configurada, nada nas etapas 12 e 13 entra.
+  assert.deepEqual(limpo(ctx.separarPrevistas(deals, [])).cards.map((x) => x.dealId), ['710015', '710016', '710099']);
+});
+
+test('linhaPrevista: em_costura NAO, prevista SIM e datas projetadas; sem peças fica sem datas', () => {
+  const card = ctx.normalizarDealPrevisto(dealPrevisto(710015, '15. Preparação 1'));
+  const linha = limpo(ctx.linhaPrevista(card, ctx.tabelaMedias([]), '2026-10-19', 'T1'));
+  assert.equal(linha.em_costura, 'NAO');
+  assert.equal(linha.prevista, 'SIM');
+  assert.equal(linha.etapa_ordem, 15);
+  assert.equal(linha.etapa_nome, '15. Preparação 1');
+  assert.equal(linha.oficina_id, '501');
+  // Sem médias (fallback do BI): FimBase = 19 + 1 = 20/10; Início(17) = 20 + 0 = 20/10; Fim = 21/10.
+  assert.equal(linha.inicio_costura_previsto, '2026-10-20');
+  assert.equal(linha.fim_costura_previsto, '2026-10-21');
+  const semPecas = ctx.normalizarDealPrevisto(Object.assign(dealPrevisto(710016, '16. Primeira Peça'), {
+    OtherProperties: [{ FieldKey: CAMPO_OS, StringValue: '10016' }]
+  }));
+  const vazia = limpo(ctx.linhaPrevista(semPecas, ctx.tabelaMedias([]), '2026-10-19', 'T1'));
+  assert.equal(vazia.pecas, '');
+  assert.equal(vazia.inicio_costura_previsto, '');
+  assert.equal(vazia.fim_costura_previsto, '');
+});
+
+test('sincronização com previstas: upsert das previstas e encerramento nas duas colunas', () => {
+  const cards = [prod({ dealId: '700001' })];
+  const prevista = limpo(ctx.linhaPrevista(ctx.normalizarDealPrevisto(dealPrevisto(710015, '15. Preparação 1')), ctx.tabelaMedias([]), '2026-10-19', 'T1'));
+  const atuais = [
+    { deal_id: '700001', em_costura: 'SIM', prevista: 'NAO' },
+    { deal_id: '710016', em_costura: 'NAO', prevista: 'SIM' },
+    { deal_id: '710099', em_costura: 'NAO', prevista: 'NAO' }
+  ];
+  const r = limpo(ctx.montarSincronizacaoProducao(cards, atuais, [], 'T1', [], [prevista]));
+  assert.deepEqual(r.operacoes.filter((o) => o.aba === 'PRODUCAO').map((o) => [o.operacao, o.linha.deal_id, o.linha.em_costura, o.linha.prevista]), [
+    ['appendOrUpdate', '700001', 'SIM', 'NAO'],
+    ['appendOrUpdate', '710015', 'NAO', 'SIM'],
+    ['update', '710016', 'NAO', 'NAO']
+  ]);
+  assert.deepEqual(r.operacoes.filter((o) => o.aba === 'OFICINAS').map((o) => o.linha.ploomes_id), ['of-1', '501']);
 });

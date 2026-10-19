@@ -58,9 +58,9 @@ posAtual = POS;
 
 const POS_SYNC_PRODUCAO = {};
 [['A cada 5 minutos', 0, 0], ['Ler Snapshot Produção', 1, 0], ['Buscar Produção no Ploomes', 2, 0],
-  ['Montar Sincronização', 3, 0], ['Tem Escritas?', 4, 0], ['Loop Escritas Produção', 5, 0],
-  ['Repetir Escrita?', 6, 0], ['Gravar Produção', 7, -100], ['Anexar Produção', 7, 100],
-  ['Montar Erro Produção', 6, 260], ['Registrar Erro Produção', 7, 260]]
+  ['Buscar Previstas no Ploomes', 3, 0], ['Montar Sincronização', 4, 0], ['Tem Escritas?', 5, 0],
+  ['Loop Escritas Produção', 6, 0], ['Repetir Escrita?', 7, 0], ['Gravar Produção', 8, -100], ['Anexar Produção', 8, 100],
+  ['Montar Erro Produção', 7, 260], ['Registrar Erro Produção', 8, 260]]
   .forEach(([n, c, y]) => { POS_SYNC_PRODUCAO[n] = [c * DX, y]; });
 
 const POS_WHATSAPP_SAIDA = {};
@@ -464,11 +464,13 @@ const buscarPloomes = (varName, nome, url, extra) => `const ${varName} = node({
 const PLOOMES = 'https://public-api2.ploomes.com/';
 const FUNIS_PREVISAO = '(PipelineId%20eq%20' + lote.FUNIL_PCP + '%20or%20PipelineId%20eq%20' + lote.FUNIL_PRODUCAO + ')';
 const URL_COSTURA = PLOOMES + 'Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$orderby=Id&$top=100';
+// Etapas 12 a 16 (previstas): OS em aberto dos funis PCP e Produção. A etapa sai do
+// nome do estágio ("12. Encaixe"); o filtro 12–16 fica no Code node (separarPrevistas).
+const URL_PREVISTAS = PLOOMES + 'Deals?$filter=' + FUNIS_PREVISAO + '%20and%20StatusId%20eq%201&$expand=OtherProperties,Stage($select=Id,Name)&$select=Id,Title,ContactName,LastUpdateDate,StageId&$orderby=Id&$top=100';
 
 posAtual = POS_SYNC_PRODUCAO;
 RETRY = RETRY_API;
-const LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS'];
-const urlSnapshotProducao = lote.urlLeitura(DOC, LEITURAS_SYNC_PRODUCAO);
+const urlSnapshotProducao = lote.urlLeitura(DOC, lote.LEITURAS_SYNC_PRODUCAO);
 const syncProducao = IMPORT_API + [
   `const agendaProducao = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
@@ -482,6 +484,7 @@ const syncProducao = IMPORT_API + [
 });`,
   httpGoogle('lerSnapshotProducao', 'Ler Snapshot Produção', 'GET', JSON.stringify(urlSnapshotProducao), false, ERRO_SAIDA),
   buscarPloomes('buscarProducao', 'Buscar Produção no Ploomes', URL_COSTURA),
+  buscarPloomes('buscarPrevistas', 'Buscar Previstas no Ploomes', URL_PREVISTAS, unico),
   code('montarSyncProducao', 'Montar Sincronização', 'sincronizar-producao'),
   'const temEscritasProducao = ' + condicao('Tem Escritas?', '{{ $json.vazio === true }}', 'boolean', 'false', "''")
     .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';',
@@ -513,7 +516,9 @@ const syncProducao = IMPORT_API + [
     .onError(montarErroProducao.to(registrarErroProducao))
     .to(buscarProducao
       .onError(montarErroProducao.to(registrarErroProducao))
-      .to(montarSyncProducao)
+      .to(buscarPrevistas
+        .onError(montarErroProducao.to(registrarErroProducao))
+        .to(montarSyncProducao)
       .to(temEscritasProducao
         .onTrue(loopEscritasProducao
           .onEachBatch(repetirEscritaProducao
@@ -522,7 +527,7 @@ const syncProducao = IMPORT_API + [
               .to(nextBatch(loopEscritasProducao)))
             .onFalse(anexarProducao
               .onError(montarErroProducao.to(registrarErroProducao))
-              .to(nextBatch(loopEscritasProducao))))))));
+              .to(nextBatch(loopEscritasProducao)))))))));
 `;
 
 posAtual = POS_WHATSAPP_SAIDA;

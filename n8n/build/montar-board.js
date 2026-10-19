@@ -2228,8 +2228,77 @@ function linhaProducao(p, sincronizadoEm) {
     atualizado_em_ploomes: texto(p.versao),
     sincronizado_em: texto(sincronizadoEm),
     // Coluna acrescentada no fim do contrato da aba (16/10).
-    valor_corte: numeroOuNulo(p.valorCorte) === null ? '' : numeroOuNulo(p.valorCorte)
+    valor_corte: numeroOuNulo(p.valorCorte) === null ? '' : numeroOuNulo(p.valorCorte),
+    // Visão de futuro (19/10), no fim da aba. OS na Costura segue a regra atual
+    // (combinada ou lead time): as colunas de previsão ficam vazias.
+    etapa_ordem: ETAPA_COSTURA,
+    etapa_nome: ETAPA_NOME_COSTURA,
+    etapa_inicio: '',
+    prevista: 'NAO',
+    inicio_costura_previsto: '',
+    fim_costura_previsto: ''
   };
+}
+
+var ETAPA_NOME_COSTURA = '17. Costura';
+
+// Card dos funis PCP e Produção nas etapas 12 a 16: o card da produção mais a
+// etapa (pelo nome do estágio), a data de entrada nela, o "PCP completo pelo
+// Ploomes?" e as peças usadas na faixa (corte, senão pedido).
+function normalizarDealPrevisto(deal) {
+  deal = deal || {};
+  var card = normalizarDealProducao(deal);
+  var etapaNome = texto(deal.Stage && deal.Stage.Name);
+  var etapa = numeroEtapa(etapaNome);
+  card.etapaOrdem = etapa;
+  card.etapaNome = etapaNome;
+  card.etapaInicio = etapa !== null && CAMPOS_ENTRADA_ETAPA[etapa] ? dataSaoPaulo(valorCampoDeal(deal, CAMPOS_ENTRADA_ETAPA[etapa])) : '';
+  card.pcpCompleto = campoConfigurado(CAMPO_PCP_COMPLETO) && simNaoPloomes(propriedadeDoDeal(deal, CAMPO_PCP_COMPLETO));
+  card.pecasPrevisao = pecasPrevisao(card.pecas, valorCampoDeal(deal, CAMPO_PECAS_PEDIDO));
+  return card;
+}
+
+// Entram as etapas 12 a 16; nas 12 e 13 só com "PCP completo pelo Ploomes?" = sim
+// (como no BI). Card que já veio na consulta da Costura fica de fora. Card sem OS é
+// pulado sem aviso (o funil PCP tem muitos) e, se já tinha linha, não é encerrado.
+function separarPrevistas(deals, dealsCostura) {
+  var costura = Object.create(null);
+  (dealsCostura || []).forEach(function (id) { if (texto(id)) costura[texto(id)] = 1; });
+  var cards = [];
+  var mantidos = [];
+  (deals || []).forEach(function (deal) {
+    var card = normalizarDealPrevisto(deal);
+    if (!card.dealId || costura[card.dealId]) return;
+    var etapa = card.etapaOrdem;
+    if (!(etapa >= ETAPA_ENCAIXE && etapa <= ETAPA_ULTIMA_PREVISTA)) return;
+    if (etapa <= 13 && !card.pcpCompleto) return;
+    if (!card.os) {
+      mantidos.push(card.dealId);
+      return;
+    }
+    cards.push(card);
+  });
+  return { cards: cards, dealsMantidos: mantidos };
+}
+
+// Linha da PRODUCAO de uma OS prevista: em_costura NAO, prevista SIM e as datas
+// da projeção (vazias para OS sem peças).
+function linhaPrevista(card, medias, hojeISO, sincronizadoEm) {
+  var linha = linhaProducao(card, sincronizadoEm);
+  var semOficina = !texto(card.oficinaId) || semAcento(card.oficina) === 'ALOCAR';
+  var projecao = projetarOs({
+    etapa: card.etapaOrdem, dtInicio: card.etapaInicio, pecas: card.pecasPrevisao,
+    oficinaId: semOficina ? '' : texto(card.oficinaId)
+  }, medias, hojeISO);
+  linha.pecas = card.pecasPrevisao > 0 ? card.pecasPrevisao : '';
+  linha.em_costura = 'NAO';
+  linha.etapa_ordem = card.etapaOrdem;
+  linha.etapa_nome = texto(card.etapaNome);
+  linha.etapa_inicio = texto(card.etapaInicio);
+  linha.prevista = 'SIM';
+  linha.inicio_costura_previsto = projecao ? projecao.inicioCostura : '';
+  linha.fim_costura_previsto = projecao ? projecao.fimCostura : '';
+  return linha;
 }
 
 function avaliarPaginaProducao(resposta, pagina, tamanhoPagina) {
@@ -2289,7 +2358,8 @@ function separarCardsSincronizacao(deals) {
 
 // em_costura=NAO so sai daqui, e o adaptador so chega aqui depois de ler todas
 // as paginas do Ploomes sem erro (qualquer pagina invalida cancela o sync).
-function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm, dealsMantidos) {
+// previstas (19/10): linhas prontas (linhaPrevista) das OS nas etapas 12 a 16.
+function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincronizadoEm, dealsMantidos, previstas) {
   var mantidos = Object.create(null);
   (dealsMantidos || []).forEach(function (id) { if (texto(id)) mantidos[texto(id)] = 1; });
   var porDeal = Object.create(null);
@@ -2301,18 +2371,32 @@ function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincr
     porDeal[dealId] = card;
   });
 
+  var previstasPorDeal = Object.create(null);
+  var ordemPrevistas = [];
+  (previstas || []).forEach(function (linha) {
+    var dealId = texto(linha && linha.deal_id);
+    if (!dealId || porDeal[dealId]) return;
+    if (!previstasPorDeal[dealId]) ordemPrevistas.push(dealId);
+    previstasPorDeal[dealId] = linha;
+  });
+
   var operacoes = [];
   ordemDeals.forEach(function (dealId) {
     operacoes.push({ aba: 'PRODUCAO', operacao: 'appendOrUpdate', chave: 'deal_id', linha: linhaProducao(porDeal[dealId], sincronizadoEm) });
   });
+  ordemPrevistas.forEach(function (dealId) {
+    operacoes.push({ aba: 'PRODUCAO', operacao: 'appendOrUpdate', chave: 'deal_id', linha: previstasPorDeal[dealId] });
+  });
+  // Saiu da Costura e das etapas 12 a 16 (ou perdeu o "PCP completo"): NAO nas duas colunas.
   var encerrados = Object.create(null);
   (producaoAtual || []).forEach(function (linha) {
     var dealId = texto(linha && linha.deal_id);
-    if (!dealId || porDeal[dealId] || mantidos[dealId] || encerrados[dealId] || !VALORES_ATIVO_PRODUCAO[semAcento(linha.em_costura)]) return;
+    var ativa = VALORES_ATIVO_PRODUCAO[semAcento(linha && linha.em_costura)] || VALORES_ATIVO_PRODUCAO[semAcento(linha && linha.prevista)];
+    if (!dealId || porDeal[dealId] || previstasPorDeal[dealId] || mantidos[dealId] || encerrados[dealId] || !ativa) return;
     encerrados[dealId] = 1;
     operacoes.push({
       aba: 'PRODUCAO', operacao: 'update', chave: 'deal_id',
-      linha: { deal_id: dealId, em_costura: 'NAO', sincronizado_em: texto(sincronizadoEm) }
+      linha: { deal_id: dealId, em_costura: 'NAO', prevista: 'NAO', sincronizado_em: texto(sincronizadoEm) }
     });
   });
 
@@ -2322,10 +2406,14 @@ function montarSincronizacaoProducao(cards, producaoAtual, oficinasAtuais, sincr
     if (id) oficinasExistentes[id] = 1;
   });
   var oficinasVistas = Object.create(null);
-  ordemDeals.forEach(function (dealId) {
-    var card = porDeal[dealId];
-    var id = texto(card && card.oficinaId);
-    var nome = texto(card && card.oficina);
+  var origens = ordemDeals.map(function (dealId) {
+    return { id: texto(porDeal[dealId].oficinaId), nome: texto(porDeal[dealId].oficina) };
+  }).concat(ordemPrevistas.map(function (dealId) {
+    return { id: texto(previstasPorDeal[dealId].oficina_id), nome: texto(previstasPorDeal[dealId].oficina_nome) };
+  }));
+  origens.forEach(function (origem) {
+    var id = origem.id;
+    var nome = origem.nome;
     if (!id || !nome || oficinasVistas[id]) return;
     oficinasVistas[id] = 1;
     var linha = { ploomes_id: id, nome: nome };
@@ -3822,6 +3910,8 @@ var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PED
 var LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS'];
 // Agendamento das novas tentativas do intérprete (workflow Retentar Interpretação).
 var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+// Sync da produção (a cada 5 min): as médias da previsão entram na projeção das OS previstas.
+var LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS', 'PREVISAO_MEDIAS'];
 // Workflow diário "PCP MRBL - Médias de Previsão".
 var LEITURAS_MEDIAS_PREVISAO = ['PREVISAO_MEDIAS'];
 
