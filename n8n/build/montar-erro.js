@@ -1871,7 +1871,9 @@ function projetarOs(os, t, hojeISO) {
   var dtInicio = diaNumero(os.dtInicio);
   var chegada = diaNumero(os.chegada);
   var inicioEfetivo = dtInicio !== null ? dtInicio : Math.max(chegada !== null ? chegada : hoje, hoje) + filaEtapaPrevisao(t, s, faixa);
-  var fimBase = Math.max(inicioEfetivo + duracaoEtapaPrevisao(t, s, faixa), hoje);
+  // Decisão do dono (19/10): na etapa 16 a duração dela não entra; a fila até a Costura já parte do término da 15 e contém esse tempo.
+  var durAtual = s === ETAPA_PRIMEIRA_PECA ? 0 : duracaoEtapaPrevisao(t, s, faixa);
+  var fimBase = Math.max(inicioEfetivo + durAtual, hoje);
   var meio = 0;
   for (var o = s + 1; o < ETAPA_COSTURA; o++) {
     if (o === ETAPA_PRIMEIRA_PECA) continue;
@@ -4386,7 +4388,7 @@ var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
-var DEALS_PRODUCAO_EDITAVEIS = ['0'];  // Bloqueado ate haver um card de teste do funil Producao; vazio = todos.
+var DEALS_PRODUCAO_EDITAVEIS = ['607612577'];  // TESTE: so o card de teste do funil Producao ate o go-live; vazio = todos.
 var DEALS_EDITAVEIS = ['607479158', '607493886', '607493902', '607520448'];  // vazio = todos. Até o go-live, só os cards de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
