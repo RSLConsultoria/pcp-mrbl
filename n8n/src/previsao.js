@@ -187,20 +187,20 @@ function projetarOs(os, t, hojeISO) {
 
 // ---------- registros do Ploomes e médias (workflow diário) ----------
 
-// FieldKeys ainda não conferidas numa leitura real (spec, seção 8). Enquanto
-// começarem por CONFIGURAR_, o campo é lido como vazio: a previsão cai no
-// fallback do BI e o workflow de médias não grava nada. Trocar pela chave real
-// (não é segredo) na homologação, rodar npm test && npm run build e commitar.
-var CAMPO_PECAS_PEDIDO = 'CONFIGURAR_CAMPO_PECAS_PEDIDO';
-var CAMPO_PCP_COMPLETO = 'CONFIGURAR_CAMPO_PCP_COMPLETO';
-var CAMPO_REGISTRO_INICIO = 'CONFIGURAR_CAMPO_REGISTRO_INICIO';
-var CAMPO_REGISTRO_TERMINO = 'CONFIGURAR_CAMPO_REGISTRO_TERMINO';
+// FieldKeys conferidas numa leitura real do Ploomes em 19/10/2026 (não são
+// segredo). Se uma chave ficar vazia ou começar por CONFIGURAR_ (campo
+// recriado, ambiente sem o campo), ela é lida como vazia: a previsão cai no
+// fallback do BI (duração 1, fila 0) e o workflow de médias não grava nada.
+var CAMPO_PECAS_PEDIDO = 'deal_3535D5CD-A8A7-425D-AECE-4D7F1F884489';
+var CAMPO_PCP_COMPLETO = 'deal_64F15A50-2136-43A1-AA13-DDB49905A8C9';
+var CAMPO_REGISTRO_INICIO = 'interaction_record_F162EE12-FC0C-4BDD-9C1D-873101371462';
+var CAMPO_REGISTRO_TERMINO = 'interaction_record_63FD8E8F-E6E9-4D58-91D6-B2587FA9ED82';
 var CAMPOS_ENTRADA_ETAPA = {
-  12: 'CONFIGURAR_CAMPO_ENTRADA_12',
-  13: 'CONFIGURAR_CAMPO_ENTRADA_13',
-  14: 'CONFIGURAR_CAMPO_ENTRADA_14',
-  15: 'CONFIGURAR_CAMPO_ENTRADA_15',
-  16: 'CONFIGURAR_CAMPO_ENTRADA_16'
+  12: 'deal_399B29F0-8A52-4EA2-B4FD-B8F41F3332E6',
+  13: 'deal_DB678558-34C4-4414-B4A6-749E3860E3B6',
+  14: 'deal_074B7ADD-94B0-46E4-90A5-FC9C9E49B0ED',
+  15: 'deal_EB30D399-E64C-42A0-8161-AEB9DA9DDAE1',
+  16: 'deal_181CB9F8-4B3D-43BE-BD25-174D52A5A7BF'
 };
 
 function campoConfigurado(chave) {
@@ -208,9 +208,8 @@ function campoConfigurado(chave) {
 }
 
 
-// Número da etapa no texto do registro de interação. O formato real ainda será
-// confirmado numa leitura na homologação (spec, seção 8): por isso o parser é
-// tolerante e isolado. Aceita "Etapa: 17", "Estágio 17", "17. Costura" e
+// Número da etapa no texto do registro de interação. Formato real confirmado em
+// 19/10/2026 ("Dado data 12. Encaixe"); o parser continua tolerante e isolado. Aceita "Etapa: 17", "Estágio 17", "17. Costura" e
 // "Etapa 17. Costura" (com ou sem HTML); devolve null quando não acha 1–30.
 function etapaDoTextoRegistro(conteudo) {
   var t = texto(conteudo).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ');

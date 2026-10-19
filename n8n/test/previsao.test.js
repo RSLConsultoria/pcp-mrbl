@@ -114,12 +114,53 @@ test('etapa no texto do registro de interação (parser tolerante; formato real 
   assert.equal(ctx.etapaDoTextoRegistro('Etapa 99'), null);
 });
 
-test('FieldKeys por configurar são lidas como vazias', () => {
+test('FieldKeys por configurar são lidas como vazias (fallback, com chave CONFIGURAR_ injetada)', () => {
   assert.equal(ctx.campoConfigurado('CONFIGURAR_CAMPO_PCP_COMPLETO'), false);
+  assert.equal(ctx.campoConfigurado(''), false);
   assert.equal(ctx.campoConfigurado('deal_00000000-0000-0000-0000-000000000000'), true);
-  const deal = { Id: 1, OtherProperties: [{ FieldKey: 'CONFIGURAR_CAMPO_PECAS_PEDIDO', IntegerValue: 999 }] };
-  assert.equal(ctx.normalizarDealPrevisao(deal).pecas, 0);
-  assert.equal(ctx.normalizarDealPrevisao(deal).pcpCompleto, false);
+  const c2 = carregar();
+  c2.CAMPO_PECAS_PEDIDO = 'CONFIGURAR_CAMPO_PECAS_PEDIDO';
+  c2.CAMPO_PCP_COMPLETO = 'CONFIGURAR_CAMPO_PCP_COMPLETO';
+  const deal = { Id: 1, OtherProperties: [
+    { FieldKey: 'CONFIGURAR_CAMPO_PECAS_PEDIDO', IntegerValue: 999 },
+    { FieldKey: 'CONFIGURAR_CAMPO_PCP_COMPLETO', BoolValue: true }
+  ] };
+  assert.equal(c2.normalizarDealPrevisao(deal).pecas, 0);
+  assert.equal(c2.normalizarDealPrevisao(deal).pcpCompleto, false);
+});
+
+test('FieldKeys reais do Ploomes (homologação de 19/10): peças do pedido e PCP completo', () => {
+  assert.equal(ctx.CAMPO_PECAS_PEDIDO, 'deal_3535D5CD-A8A7-425D-AECE-4D7F1F884489');
+  assert.equal(ctx.CAMPO_PCP_COMPLETO, 'deal_64F15A50-2136-43A1-AA13-DDB49905A8C9');
+  assert.equal(ctx.CAMPOS_ENTRADA_ETAPA[12], 'deal_399B29F0-8A52-4EA2-B4FD-B8F41F3332E6');
+  assert.equal(ctx.CAMPOS_ENTRADA_ETAPA[16], 'deal_181CB9F8-4B3D-43BE-BD25-174D52A5A7BF');
+  const deal = (bool) => ({ Id: 2, OtherProperties: [
+    { FieldKey: ctx.CAMPO_PECAS_PEDIDO, IntegerValue: 80 },
+    { FieldKey: ctx.CAMPO_PCP_COMPLETO, BoolValue: bool }
+  ] });
+  assert.equal(ctx.normalizarDealPrevisao(deal(true)).pcpCompleto, true);
+  assert.equal(ctx.normalizarDealPrevisao(deal(false)).pcpCompleto, false);
+  assert.equal(ctx.normalizarDealPrevisao(deal(true)).pecas, 80);
+  assert.equal(ctx.simNaoPloomes({ BoolValue: true }), true);
+  assert.equal(ctx.simNaoPloomes({ BoolValue: false }), false);
+});
+
+test('texto real dos registros do Ploomes e datas reais com fuso -03:00', () => {
+  assert.equal(ctx.etapaDoTextoRegistro('Dado data 12. Encaixe'), 12);
+  assert.equal(ctx.etapaDoTextoRegistro('Dado data 4. Pilotagem - Piloteiro'), 4);
+  assert.equal(ctx.etapaDoTextoRegistro('Dado data 5. Prontas para envio ao cliente'), 5);
+  const reg = ctx.normalizarRegistroPrevisao({
+    DealId: 700001, Content: 'Dado data 15. Preparação 1',
+    OtherProperties: [
+      { FieldKey: ctx.CAMPO_REGISTRO_INICIO, DateTimeValue: '2026-10-15T13:33:27-03:00' },
+      { FieldKey: ctx.CAMPO_REGISTRO_TERMINO, DateTimeValue: '2026-10-19T09:00:00-03:00' }
+    ]
+  });
+  assert.equal(reg.etapa, 15);
+  assert.equal(reg.inicio, '2026-10-15');
+  assert.equal(reg.termino, '2026-10-19');
+  const dias = (new Date(reg.termino + 'T00:00:00Z') - new Date(reg.inicio + 'T00:00:00Z')) / 86400000;
+  assert.equal(dias, 4);
 });
 
 // Histórico fictício: hoje = 19/10/2026, janela a partir de 22/04/2026.
