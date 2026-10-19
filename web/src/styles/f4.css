@@ -31,6 +31,10 @@
 .gantt__dias > div { box-sizing: border-box; width: 28px; flex: none; padding-top: 15px; border-right: 1px solid #eef0f4; text-align: center; font-size: 10px; color: var(--leve); }
 .gantt__dias .gantt__dia--fim { background: #f8f8fa; }
 .gantt__dias .gantt__dia--hoje { background: var(--signal-tint); color: var(--signal-lo); font-weight: 700; }
+.gantt { --gantt-fixo: 260px; }
+/* Coluna do dia de hoje: faixa suave de cima a baixo, atrás das barras (z-index 2) e sem capturar cliques */
+.gantt__hoje-coluna { position: absolute; top: 0; bottom: 0; left: calc(var(--gantt-fixo) + var(--dia-hoje) * 28px); width: 28px; z-index: 1; pointer-events: none; background: var(--signal-tint); opacity: .55; }
+.gantt__barra { z-index: 2; }
 .gantt__grupo { grid-column: 1 / -1; display: grid; grid-template-columns: 260px auto; }
 .gantt__grupo-nome { grid-column: 1; display: flex; justify-content: space-between; align-items: center; height: 34px; padding: 0 12px; border-right: 1px solid var(--borda); border-bottom: 1px solid var(--borda); background: #f7f8fa; }
 .gantt__grupo-nome strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; letter-spacing: .04em; }
@@ -128,7 +132,7 @@
   .producao-filtros select { width: 100%; }
   .producao-kpis { grid-template-columns: 1fr; }
   .producao-kpis article:nth-child(n+3) { display: none; }
-  .gantt { grid-template-columns: 210px auto; }
+  .gantt { --gantt-fixo: 210px; grid-template-columns: 210px auto; }
   .gantt__fixo { width: 210px; }
   .gantt__grupo { grid-template-columns: 210px auto; }
   .gantt__linha { grid-template-columns: 210px auto; }

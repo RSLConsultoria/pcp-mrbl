@@ -347,3 +347,21 @@ test('Gantt agrupado por entrega: prazo mais cedo primeiro, sem prazo no fim, fi
   await expect(page.getByRole('group', { name: 'Agrupar' }).getByRole('button', { name: 'Entrega' })).toHaveAttribute('aria-pressed', 'true');
   await expect(linhasOs).toHaveText(['OS 90001', 'OS 90006', 'OS 90002', 'OS 90003', 'OS 90004', 'OS 90000']);
 });
+
+test('Gantt destaca a coluna inteira de hoje atrás das barras, que continuam clicáveis', async ({ page }) => {
+  await entrar(page);
+  const coluna = page.getByTestId('gantt-hoje-coluna');
+  await expect(coluna).toHaveCount(1);
+  const cab = await page.locator('.gantt__dia--hoje').boundingBox();
+  const col = await coluna.boundingBox();
+  const ultima = await page.locator('.gantt__linha').last().boundingBox();
+  expect(Math.abs(col!.x - cab!.x)).toBeLessThan(1.5);
+  expect(Math.abs(col!.width - cab!.width)).toBeLessThan(1.5);
+  expect(col!.y + col!.height).toBeGreaterThanOrEqual(ultima!.y + ultima!.height - 1);
+  // Os dois agrupamentos mantêm o destaque.
+  await page.getByRole('button', { name: 'Entrega', exact: true }).click();
+  await expect(coluna).toHaveCount(1);
+  // A barra segue por cima e abre o painel.
+  await page.getByTitle('OS 90002 · 12/10 · 120 pç · R$ 12.346').click();
+  await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90002' })).toBeVisible();
+});

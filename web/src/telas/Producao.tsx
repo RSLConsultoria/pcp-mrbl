@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
@@ -203,6 +203,7 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
   const indicadores = useMemo(() => indicadoresProducao(filtradas, hojeIso), [filtradas, hojeIso]);
   const janela = useMemo(() => janelaGantt(filtradas, hojeIso), [filtradas, hojeIso]);
   const dias = useMemo(() => diasEntre(janela.inicio, janela.dias), [janela]);
+  const indiceHoje = indiceDia(hojeIso, janela.inicio);
   const grupos = useMemo(() => agruparPorOficina(filtradas), [filtradas]);
   // A tabela parte da mesma ordem do Gantt: grupo a grupo.
   const ordemGantt = useMemo(() => grupos.flatMap(([, itens]) => itens), [grupos]);
@@ -283,6 +284,7 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>
         <div className="gantt__cabecalho gantt__fixo"><strong>{agrupamento === 'ENTREGA' ? 'OS por entrega' : 'Oficina / OS'}</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>
         <div className="gantt__dias" style={{ width: janela.dias * LARGURA_DIA }}>{dias.map((d) => <div key={d} className={`${d === hojeIso ? 'gantt__dia--hoje' : ''} ${[0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()) ? 'gantt__dia--fim' : ''}`}><span>{d.slice(8)}</span></div>)}</div>
+        {indiceHoje >= 0 && indiceHoje < janela.dias && <div className="gantt__hoje-coluna" aria-hidden="true" data-testid="gantt-hoje-coluna" style={{ '--dia-hoje': indiceHoje } as CSSProperties} />}
         {agrupamento === 'ENTREGA' ? <div className="gantt__grupo">{porEntrega.map((p) => linhaGantt(p, true))}</div>
           : grupos.map(([oficina, itens]) => <div className="gantt__grupo" key={oficina}>
           <div className={`gantt__grupo-nome gantt__fixo ${oficina === 'ALOCAR' ? 'gantt__grupo-nome--alocar' : ''}`}><strong>{oficina}</strong><span>{itens.length} OS</span></div>
