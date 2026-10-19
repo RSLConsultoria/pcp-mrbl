@@ -55,6 +55,8 @@ const contagem = (n: number, sinal: string): ValorCelula => ({ exibir: n ? `${si
 export function linhasTabela(lista: Producao[], hoje: string): LinhaProducao[] {
   return lista.map((p) => {
     const situacao = situacaoPrazo(p, hoje);
+    // OS prevista ainda não tem prazo de entrega da Costura: Prazo e Situação ficam vazios.
+    const vazio: ValorCelula = { exibir: '—', ordem: null };
     const pendente = p.sugestoes.some((s) => s.status === 'PENDENTE');
     return {
       item: p,
@@ -69,8 +71,8 @@ export function linhasTabela(lista: Producao[], hoje: string): LinhaProducao[] {
         inicio: data(p.inicioCostura),
         combinada: data(p.dataCombinada),
         leadTime: data(p.leadTime),
-        prazo: data(prazoProducao(p).data),
-        situacao: { exibir: situacao.texto, ordem: situacao.dias, filtro: situacao.situacao },
+        prazo: p.prevista ? vazio : data(prazoProducao(p).data),
+        situacao: p.prevista ? { ...vazio, filtro: '' } : { exibir: situacao.texto, ordem: situacao.dias, filtro: situacao.situacao },
         faltasCostura: contagem(p.faltasCostura.length, '🚫'),
         faltasAcabamento: contagem(p.faltasAcabamento.length, '⚠️'),
         sugestao: { exibir: pendente ? 'Sim' : '—', ordem: pendente ? 1 : 0 },
@@ -118,6 +120,13 @@ export function filtrarLinhas(linhas: LinhaProducao[], filtros: FiltrosColuna): 
     if (c.filtro === 'select') return celula.filtro === valor;
     return chaveBusca(celula.exibir).includes(chaveBusca(valor));
   }));
+}
+
+// Ao desligar "Incluir previstas" as colunas Etapa e Chegada somem: os filtros delas saem junto.
+export function limparFiltrosDePrevistas(filtros: FiltrosColuna): FiltrosColuna {
+  if (!filtros.etapa && !filtros.chegada) return filtros;
+  const { etapa: _e, chegada: _c, ...resto } = filtros;
+  return resto;
 }
 
 export function colunasVisiveis(ocultas: string[], incluirPrevistas = false): DefinicaoColuna[] {

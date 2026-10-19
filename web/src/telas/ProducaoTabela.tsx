@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Producao } from '../api/tipos';
 import { reais, SITUACOES_PRAZO, totaisProducao } from '../regras/producao';
 import {
-  COLUNAS_PRODUCAO, colunasVisiveis, filtrarLinhas, lerColunasOcultas, linhasTabela, ordenarLinhas, proximaOrdem,
+  COLUNAS_PRODUCAO, colunasVisiveis, filtrarLinhas, lerColunasOcultas, limparFiltrosDePrevistas, linhasTabela, ordenarLinhas, proximaOrdem,
   salvarColunasOcultas, temFiltroColuna, type ColunaProducao, type FiltrosColuna, type OrdemTabela
 } from '../regras/producaoTabela';
 
@@ -17,6 +17,7 @@ export function TabelaProducao({ lista, hojeIso, incluirPrevistas = false, onAbr
   const colunas = colunasVisiveis(ocultas, incluirPrevistas);
   const oficinas = useMemo(() => [...new Set(lista.map((p) => p.oficina))], [lista]);
   const etapas = useMemo(() => [...new Set(linhas.map((l) => l.valores.etapa.exibir).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })), [linhas]);
+  useEffect(() => { if (!incluirPrevistas) setFiltros(limparFiltrosDePrevistas); }, [incluirPrevistas]);
   const algumFiltro = temFiltroColuna(filtros);
   const totais = useMemo(() => totaisProducao(visiveis.map((l) => l.item)), [visiveis]);
 
@@ -30,7 +31,7 @@ export function TabelaProducao({ lista, hojeIso, incluirPrevistas = false, onAbr
   return <section className="producao-tabela__area" aria-label="Tabela de produção">
     <div className="producao-tabela__barra">
       <strong>{visiveis.length} OS</strong>
-      <span className="producao-tabela__totais">{totais.pecas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} peças · {reais(totais.valor)}</span>
+      <span className="producao-tabela__totais">{totais.pecas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} peças · {reais(totais.valor)}{totais.previstas > 0 && <> · + {totais.previstas} {totais.previstas === 1 ? 'prevista' : 'previstas'} · {totais.pecasPrevistas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} pç</>}</span>
       {algumFiltro && <button type="button" className="botao botao--contorno" onClick={() => setFiltros({})}>Limpar filtros</button>}
       <details className="producao-tabela__colunas">
         <summary>Colunas</summary>

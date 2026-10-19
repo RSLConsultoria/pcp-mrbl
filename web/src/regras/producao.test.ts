@@ -138,7 +138,12 @@ describe('texto da barra do Gantt: peças e valor do corte', () => {
   it('formata reais sem centavos e soma peças e valor das OS', () => {
     expect(reais(1234567.89)).toBe('R$ 1.234.568');
     expect(totaisProducao([prod({ pecas: 100, valorCorte: 1000 }), prod({ pecas: null, valorCorte: 500.5 }), prod({ pecas: 20, valorCorte: null })]))
-      .toEqual({ pecas: 120, valor: 1500.5 });
+      .toEqual({ pecas: 120, valor: 1500.5, previstas: 0, pecasPrevistas: 0 });
+  });
+
+  it('totais ficam só com a Costura; as previstas aparecem à parte', () => {
+    expect(totaisProducao([prod({ pecas: 100, valorCorte: 1000 }), prod({ prevista: true, pecas: 50, valorCorte: 700 }), prod({ prevista: true, pecas: null })]))
+      .toEqual({ pecas: 100, valor: 1000, previstas: 2, pecasPrevistas: 50 });
   });
 });
 
