@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { agruparPorOficina, ordenarPorEntrega, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
+import { agruparPorOficina, ordenarPorEntrega, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, opcoesAssociacaoMensagem, janelaGantt, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -154,4 +154,34 @@ it('ordem de entrega: prazo vigente mais cedo primeiro, empate por OS e sem praz
   expect(ordenarPorEntrega(lista).map((p) => p.dealId)).toEqual(['c', 'd', 'b', 'f', 'e', 'a']);
   // Não altera a lista recebida.
   expect(lista[0].dealId).toBe('a');
+});
+
+describe('OS previstas (19/10)', () => {
+  const prevista = prod({
+    dealId: '710015', os: '10015', prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1',
+    inicioCostura: '', dataCombinada: '', leadTime: '', inicioCosturaPrevisto: '2026-10-21', fimCosturaPrevisto: '2026-12-20', pecas: 80, valorCorte: null
+  });
+  it('ficam fora sem "Incluir previstas" e entram com ele', () => {
+    const base = { busca: '', oficinaId: '', soComFalta: false };
+    expect(filtrarProducoes([prod(), prevista], base).map((p) => p.dealId)).toEqual(['700001']);
+    expect(filtrarProducoes([prod(), prevista], { ...base, incluirPrevistas: true }).map((p) => p.dealId)).toEqual(['700001', '710015']);
+  });
+  it('não entram nos indicadores da Costura', () => {
+    expect(indicadoresProducao([prod(), prevista], '2026-10-13')).toMatchObject({ os: 1, pecas: 120 });
+    expect(indicadoresProducao([prod(), prevista], '2026-10-13').semCombinada).toBe(0);
+  });
+  it('a janela do Gantt vai até o fim previsto', () => {
+    expect(janelaGantt([prod({ inicioCostura: '2026-10-01', dataCombinada: '2026-10-20' }), prevista], '2026-10-13').fim).toBe('2026-12-20');
+  });
+  it('título da barra tracejada', () => {
+    expect(tituloBarraPrevista(prevista)).toBe('OS 10015 · prevista · 15. Preparação 1 · 21/10 a 20/12 · 80 pç');
+    expect(tituloBarraPrevista({ ...prevista, inicioCosturaPrevisto: '', fimCosturaPrevisto: '' })).toBe('OS 10015 · prevista · 15. Preparação 1 · sem previsão · 80 pç');
+  });
+  it('a associação manual de mensagem não oferece OS previstas', () => {
+    const real = prod({ dealId: '700002' });
+    const prevDaOficina = { ...prevista, oficinaId: 'of-1' };
+    expect(opcoesAssociacaoMensagem([real, prevDaOficina], 'of-1', undefined).map((p) => p.dealId)).toEqual(['700002']);
+    expect(opcoesAssociacaoMensagem([real, prevDaOficina], 'of-1', ['700002']).map((p) => p.dealId)).toEqual(['700002']);
+    expect(opcoesAssociacaoMensagem([real, prod({ dealId: '700003', oficinaId: 'of-2' })], 'of-1', ['999']).map((p) => p.dealId)).toEqual([]);
+  });
 });

@@ -8,7 +8,8 @@ export const SITUACOES_PRAZO: { valor: SituacaoPrazo; rotulo: string }[] = [
   { valor: 'ATRASADA', rotulo: 'Atrasada' }, { valor: 'EM_BREVE', rotulo: 'Vence em breve' },
   { valor: 'NO_PRAZO', rotulo: 'No prazo' }, { valor: 'SEM_PRAZO', rotulo: 'Sem prazo' }
 ];
-export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean; situacao?: SituacaoPrazo | ''; hoje?: string }
+// incluirPrevistas (19/10): sem ele, as OS previstas (etapas 12 a 16) ficam fora.
+export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean; situacao?: SituacaoPrazo | ''; hoje?: string; incluirPrevistas?: boolean }
 // Material enviado saiu da F4 por decisão do dono (16/10).
 export type ModeloMensagemProducao = 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA';
 
@@ -51,6 +52,7 @@ export function chaveBusca(v: string): string { return v.normalize('NFD').replac
 export function filtrarProducoes(lista: Producao[], filtros: FiltrosProducao): Producao[] {
   const busca = chaveBusca(filtros.busca.trim());
   return lista.filter((p) => {
+    if (p.prevista && !filtros.incluirPrevistas) return false;
     if (filtros.oficinaId && p.oficinaId !== filtros.oficinaId) return false;
     if (filtros.soComFalta && p.faltasCostura.length === 0) return false;
     if (filtros.situacao && filtros.hoje && situacaoPrazo(p, filtros.hoje).situacao !== filtros.situacao) return false;
@@ -100,6 +102,19 @@ export function tituloBarraProducao(p: Pick<Producao, 'os' | 'pecas' | 'valorCor
   return [`OS ${p.os}`, prazo ? `${prazo.slice(8, 10)}/${prazo.slice(5, 7)}` : 'sem prazo', textoBarraProducao(p)].filter(Boolean).join(' · ');
 }
 
+// Barra tracejada da OS prevista: da chegada prevista ao fim previsto.
+export function tituloBarraPrevista(p: Pick<Producao, 'os' | 'etapaNome' | 'inicioCosturaPrevisto' | 'fimCosturaPrevisto' | 'pecas' | 'valorCorte'>): string {
+  const ini = p.inicioCosturaPrevisto ?? '';
+  const fim = p.fimCosturaPrevisto ?? '';
+  const periodo = ini && fim ? `${ini.slice(8, 10)}/${ini.slice(5, 7)} a ${fim.slice(8, 10)}/${fim.slice(5, 7)}` : 'sem previsão';
+  return [`OS ${p.os}`, 'prevista', p.etapaNome ?? '', periodo, textoBarraProducao(p)].filter(Boolean).join(' · ');
+}
+
+// Mensagens do WhatsApp só se associam a OS na Costura: as previstas nunca são oferecidas.
+export function opcoesAssociacaoMensagem(producao: Producao[], oficinaId: string, editaveis: string[] | undefined): Producao[] {
+  return producao.filter((p) => !p.prevista && p.oficinaId === oficinaId && (!editaveis?.length || editaveis.includes(p.dealId)));
+}
+
 export function totaisProducao(lista: Pick<Producao, 'pecas' | 'valorCorte'>[]): { pecas: number; valor: number } {
   const total = { pecas: 0, valor: 0 };
   for (const p of lista) {
@@ -109,7 +124,9 @@ export function totaisProducao(lista: Pick<Producao, 'pecas' | 'valorCorte'>[]):
   return total;
 }
 
-export function indicadoresProducao(lista: Producao[], hoje: string) {
+// Indicadores da Costura: as OS previstas não entram (ainda não chegaram).
+export function indicadoresProducao(todas: Producao[], hoje: string) {
+  const lista = todas.filter((p) => !p.prevista);
   const oficinas = new Set(lista.filter((p) => p.oficinaId).map((p) => p.oficinaId));
   return {
     os: lista.length,
@@ -131,7 +148,9 @@ export function resumoFaltasAviamentos(p: Pick<Producao, 'faltasCostura' | 'falt
 }
 
 export function janelaGantt(lista: Producao[], hoje: string): { inicio: string; fim: string; dias: number } {
-  const datas = lista.flatMap((p) => [p.inicioCostura, prazoProducao(p).data]).filter(Boolean);
+  const datas = lista.flatMap((p) => p.prevista
+    ? [p.inicioCosturaPrevisto ?? '', p.fimCosturaPrevisto ?? '']
+    : [p.inicioCostura, prazoProducao(p).data]).filter(Boolean);
   let inicio = [somarDias(hoje, -30), ...datas].sort()[0];
   let fim = [somarDias(hoje, 30), ...datas].sort().at(-1)!;
   if (diasInclusivos(inicio, fim) > 180) {

@@ -7,9 +7,10 @@ import { chaveBusca, prazoProducao, reais, situacaoPrazo } from './producao';
 
 export type ColunaProducao =
   | 'os' | 'peca' | 'referencia' | 'cliente' | 'oficina' | 'pecas' | 'valorCorte' | 'inicio' | 'combinada'
-  | 'leadTime' | 'prazo' | 'situacao' | 'faltasCostura' | 'faltasAcabamento' | 'sugestao';
+  | 'leadTime' | 'prazo' | 'situacao' | 'faltasCostura' | 'faltasAcabamento' | 'sugestao' | 'etapa' | 'chegada';
 
-export interface DefinicaoColuna { id: ColunaProducao; titulo: string; filtro: 'texto' | 'select'; numerica?: boolean }
+// soPrevistas: coluna que só aparece com "Incluir previstas" ligado (19/10).
+export interface DefinicaoColuna { id: ColunaProducao; titulo: string; filtro: 'texto' | 'select'; numerica?: boolean; soPrevistas?: boolean }
 
 export const COLUNAS_PRODUCAO: DefinicaoColuna[] = [
   { id: 'os', titulo: 'OS', filtro: 'texto' },
@@ -26,7 +27,9 @@ export const COLUNAS_PRODUCAO: DefinicaoColuna[] = [
   { id: 'situacao', titulo: 'Situação', filtro: 'select' },
   { id: 'faltasCostura', titulo: 'Faltas costura', filtro: 'texto', numerica: true },
   { id: 'faltasAcabamento', titulo: 'Faltas acabamento', filtro: 'texto', numerica: true },
-  { id: 'sugestao', titulo: 'Sugestão pendente', filtro: 'texto' }
+  { id: 'sugestao', titulo: 'Sugestão pendente', filtro: 'texto' },
+  { id: 'etapa', titulo: 'Etapa atual', filtro: 'select', soPrevistas: true },
+  { id: 'chegada', titulo: 'Chegada prevista', filtro: 'texto', soPrevistas: true }
 ];
 const IDS = new Set<string>(COLUNAS_PRODUCAO.map((c) => c.id));
 
@@ -36,7 +39,7 @@ export interface ValorCelula { exibir: string; ordem: string | number | null; fi
 export interface LinhaProducao { item: Producao; valores: Record<ColunaProducao, ValorCelula> }
 export interface OrdemTabela { coluna: ColunaProducao; direcao: 'asc' | 'desc' }
 export type FiltrosColuna = Partial<Record<ColunaProducao, string>>;
-export type VisaoProducao = 'GANTT' | 'TABELA';
+export type VisaoProducao = 'GANTT' | 'TABELA' | 'CARGA';
 export type AgrupamentoGantt = 'OFICINA' | 'ENTREGA';
 
 export function dataBr(iso: string): string {
@@ -44,6 +47,7 @@ export function dataBr(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
 }
 
+const ETAPA_COSTURA = '17. Costura';
 const texto = (v: string): ValorCelula => ({ exibir: v, ordem: v.trim() ? v : null });
 const data = (iso: string): ValorCelula => ({ exibir: dataBr(iso), ordem: dataBr(iso) ? iso.slice(0, 10) : null });
 const contagem = (n: number, sinal: string): ValorCelula => ({ exibir: n ? `${sinal} ${n}` : '—', ordem: n });
@@ -69,7 +73,11 @@ export function linhasTabela(lista: Producao[], hoje: string): LinhaProducao[] {
         situacao: { exibir: situacao.texto, ordem: situacao.dias, filtro: situacao.situacao },
         faltasCostura: contagem(p.faltasCostura.length, '🚫'),
         faltasAcabamento: contagem(p.faltasAcabamento.length, '⚠️'),
-        sugestao: { exibir: pendente ? 'Sim' : '—', ordem: pendente ? 1 : 0 }
+        sugestao: { exibir: pendente ? 'Sim' : '—', ordem: pendente ? 1 : 0 },
+        etapa: p.prevista
+          ? { exibir: p.etapaNome ?? '', ordem: p.etapaOrdem ?? null, filtro: p.etapaNome ?? '' }
+          : { exibir: ETAPA_COSTURA, ordem: 17, filtro: ETAPA_COSTURA },
+        chegada: data(p.prevista ? p.inicioCosturaPrevisto ?? '' : '')
       }
     };
   });
@@ -112,8 +120,8 @@ export function filtrarLinhas(linhas: LinhaProducao[], filtros: FiltrosColuna): 
   }));
 }
 
-export function colunasVisiveis(ocultas: string[]): DefinicaoColuna[] {
-  return COLUNAS_PRODUCAO.filter((c) => c.id === 'os' || !ocultas.includes(c.id));
+export function colunasVisiveis(ocultas: string[], incluirPrevistas = false): DefinicaoColuna[] {
+  return COLUNAS_PRODUCAO.filter((c) => c.id === 'os' || (!ocultas.includes(c.id) && (incluirPrevistas || !c.soPrevistas)));
 }
 
 // Preferências do navegador. localStorage pode lançar exceção (aba privada,
@@ -122,8 +130,22 @@ const CHAVE_VISAO = 'pcp-mrbl.producao.visao';
 const CHAVE_OCULTAS = 'pcp-mrbl.producao.colunasOcultas';
 const CHAVE_AGRUPAMENTO = 'pcp-mrbl.producao.agrupamento';
 
+const CHAVE_PREVISTAS = 'pcp-mrbl.producao.incluirPrevistas';
+
 export function lerVisao(): VisaoProducao {
-  try { return localStorage.getItem(CHAVE_VISAO) === 'TABELA' ? 'TABELA' : 'GANTT'; } catch { return 'GANTT'; }
+  try {
+    const v = localStorage.getItem(CHAVE_VISAO);
+    return v === 'TABELA' || v === 'CARGA' ? v : 'GANTT';
+  } catch { return 'GANTT'; }
+}
+
+// "Incluir previstas" (Gantt e Tabela): desligado por padrão.
+export function lerIncluirPrevistas(): boolean {
+  try { return localStorage.getItem(CHAVE_PREVISTAS) === 'SIM'; } catch { return false; }
+}
+
+export function salvarIncluirPrevistas(v: boolean): void {
+  try { localStorage.setItem(CHAVE_PREVISTAS, v ? 'SIM' : 'NAO'); } catch { /* fica só nesta aba */ }
 }
 
 export function salvarVisao(v: VisaoProducao): void {

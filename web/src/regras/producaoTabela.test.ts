@@ -2,7 +2,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
 import {
-  COLUNAS_PRODUCAO, colunasVisiveis, dataBr, filtrarLinhas, lerAgrupamento, lerColunasOcultas, lerVisao, linhasTabela,
+  COLUNAS_PRODUCAO, colunasVisiveis, dataBr, filtrarLinhas, lerAgrupamento, lerColunasOcultas, lerIncluirPrevistas, lerVisao, linhasTabela,
+  salvarIncluirPrevistas,
   ordenarLinhas, proximaOrdem, salvarAgrupamento, salvarColunasOcultas, salvarVisao, temFiltroColuna
 } from './producaoTabela';
 
@@ -38,6 +39,17 @@ describe('linhas da tabela', () => {
     expect(l.valores.faltasCostura.exibir).toBe('🚫 1');
     expect(l.valores.faltasAcabamento.exibir).toBe('⚠️ 2');
     expect(l.valores.sugestao.exibir).toBe('Sim');
+  });
+
+  it('etapa atual e chegada prevista: a prevista mostra a etapa dela; a da Costura, "17. Costura"', () => {
+    const [real, prevista] = linhasTabela([prod(), prod({
+      dealId: '710015', prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', inicioCosturaPrevisto: '2026-10-21', fimCosturaPrevisto: '2026-10-27'
+    })], HOJE);
+    expect(real.valores.etapa).toEqual({ exibir: '17. Costura', ordem: 17, filtro: '17. Costura' });
+    expect(real.valores.chegada.exibir).toBe('');
+    expect(prevista.valores.etapa).toEqual({ exibir: '15. Preparação 1', ordem: 15, filtro: '15. Preparação 1' });
+    expect(prevista.valores.chegada).toEqual({ exibir: '21/10/2026', ordem: '2026-10-21' });
+    expect(filtrarLinhas([real, prevista], { etapa: '15. Preparação 1' }).map((l) => l.item.dealId)).toEqual(['710015']);
   });
 
   it('mostra traço quando não há falta nem sugestão pendente', () => {
@@ -128,10 +140,17 @@ describe('filtro por coluna', () => {
 
 describe('colunas visíveis', () => {
   it('esconde as escolhidas, mas a OS fica sempre', () => {
-    const visiveis = colunasVisiveis(['cliente', 'os']).map((c) => c.id);
+    const visiveis = colunasVisiveis(['cliente', 'os'], true).map((c) => c.id);
     expect(visiveis).not.toContain('cliente');
     expect(visiveis[0]).toBe('os');
     expect(visiveis).toHaveLength(COLUNAS_PRODUCAO.length - 1);
+  });
+
+  it('Etapa atual e Chegada prevista só aparecem com "Incluir previstas"', () => {
+    expect(colunasVisiveis([]).map((c) => c.id)).not.toContain('etapa');
+    expect(colunasVisiveis([]).map((c) => c.id)).not.toContain('chegada');
+    expect(colunasVisiveis([], true).map((c) => c.id).slice(-2)).toEqual(['etapa', 'chegada']);
+    expect(colunasVisiveis(['chegada'], true).map((c) => c.id)).not.toContain('chegada');
   });
 });
 
@@ -142,8 +161,18 @@ describe('preferências lembradas no navegador', () => {
     expect(lerVisao()).toBe('GANTT');
     salvarVisao('TABELA');
     expect(lerVisao()).toBe('TABELA');
+    salvarVisao('CARGA');
+    expect(lerVisao()).toBe('CARGA');
     localStorage.setItem('pcp-mrbl.producao.visao', 'OUTRA');
     expect(lerVisao()).toBe('GANTT');
+  });
+
+  it('"Incluir previstas": desligado por padrão e lembrado', () => {
+    expect(lerIncluirPrevistas()).toBe(false);
+    salvarIncluirPrevistas(true);
+    expect(lerIncluirPrevistas()).toBe(true);
+    salvarIncluirPrevistas(false);
+    expect(lerIncluirPrevistas()).toBe(false);
   });
 
   it('agrupamento do Gantt: padrão Oficina e a escolha fica gravada', () => {

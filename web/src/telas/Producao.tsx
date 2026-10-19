@@ -4,7 +4,7 @@ import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { lerAgrupamento, lerVisao, salvarAgrupamento, salvarVisao, type AgrupamentoGantt, type VisaoProducao } from '../regras/producaoTabela';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, opcoesAssociacaoMensagem, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -21,7 +21,7 @@ function MensagemPendente({ mensagem, producao, editaveis, executar }: {
   editaveis: string[] | undefined;
   executar: Executar;
 }) {
-  const opcoes = producao.filter((p) => p.oficinaId === mensagem.oficinaId && (!editaveis?.length || editaveis.includes(p.dealId)));
+  const opcoes = opcoesAssociacaoMensagem(producao, mensagem.oficinaId, editaveis);
   const [dealId, setDealId] = useState(opcoes.length === 1 ? opcoes[0].dealId : '');
   const escolhida = opcoes.find((p) => p.dealId === dealId);
   return <li>
