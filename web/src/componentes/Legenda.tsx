@@ -18,6 +18,7 @@ export function LegendaProducao() {
       <span title="Prazo hoje ou nos próximos dias"><i className="legenda__barra gantt__barra gantt__barra--proximo" />Vence em breve</span>
       <span title="O prazo já passou"><i className="legenda__barra gantt__barra gantt__barra--atrasado" />Atrasada</span>
       <span title="Sem data de início da costura: aparece só o marco do prazo"><i className="legenda__marco" />Sem início</span>
+      <span title="OS ainda antes da Costura (Encaixe a Primeira Peça), com a Costura prevista pelo histórico"><i className="legenda__barra gantt__barra gantt__barra--prevista" />Prevista</span>
       <span title="Falta aviamento na caixa de costura: impede finalizar a costura"><b>🚫</b>Falta na costura</span>
       <span title="Falta aviamento na caixa de acabamento: precisa estar pronto quando a costura acabar"><b>⚠️</b>Falta no acabamento</span>
     </div>

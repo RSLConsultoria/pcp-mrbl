@@ -156,6 +156,16 @@ it('ordem de entrega: prazo vigente mais cedo primeiro, empate por OS e sem praz
   expect(lista[0].dealId).toBe('a');
 });
 
+it('ordem de entrega: a OS prevista entra pelo fim previsto da Costura', () => {
+  const lista = [
+    prod({ dealId: 'a', os: '90010', dataCombinada: '2026-10-30' }),
+    prod({ dealId: 'p1', os: '90020', prevista: true, dataCombinada: '', leadTime: '', fimCosturaPrevisto: '2026-10-20' }),
+    prod({ dealId: 'p2', os: '90021', prevista: true, dataCombinada: '', leadTime: '', fimCosturaPrevisto: '' }),
+    prod({ dealId: 'b', os: '90005', dataCombinada: '2026-10-25' })
+  ];
+  expect(ordenarPorEntrega(lista).map((p) => p.dealId)).toEqual(['p1', 'b', 'a', 'p2']);
+});
+
 describe('OS previstas (19/10)', () => {
   const prevista = prod({
     dealId: '710015', os: '10015', prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1',

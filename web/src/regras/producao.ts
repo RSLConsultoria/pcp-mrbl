@@ -69,10 +69,11 @@ export function agruparPorOficina(lista: Producao[]): [string, Producao[]][] {
 }
 
 // Gantt "Agrupar: Entrega" (19/10): um bloco só, pela data de entrega vigente
-// (combinada, senão lead time); empate pela OS; OS sem prazo no fim.
+// (combinada, senão lead time; a OS prevista usa o fim previsto da Costura);
+// empate pela OS; OS sem prazo no fim.
 export function ordenarPorEntrega(lista: Producao[]): Producao[] {
   return lista
-    .map((p) => ({ p, prazo: prazoProducao(p).data }))
+    .map((p) => ({ p, prazo: p.prevista ? p.fimCosturaPrevisto ?? '' : prazoProducao(p).data }))
     .sort((a, b) => {
       if (a.prazo !== b.prazo) {
         if (!a.prazo) return 1;

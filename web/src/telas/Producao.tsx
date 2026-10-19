@@ -4,8 +4,8 @@ import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { CargaProducao } from './ProducaoCarga';
-import { lerAgrupamento, lerVisao, salvarAgrupamento, salvarVisao, type AgrupamentoGantt, type VisaoProducao } from '../regras/producaoTabela';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, opcoesAssociacaoMensagem, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { lerAgrupamento, lerIncluirPrevistas, lerVisao, salvarAgrupamento, salvarIncluirPrevistas, salvarVisao, type AgrupamentoGantt, type VisaoProducao } from '../regras/producaoTabela';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, opcoesAssociacaoMensagem, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -101,6 +101,16 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
         </section>
         {alertaAviamentos.costura > 0 && <p className="producao-alerta-aviamentos producao-alerta-aviamentos--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.textoCostura}</p>}
         {alertaAviamentos.acabamento > 0 && <p className="producao-alerta-aviamentos producao-alerta-aviamentos--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.textoAcabamento}</p>}
+        {item.prevista && <section className="producao-secao producao-previsao" aria-label="Previsão da OS">
+          <h3>OS prevista <em className="etiqueta-prevista">prevista</em></h3>
+          <div className="producao-resumo">
+            <div><span>Etapa atual</span><strong>{item.etapaNome || '—'}</strong></div>
+            <div><span>Na etapa desde</span><strong>{ddmm(item.etapaInicio ?? '') || '—'}</strong></div>
+            <div><span>Chegada prevista à Costura</span><strong>{ddmm(item.inicioCosturaPrevisto ?? '') || '—'}</strong></div>
+            <div><span>Fim previsto da Costura</span><strong>{ddmm(item.fimCosturaPrevisto ?? '') || '—'}</strong></div>
+          </div>
+          {!item.inicioCosturaPrevisto && <p className="producao-vazio">OS sem peças informadas: sem previsão a partir do Corte.</p>}
+        </section>}
         <a className="producao-link" href={`https://app10.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
         <section className="producao-secao producao-edicao">
           <h3>Alterar combinado</h3>
@@ -130,7 +140,8 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
         </section>
         <section className="producao-secao producao-envio">
           <h3>Mensagem para a oficina</h3>
-          {!item.oficinaId ? <p className="producao-vazio">Aloque uma oficina antes de preparar a mensagem.</p>
+          {item.prevista ? <p className="producao-vazio">A mensagem para a oficina fica disponível quando a OS chegar à Costura.</p>
+            : !item.oficinaId ? <p className="producao-vazio">Aloque uma oficina antes de preparar a mensagem.</p>
             : !oficina?.grupoConfigurado ? <p className="producao-vazio">Configure o grupo desta oficina na aba OFICINAS.</p>
             : <>
               <label>Modelo<select value={modelo} disabled={!editavel} onChange={(e) => trocarModelo(e.target.value as ModeloMensagemProducao)}>
@@ -182,9 +193,10 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
   const [visao, setVisao] = useState<VisaoProducao>(lerVisao);
   const [agrupamento, setAgrupamento] = useState<AgrupamentoGantt>(lerAgrupamento);
   const [aberta, setAberta] = useState<string | null>(null);
+  const [incluirPrevistas, setIncluirPrevistas] = useState(lerIncluirPrevistas);
   const hojeIso = diaIso(hoje);
   const producao = board.producao ?? PRODUCAO_VAZIA;
-  const filtradas = useMemo(() => filtrarProducoes(producao, { busca: q, oficinaId, soComFalta, situacao, hoje: hojeIso }), [producao, q, oficinaId, soComFalta, situacao, hojeIso]);
+  const filtradas = useMemo(() => filtrarProducoes(producao, { busca: q, oficinaId, soComFalta, situacao, hoje: hojeIso, incluirPrevistas }), [producao, q, oficinaId, soComFalta, situacao, hojeIso, incluirPrevistas]);
   // A Carga sempre soma o que vem aí: inclui as previstas.
   const paraCarga = useMemo(() => visao === 'CARGA' ? filtrarProducoes(producao, { busca: q, oficinaId, soComFalta, situacao, hoje: hojeIso, incluirPrevistas: true }) : PRODUCAO_VAZIA,
     [visao, producao, q, oficinaId, soComFalta, situacao, hojeIso]);
@@ -197,11 +209,13 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
   const porEntrega = useMemo(() => agrupamento === 'ENTREGA' ? ordenarPorEntrega(filtradas) : [], [agrupamento, filtradas]);
   const trocarVisao = (v: VisaoProducao) => { setVisao(v); salvarVisao(v); };
   const trocarAgrupamento = (a: AgrupamentoGantt) => { setAgrupamento(a); salvarAgrupamento(a); };
+  const trocarPrevistas = (v: boolean) => { setIncluirPrevistas(v); salvarIncluirPrevistas(v); };
   const selecionada = producao.find((p) => p.dealId === aberta) ?? null;
   const semAssociacao = board.mensagensWhatsappSemAssociacao ?? [];
 
   // Linha do Gantt: igual nos dois agrupamentos; por entrega, mostra a oficina da OS.
   const linhaGantt = (p: ProducaoItem, comOficina: boolean) => {
+    if (p.prevista) return linhaPrevista(p, comOficina);
     const prazo = prazoProducao(p);
     const status = statusProducao(p, hojeIso);
     const alertaAviamentos = resumoFaltasAviamentos(p);
@@ -220,11 +234,30 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
     </div>;
   };
 
+  // OS prevista: barra tracejada da chegada prevista ao fim previsto, com a etiqueta "prevista".
+  const linhaPrevista = (p: ProducaoItem, comOficina: boolean) => {
+    const ini = p.inicioCosturaPrevisto ?? '';
+    const fim = p.fimCosturaPrevisto ?? '';
+    const esquerda = ini ? Math.max(0, indiceDia(ini, janela.inicio)) * LARGURA_DIA : 0;
+    const largura = ini && fim ? Math.max(16, (Math.min(janela.dias - 1, indiceDia(fim, janela.inicio)) - Math.max(0, indiceDia(ini, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
+    return <div className="gantt__linha gantt__linha--prevista" key={p.dealId}>
+      <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong>
+        <span className="gantt__os-texto"><span>{p.peca || p.referencia || 'Sem descrição'}</span>{comOficina && <span className={`gantt__oficina ${p.oficina === 'ALOCAR' ? 'gantt__oficina--alocar' : ''}`}>{p.oficina || 'Sem oficina'}</span>}</span>
+        <em className="etiqueta-prevista">prevista</em></button>
+      <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
+        {ini && fim ? <button type="button" onClick={() => setAberta(p.dealId)} title={tituloBarraPrevista(p)}
+          className="gantt__barra gantt__barra--prevista" style={{ left: esquerda + 3, width: largura }}><span>{textoBarraProducao(p)}</span></button>
+          : <button type="button" className="gantt__sem-prazo" onClick={() => setAberta(p.dealId)}>Sem previsão</button>}
+      </div>
+    </div>;
+  };
+
   return <div className="producao-tela">
     <div className="producao-filtros">
       <label>Oficina<select value={oficinaId} onChange={(e) => setOficinaId(e.target.value)}><option value="">Todas</option>{(board.oficinas ?? []).map((o) => <option key={o.ploomesId} value={o.ploomesId}>{o.nome}</option>)}</select></label>
       <label>Situação do prazo<select value={situacao} onChange={(e) => setSituacao(e.target.value as SituacaoPrazo | '')}><option value="">Todas</option>{SITUACOES_PRAZO.map((s) => <option key={s.valor} value={s.valor}>{s.rotulo}</option>)}</select></label>
       <label className="producao-check"><input type="checkbox" checked={soComFalta} onChange={(e) => setSoComFalta(e.target.checked)} /> Só com falta na costura</label>
+      {visao !== 'CARGA' && <label className="producao-check"><input type="checkbox" checked={incluirPrevistas} onChange={(e) => trocarPrevistas(e.target.checked)} /> Incluir previstas</label>}
       {visao === 'GANTT' && <div className="producao-agrupar" role="group" aria-label="Agrupar">
         <span>Agrupar</span>
         <div className="producao-visao">{(['OFICINA', 'ENTREGA'] as const).map((a) => <button key={a} type="button" aria-pressed={agrupamento === a} onClick={() => trocarAgrupamento(a)}>{a === 'OFICINA' ? 'Oficina' : 'Entrega'}</button>)}</div>
@@ -244,9 +277,9 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
       <ul>{semAssociacao.map((m) => <MensagemPendente key={m.id} mensagem={m} producao={producao}
         editaveis={board.dealsProducaoEditaveis} executar={executar} />)}</ul>
     </details>}
-    {visao === 'CARGA' && board.previsaoSemHistorico && <p className="producao-aviso" role="status">Previsão sem histórico: as OS previstas usam duração de 1 dia por etapa e fila zero até o cálculo diário das médias.</p>}
+    {(visao === 'CARGA' || incluirPrevistas) && board.previsaoSemHistorico && <p className="producao-aviso" role="status">Previsão sem histórico: as OS previstas usam duração de 1 dia por etapa e fila zero até o cálculo diário das médias.</p>}
     {visao === 'CARGA' ? <CargaProducao lista={paraCarga} oficinas={board.oficinas ?? []} hojeIso={hojeIso} oficinaId={oficinaId} ehAdm={ehAdm} executar={executar} onAbrir={setAberta} />
-      : visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} onAbrir={setAberta} /> : <div className="gantt__rolagem">
+      : visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} incluirPrevistas={incluirPrevistas} onAbrir={setAberta} /> : <div className="gantt__rolagem">
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>
         <div className="gantt__cabecalho gantt__fixo"><strong>{agrupamento === 'ENTREGA' ? 'OS por entrega' : 'Oficina / OS'}</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>
         <div className="gantt__dias" style={{ width: janela.dias * LARGURA_DIA }}>{dias.map((d) => <div key={d} className={`${d === hojeIso ? 'gantt__dia--hoje' : ''} ${[0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()) ? 'gantt__dia--fim' : ''}`}><span>{d.slice(8)}</span></div>)}</div>

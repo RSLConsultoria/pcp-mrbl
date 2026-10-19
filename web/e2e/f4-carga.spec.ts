@@ -126,3 +126,43 @@ test('Carga: OS prevista abre o painel só leitura, mesmo com a OS na lista de e
   await lista.getByRole('button', { name: /OS 20001/ }).click();
   await expect(page.getByRole('complementary', { name: 'Detalhes da OS 20001' }).getByRole('button', { name: 'Salvar combinado' })).toBeVisible();
 });
+
+test('Incluir previstas: Gantt com barra tracejada e Tabela com Etapa atual e Chegada prevista; escolha lembrada', async ({ page }) => {
+  await entrar(page, { semHistorico: true });
+  await expect(page.getByRole('button', { name: /OS 10015/ })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: 'Previsão sem histórico' })).toHaveCount(0);
+  await page.getByLabel('Incluir previstas').check();
+  await expect(page.getByRole('status').filter({ hasText: 'Previsão sem histórico' })).toBeVisible();
+  const barra = page.getByTitle('OS 10015 · prevista · 15. Preparação 1 · 28/10 a 03/11 · 60 pç');
+  await expect(barra).toHaveClass(/gantt__barra--prevista/);
+  await expect(page.locator('.gantt__linha--prevista .etiqueta-prevista').first()).toHaveText('prevista');
+  // Indicadores da Costura não contam as previstas.
+  await expect(page.getByText('OS na Costura').locator('..')).toContainText('2');
+
+  await page.getByRole('group', { name: 'Visão' }).getByRole('button', { name: 'Tabela' }).click();
+  await expect(page.getByRole('columnheader', { name: 'Etapa atual' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Chegada prevista' })).toBeVisible();
+  const linha = page.locator('.producao-tabela tbody tr').filter({ hasText: '10015' });
+  await expect(linha).toContainText('prevista');
+  await expect(linha).toContainText('15. Preparação 1');
+  await expect(linha).toContainText('28/10/2026');
+  await page.getByLabel('Filtrar Etapa atual').selectOption('17. Costura');
+  await expect(page.locator('.producao-tabela tbody tr td:first-child')).toHaveText(['20001', '20002']);
+
+  await page.reload();
+  await expect(page.getByLabel('Incluir previstas')).toBeChecked();
+  await page.getByLabel('Incluir previstas').uncheck();
+  await expect(page.getByRole('columnheader', { name: 'Etapa atual' })).toHaveCount(0);
+});
+
+test('painel da OS prevista mostra a etapa e as datas previstas e não oferece mensagem à oficina', async ({ page }) => {
+  await entrar(page);
+  await page.getByLabel('Incluir previstas').check();
+  await page.getByRole('button', { name: /OS 10015/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 10015' });
+  const previsao = painel.getByRole('region', { name: 'Previsão da OS' });
+  await expect(previsao).toContainText('15. Preparação 1');
+  await expect(previsao).toContainText('28/10');
+  await expect(previsao).toContainText('03/11');
+  await expect(painel).toContainText('A mensagem para a oficina fica disponível quando a OS chegar à Costura.');
+});

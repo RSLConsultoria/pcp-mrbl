@@ -8,14 +8,15 @@ import {
 
 // Visão em tabela do Controle de produção. Recebe a lista já filtrada pelos
 // filtros gerais e na ordem do Gantt; ordena, filtra por coluna e abre o painel.
-export function TabelaProducao({ lista, hojeIso, onAbrir }: { lista: Producao[]; hojeIso: string; onAbrir: (dealId: string) => void }) {
+export function TabelaProducao({ lista, hojeIso, incluirPrevistas = false, onAbrir }: { lista: Producao[]; hojeIso: string; incluirPrevistas?: boolean; onAbrir: (dealId: string) => void }) {
   const [ordem, setOrdem] = useState<OrdemTabela | null>(null);
   const [filtros, setFiltros] = useState<FiltrosColuna>({});
   const [ocultas, setOcultas] = useState<ColunaProducao[]>(lerColunasOcultas);
   const linhas = useMemo(() => linhasTabela(lista, hojeIso), [lista, hojeIso]);
   const visiveis = useMemo(() => ordenarLinhas(filtrarLinhas(linhas, filtros), ordem), [linhas, filtros, ordem]);
-  const colunas = colunasVisiveis(ocultas);
+  const colunas = colunasVisiveis(ocultas, incluirPrevistas);
   const oficinas = useMemo(() => [...new Set(lista.map((p) => p.oficina))], [lista]);
+  const etapas = useMemo(() => [...new Set(linhas.map((l) => l.valores.etapa.exibir).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })), [linhas]);
   const algumFiltro = temFiltroColuna(filtros);
   const totais = useMemo(() => totaisProducao(visiveis.map((l) => l.item)), [visiveis]);
 
@@ -33,7 +34,7 @@ export function TabelaProducao({ lista, hojeIso, onAbrir }: { lista: Producao[];
       {algumFiltro && <button type="button" className="botao botao--contorno" onClick={() => setFiltros({})}>Limpar filtros</button>}
       <details className="producao-tabela__colunas">
         <summary>Colunas</summary>
-        <div>{COLUNAS_PRODUCAO.map((c) => <label key={c.id}>
+        <div>{COLUNAS_PRODUCAO.filter((c) => incluirPrevistas || !c.soPrevistas).map((c) => <label key={c.id}>
           <input type="checkbox" checked={c.id === 'os' || !ocultas.includes(c.id)} disabled={c.id === 'os'}
             onChange={(e) => alternarColuna(c.id, e.target.checked)} />{c.titulo}
         </label>)}</div>
@@ -54,6 +55,8 @@ export function TabelaProducao({ lista, hojeIso, onAbrir }: { lista: Producao[];
               <option value="">Todas</option>{oficinas.map((o) => <option key={o} value={o}>{o}</option>)}</select>
               : c.id === 'situacao' ? <select aria-label={`Filtrar ${c.titulo}`} value={filtros.situacao ?? ''} onChange={(e) => setFiltros({ ...filtros, situacao: e.target.value })}>
                 <option value="">Todas</option>{SITUACOES_PRAZO.map((s) => <option key={s.valor} value={s.valor}>{s.rotulo}</option>)}</select>
+              : c.id === 'etapa' ? <select aria-label={`Filtrar ${c.titulo}`} value={filtros.etapa ?? ''} onChange={(e) => setFiltros({ ...filtros, etapa: e.target.value })}>
+                <option value="">Todas</option>{etapas.map((e) => <option key={e} value={e}>{e}</option>)}</select>
               : <input type="search" aria-label={`Filtrar ${c.titulo}`} placeholder="Filtrar" value={filtros[c.id] ?? ''}
                 onChange={(e) => setFiltros({ ...filtros, [c.id]: e.target.value })} />}
           </th>)}</tr>
@@ -62,7 +65,8 @@ export function TabelaProducao({ lista, hojeIso, onAbrir }: { lista: Producao[];
           onClick={() => onAbrir(l.item.dealId)} onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(l.item.dealId); }}>
           {colunas.map((c) => <td key={c.id} className={[c.numerica ? 'producao-tabela__num' : '',
             c.id === 'situacao' ? `producao-tabela__situacao--${(l.valores.situacao.filtro ?? '').toLowerCase()}` : ''].join(' ').trim() || undefined}>
-            {l.valores[c.id].exibir || '—'}</td>)}
+            {l.valores[c.id].exibir || '—'}
+            {c.id === 'os' && l.item.prevista && <em className="etiqueta-prevista">prevista</em>}</td>)}
         </tr>)}</tbody>
       </table>
       {visiveis.length === 0 && <p className="gantt__vazio">Nenhuma OS encontrada com estes filtros.</p>}
