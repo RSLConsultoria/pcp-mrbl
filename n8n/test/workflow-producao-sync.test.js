@@ -181,6 +181,7 @@ test('sync consulta as previstas dos funis PCP e Produção em aberto, uma vez s
   assert.match(prev.parameters.url, /PipelineId%20eq%2060011710/);
   assert.match(prev.parameters.url, /PipelineId%20eq%2060015827/);
   assert.match(prev.parameters.url, /StatusId%20eq%201/);
+  for (const id of [60054173, 60054175, 60073485, 60073486, 60073487]) assert.match(prev.parameters.url, new RegExp('StageId%20eq%20' + id));
   assert.match(prev.parameters.url, /Stage\(\$select=Id,Name\)/);
   assert.match(prev.parameters.url, /&\$orderby=Id(&|$)/);
   assert.equal(prev.retryOnFail, true);

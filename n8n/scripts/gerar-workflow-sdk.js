@@ -464,9 +464,12 @@ const buscarPloomes = (varName, nome, url, extra) => `const ${varName} = node({
 const PLOOMES = 'https://public-api2.ploomes.com/';
 const FUNIS_PREVISAO = '(PipelineId%20eq%20' + lote.FUNIL_PCP + '%20or%20PipelineId%20eq%20' + lote.FUNIL_PRODUCAO + ')';
 const URL_COSTURA = PLOOMES + 'Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$orderby=Id&$top=100';
-// Etapas 12 a 16 (previstas): OS em aberto dos funis PCP e Produção. A etapa sai do
-// nome do estágio ("12. Encaixe"); o filtro 12–16 fica no Code node (separarPrevistas).
-const URL_PREVISTAS = PLOOMES + 'Deals?$filter=' + FUNIS_PREVISAO + '%20and%20StatusId%20eq%201&$expand=OtherProperties,Stage($select=Id,Name)&$select=Id,Title,ContactName,LastUpdateDate,StageId&$orderby=Id&$top=100';
+// Etapas 12 a 16 (previstas): OS em aberto, filtradas na consulta pelos 5 StageIds
+// (Encaixe, Estratégico 2, Corte, Preparação 1 e 1ª Peça). A etapa sai do nome do
+// estágio ("12. Encaixe"); o filtro 12–16 no Code node (separarPrevistas) é a segunda proteção.
+const ESTAGIOS_PREVISTAS = [60054173, 60054175, 60073485, 60073486, 60073487];
+const FILTRO_ESTAGIOS_PREVISTAS = '(' + ESTAGIOS_PREVISTAS.map((id) => 'StageId%20eq%20' + id).join('%20or%20') + ')';
+const URL_PREVISTAS = PLOOMES + 'Deals?$filter=' + FUNIS_PREVISAO + '%20and%20' + FILTRO_ESTAGIOS_PREVISTAS + '%20and%20StatusId%20eq%201&$expand=OtherProperties,Stage($select=Id,Name)&$select=Id,Title,ContactName,LastUpdateDate,StageId&$orderby=Id&$top=100';
 
 posAtual = POS_SYNC_PRODUCAO;
 RETRY = RETRY_API;
