@@ -37,6 +37,7 @@ export interface LinhaProducao { item: Producao; valores: Record<ColunaProducao,
 export interface OrdemTabela { coluna: ColunaProducao; direcao: 'asc' | 'desc' }
 export type FiltrosColuna = Partial<Record<ColunaProducao, string>>;
 export type VisaoProducao = 'GANTT' | 'TABELA';
+export type AgrupamentoGantt = 'OFICINA' | 'ENTREGA';
 
 export function dataBr(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
@@ -119,6 +120,7 @@ export function colunasVisiveis(ocultas: string[]): DefinicaoColuna[] {
 // bloqueio de dados do site): aí vale o padrão e nada é lembrado.
 const CHAVE_VISAO = 'pcp-mrbl.producao.visao';
 const CHAVE_OCULTAS = 'pcp-mrbl.producao.colunasOcultas';
+const CHAVE_AGRUPAMENTO = 'pcp-mrbl.producao.agrupamento';
 
 export function lerVisao(): VisaoProducao {
   try { return localStorage.getItem(CHAVE_VISAO) === 'TABELA' ? 'TABELA' : 'GANTT'; } catch { return 'GANTT'; }
@@ -126,6 +128,14 @@ export function lerVisao(): VisaoProducao {
 
 export function salvarVisao(v: VisaoProducao): void {
   try { localStorage.setItem(CHAVE_VISAO, v); } catch { /* fica só nesta aba */ }
+}
+
+export function lerAgrupamento(): AgrupamentoGantt {
+  try { return localStorage.getItem(CHAVE_AGRUPAMENTO) === 'ENTREGA' ? 'ENTREGA' : 'OFICINA'; } catch { return 'OFICINA'; }
+}
+
+export function salvarAgrupamento(a: AgrupamentoGantt): void {
+  try { localStorage.setItem(CHAVE_AGRUPAMENTO, a); } catch { /* fica só nesta aba */ }
 }
 
 export function lerColunasOcultas(): ColunaProducao[] {

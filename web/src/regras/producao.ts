@@ -66,6 +66,22 @@ export function agruparPorOficina(lista: Producao[]): [string, Producao[]][] {
   return [...mapa.entries()];
 }
 
+// Gantt "Agrupar: Entrega" (19/10): um bloco só, pela data de entrega vigente
+// (combinada, senão lead time); empate pela OS; OS sem prazo no fim.
+export function ordenarPorEntrega(lista: Producao[]): Producao[] {
+  return lista
+    .map((p) => ({ p, prazo: prazoProducao(p).data }))
+    .sort((a, b) => {
+      if (a.prazo !== b.prazo) {
+        if (!a.prazo) return 1;
+        if (!b.prazo) return -1;
+        return a.prazo < b.prazo ? -1 : 1;
+      }
+      return a.p.os.localeCompare(b.p.os, 'pt-BR', { numeric: true });
+    })
+    .map(({ p }) => p);
+}
+
 const ehNumero = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v);
 
 // Reais sem centavos: "R$ 12.345".

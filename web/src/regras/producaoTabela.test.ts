@@ -2,8 +2,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
 import {
-  COLUNAS_PRODUCAO, colunasVisiveis, dataBr, filtrarLinhas, lerColunasOcultas, lerVisao, linhasTabela,
-  ordenarLinhas, proximaOrdem, salvarColunasOcultas, salvarVisao, temFiltroColuna
+  COLUNAS_PRODUCAO, colunasVisiveis, dataBr, filtrarLinhas, lerAgrupamento, lerColunasOcultas, lerVisao, linhasTabela,
+  ordenarLinhas, proximaOrdem, salvarAgrupamento, salvarColunasOcultas, salvarVisao, temFiltroColuna
 } from './producaoTabela';
 
 const HOJE = '2026-10-13';
@@ -144,6 +144,14 @@ describe('preferências lembradas no navegador', () => {
     expect(lerVisao()).toBe('TABELA');
     localStorage.setItem('pcp-mrbl.producao.visao', 'OUTRA');
     expect(lerVisao()).toBe('GANTT');
+  });
+
+  it('agrupamento do Gantt: padrão Oficina e a escolha fica gravada', () => {
+    expect(lerAgrupamento()).toBe('OFICINA');
+    salvarAgrupamento('ENTREGA');
+    expect(lerAgrupamento()).toBe('ENTREGA');
+    localStorage.setItem('pcp-mrbl.producao.agrupamento', 'OUTRO');
+    expect(lerAgrupamento()).toBe('OFICINA');
   });
 
   it('colunas ocultas ignoram lixo e colunas desconhecidas', () => {

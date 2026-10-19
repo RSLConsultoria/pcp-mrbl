@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
+import { agruparPorOficina, ordenarPorEntrega, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -140,4 +140,18 @@ describe('texto da barra do Gantt: peças e valor do corte', () => {
     expect(totaisProducao([prod({ pecas: 100, valorCorte: 1000 }), prod({ pecas: null, valorCorte: 500.5 }), prod({ pecas: 20, valorCorte: null })]))
       .toEqual({ pecas: 120, valor: 1500.5 });
   });
+});
+
+it('ordem de entrega: prazo vigente mais cedo primeiro, empate por OS e sem prazo no fim', () => {
+  const lista = [
+    prod({ dealId: 'a', os: '90010', dataCombinada: '', leadTime: '' }),
+    prod({ dealId: 'b', os: '90005', dataCombinada: '2026-10-15' }),
+    prod({ dealId: 'c', os: '90003', dataCombinada: '', leadTime: '2026-10-12' }),
+    prod({ dealId: 'd', os: '90004', dataCombinada: '2026-10-15' }),
+    prod({ dealId: 'e', os: '90001', dataCombinada: '', leadTime: '' }),
+    prod({ dealId: 'f', os: '900100', dataCombinada: '2026-10-15' })
+  ];
+  expect(ordenarPorEntrega(lista).map((p) => p.dealId)).toEqual(['c', 'd', 'b', 'f', 'e', 'a']);
+  // Não altera a lista recebida.
+  expect(lista[0].dealId).toBe('a');
 });
