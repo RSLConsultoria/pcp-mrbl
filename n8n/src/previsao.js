@@ -208,6 +208,24 @@ function campoConfigurado(chave) {
 }
 
 
+// FieldKeys que cada consulta ao Ploomes precisa trazer em OtherProperties (o gerador
+// monta o $expand filtrado com elas). Derivadas das constantes acima e das de producao.js:
+// campo novo lido pelas funções de normalização entra aqui, senão vira dado vazio.
+// Chave por configurar (CONFIGURAR_) fica de fora.
+function fieldKeysConsulta(consulta) {
+  var producao = [CAMPO_OFICINA_PLOOMES, CAMPO_DATA_COMBINADA_PLOOMES, CAMPO_OS_PRODUCAO, CAMPO_INICIO_COSTURA,
+    CAMPO_LEAD_TIME, CAMPO_PECAS_CORTE, CAMPO_DESCRICAO_PECA, CAMPO_REFERENCIA, CAMPO_VALOR_CORTE];
+  var entradas = [12, 13, 14, 15, 16].map(function (e) { return CAMPOS_ENTRADA_ETAPA[e]; });
+  var chaves;
+  if (consulta === 'costura') chaves = producao;
+  else if (consulta === 'previstas') chaves = producao.concat(entradas, [CAMPO_PCP_COMPLETO, CAMPO_PECAS_PEDIDO]);
+  else if (consulta === 'negocios_previsao') chaves = [CAMPO_OFICINA_PLOOMES, CAMPO_PECAS_CORTE, CAMPO_PECAS_PEDIDO, CAMPO_PCP_COMPLETO];
+  else if (consulta === 'registros_previsao') chaves = [CAMPO_REGISTRO_INICIO, CAMPO_REGISTRO_TERMINO];
+  else throw new Error('Consulta desconhecida: ' + consulta);
+  return chaves.filter(function (c, i) { return campoConfigurado(c) && chaves.indexOf(c) === i; });
+}
+
+
 // Número da etapa no texto do registro de interação. Formato real confirmado em
 // 19/10/2026 ("Dado data 12. Encaixe"); o parser continua tolerante e isolado. Aceita "Etapa: 17", "Estágio 17", "17. Costura" e
 // "Etapa 17. Costura" (com ou sem HTML); devolve null quando não acha 1–30.

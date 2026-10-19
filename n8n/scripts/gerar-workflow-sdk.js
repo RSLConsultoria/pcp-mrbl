@@ -462,14 +462,11 @@ const buscarPloomes = (varName, nome, url, extra) => `const ${varName} = node({
 });`;
 
 const PLOOMES = 'https://public-api2.ploomes.com/';
-const FUNIS_PREVISAO = '(PipelineId%20eq%20' + lote.FUNIL_PCP + '%20or%20PipelineId%20eq%20' + lote.FUNIL_PRODUCAO + ')';
-const URL_COSTURA = PLOOMES + 'Deals?$filter=PipelineId%20eq%2060015827%20and%20StageId%20eq%2060073488&$expand=OtherProperties&$select=Id,Title,ContactName,LastUpdateDate&$orderby=Id&$top=100';
-// Etapas 12 a 16 (previstas): OS em aberto, filtradas na consulta pelos 5 StageIds
-// (Encaixe, Estratégico 2, Corte, Preparação 1 e 1ª Peça). A etapa sai do nome do
-// estágio ("12. Encaixe"); o filtro 12–16 no Code node (separarPrevistas) é a segunda proteção.
-const ESTAGIOS_PREVISTAS = [60054173, 60054175, 60073485, 60073486, 60073487];
-const FILTRO_ESTAGIOS_PREVISTAS = '(' + ESTAGIOS_PREVISTAS.map((id) => 'StageId%20eq%20' + id).join('%20or%20') + ')';
-const URL_PREVISTAS = PLOOMES + 'Deals?$filter=' + FUNIS_PREVISAO + '%20and%20' + FILTRO_ESTAGIOS_PREVISTAS + '%20and%20StatusId%20eq%201&$expand=OtherProperties,Stage($select=Id,Name)&$select=Id,Title,ContactName,LastUpdateDate,StageId&$orderby=Id&$top=100';
+const { urlsPloomes } = require('./gerar-workflow-sdk-urls');
+// As URLs entram em strings com aspas simples no SDK: as aspas do $filter vão escapadas.
+const escAspas = (u) => u.split("'").join(String.fromCharCode(92) + "'");
+const URL_COSTURA = escAspas(urlsPloomes.costura);
+const URL_PREVISTAS = escAspas(urlsPloomes.previstas);
 
 posAtual = POS_SYNC_PRODUCAO;
 RETRY = RETRY_API;
@@ -863,8 +860,8 @@ export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar 
 // nova, nunca apaga). Falha de leitura: médias anteriores ficam e vai para ERROS_APP.
 // Todos os registros com o marcador (a média de Costura por oficina não tem janela)
 // e os negócios dos dois funis, em qualquer situação.
-const URL_REGISTROS_PREVISAO = PLOOMES + 'InteractionRecords?$filter=Tags/any(t:%20t/TagId%20eq%20' + lote.MARCADOR_HISTORICO_PREVISAO + ')&$expand=OtherProperties&$select=Id,DealId,Content&$orderby=Id&$top=100';
-const URL_NEGOCIOS_PREVISAO = PLOOMES + 'Deals?$filter=' + FUNIS_PREVISAO + '&$expand=OtherProperties&$select=Id&$orderby=Id&$top=100';
+const URL_REGISTROS_PREVISAO = escAspas(urlsPloomes.registrosPrevisao);
+const URL_NEGOCIOS_PREVISAO = escAspas(urlsPloomes.negociosPrevisao);
 const POS_MEDIAS = {};
 [['Todo dia às 3h', 0, 0], ['Ler Médias Atuais', 1, 0], ['Buscar Registros no Ploomes', 2, 0],
   ['Buscar Negócios no Ploomes', 3, 0], ['Montar Médias', 4, 0], ['Tem Escritas?', 5, 0],
