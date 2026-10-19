@@ -103,8 +103,8 @@ const estado = {
   dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008'],
   dealsProducaoEditaveis: ['700002', '700003', '700005'],
   oficinas: [
-    { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL' },
-    { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '' }
+    { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL', capacidadeSemana: 300 },
+    { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null }
   ],
   mensagensWhatsappSemAssociacao: [{
     id: 'MSG-SEM-1', quando: new Date(Date.now() - 900_000).toISOString(), participanteNome: 'Pessoa da oficina',
@@ -683,6 +683,20 @@ function alterarProducao(c, usuario) {
   return { ok: true, versao: p.versao, historico: h, historicos: [h] };
 }
 
+// Capacidade da oficina (19/10): as mesmas regras de validarCapacidadeOficina (n8n/src/producao.js).
+function alterarCapacidade(c) {
+  if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar a capacidade das oficinas.');
+  if (!String(c.oficinaId ?? '').trim()) throw bad('Informe a oficina.');
+  const v = c.capacidade;
+  const vazio = v === null || v === undefined || String(v).trim() === '';
+  const n = vazio ? null : typeof v === 'number' ? v : /^\d+$/.test(String(v).trim()) ? Number(v) : NaN;
+  if (!vazio && (!Number.isInteger(n) || n < 0 || n > 1_000_000)) throw bad('Informe a capacidade em peças por semana: número inteiro, 0 ou mais.');
+  const oficina = estado.oficinas.find((o) => o.ploomesId === c.oficinaId);
+  if (!oficina) throw new Erro(404, 'Oficina não encontrada.');
+  oficina.capacidadeSemana = n;
+  return { ok: true, versao: agoraIso(), historico: null, historicos: [] };
+}
+
 function decidirSugestao(c, usuario, aceitar) {
   const p = estado.producao.find((x) => x.dealId === c.dealId);
   if (!p) throw new Erro(404, 'OS não encontrada na produção.');
@@ -796,6 +810,7 @@ function processar(corpo, usuario) {
     case 'associar_whatsapp': return associarWhatsapp(corpo, usuario);
     case 'enviar_whatsapp': return enviarWhatsapp(corpo, usuario);
     case 'reenviar_whatsapp': return reenviarWhatsapp(corpo, usuario);
+    case 'alterar_capacidade_oficina': return alterarCapacidade(corpo);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);

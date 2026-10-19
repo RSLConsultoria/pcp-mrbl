@@ -155,6 +155,7 @@ export interface OficinaProducao {
   nome: string;
   grupoConfigurado: boolean;
   grupoNome: string;
+  capacidadeSemana?: number | null; // peças por semana (aba OFICINAS); null/ausente = sem capacidade
 }
 
 export interface Board {
@@ -205,7 +206,9 @@ export type Acao =
   // mesma ação enviada de novo não cria segunda linha.
   | { tipo: 'enviar_whatsapp'; dealId: string; versao: string; modelo: 'COBRANCA_PRAZO' | 'CONFIRMAR_DATA'; texto: string; chave: string }
   | { tipo: 'reenviar_whatsapp'; dealId: string; mensagemId: string; versao: string; confirmou: true }
-  | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] };
+  | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] }
+  // Só ADM. capacidade null = sem capacidade (a carga aparece sem cor de alerta).
+  | { tipo: 'alterar_capacidade_oficina'; oficinaId: string; capacidade: number | null };
 
 export interface DadosPedido {
   origem: OrigemPedido;

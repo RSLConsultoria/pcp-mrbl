@@ -314,3 +314,22 @@ describe('aplicarPendentes', () => {
     expect(b.pedidos!.map((p) => p.id)).toEqual(['novo:1', 'novo:2']);
   });
 });
+
+describe('capacidade da oficina (19/10)', () => {
+  const oficinas = [{ ploomesId: 'of-1', nome: 'OFICINA A', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null }];
+  it('aplica na hora e null limpa; oficina fora da lista não muda nada', () => {
+    let b = aplicar(quadro({ oficinas }), { tipo: 'alterar_capacidade_oficina', oficinaId: 'of-1', capacidade: 600 });
+    expect(b.oficinas?.[0].capacidadeSemana).toBe(600);
+    b = aplicar(b, { tipo: 'alterar_capacidade_oficina', oficinaId: 'of-1', capacidade: null });
+    expect(b.oficinas?.[0].capacidadeSemana).toBeNull();
+    const sem = quadro({ oficinas });
+    expect(aplicar(sem, { tipo: 'alterar_capacidade_oficina', oficinaId: 'of-9', capacidade: 10 })).toBe(sem);
+  });
+  it('confirmada sai quando o board mostra a capacidade gravada; não tem versão', () => {
+    const acao: Acao = { tipo: 'alterar_capacidade_oficina', oficinaId: 'of-1', capacidade: 600 };
+    const p = pend(1, acao, { estado: 'confirmada', confirmadaEm: 1, versaoNova: 't' });
+    expect(pendentesVivos([p], quadro({ oficinas }), 5)).toEqual([p]);
+    expect(pendentesVivos([p], quadro({ oficinas: [{ ...oficinas[0], capacidadeSemana: 600 }] }), 5)).toEqual([]);
+    expect(versaoNoBoard(quadro({ oficinas }), acao)).toBeUndefined();
+  });
+});

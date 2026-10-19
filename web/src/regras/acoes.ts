@@ -99,6 +99,8 @@ export function mensagemSucesso(
       return 'Reenvio colocado na fila do WhatsApp';
     case 'salvar_etapas':
       return 'Etapas do quadro salvas';
+    case 'alterar_capacidade_oficina':
+      return acao.capacidade === null ? 'Capacidade da oficina removida' : `Capacidade da oficina: ${acao.capacidade.toLocaleString('pt-BR')} peças por semana`;
   }
 }
 
@@ -160,6 +162,7 @@ export function chaveDaAcao(acao: Acao): string {
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
   if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';
   if (acao.tipo === 'salvar_etapas') return 'etapas';
+  if (acao.tipo === 'alterar_capacidade_oficina') return `oficina:${acao.oficinaId}`;
   if (acao.tipo === 'nova_demanda') return `demanda:${acao.os}:${acao.caixa}`;
   return `caixa:${acao.dealId}`;
 }

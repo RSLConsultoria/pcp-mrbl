@@ -206,6 +206,10 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
         ...board,
         etapasPedido: acao.etapas.map((e, k) => ({ id: e.id ?? `${PREFIXO_NOVO}${ctx.n}.${k}`, nome: e.nome.trim(), ordem: k + 1 }))
       };
+    case 'alterar_capacidade_oficina':
+      // Como o servidor: só oficina que está na lista; null limpa a capacidade.
+      if (!board.oficinas?.some((o) => o.ploomesId === acao.oficinaId)) return board;
+      return { ...board, oficinas: board.oficinas.map((o) => (o.ploomesId === acao.oficinaId ? { ...o, capacidadeSemana: acao.capacidade } : o)) };
     case 'gerar_pedido': {
       const id = `${PREFIXO_NOVO}${ctx.n}`;
       const itens: ItemPedido[] = acao.itens.map((x) => {
@@ -348,6 +352,8 @@ export function acaoNoBoard(board: Board, p: Pendente): boolean {
       const ids = new Set(board.caixas.flatMap((c) => c.itens.map((i) => i.id)));
       return !!r.itemIds?.length && r.itemIds.every((id) => ids.has(id));
     }
+    case 'alterar_capacidade_oficina':
+      return (board.oficinas?.find((o) => o.ploomesId === a.oficinaId)?.capacidadeSemana ?? null) === a.capacidade;
     case 'salvar_etapas': {
       const atuais = etapasOrdenadas(board.etapasPedido ?? []).map((e) => e.nome.trim());
       const salvas = a.etapas.map((e) => e.nome.trim());
