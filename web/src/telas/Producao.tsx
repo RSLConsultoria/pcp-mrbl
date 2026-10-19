@@ -50,7 +50,8 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
   const [modelo, setModelo] = useState<ModeloMensagemProducao>('COBRANCA_PRAZO');
   const [mensagem, setMensagem] = useState(() => modeloMensagemProducao('COBRANCA_PRAZO', item, hojeIso));
   const [enfileirando, setEnfileirando] = useState(false);
-  const editavel = !board.dealsProducaoEditaveis?.length || board.dealsProducaoEditaveis.includes(item.dealId);
+  // OS prevista ainda não chegou na Costura: o servidor recusa escrita, então o painel é só leitura.
+  const editavel = !item.prevista && (!board.dealsProducaoEditaveis?.length || board.dealsProducaoEditaveis.includes(item.dealId));
   const oficina = board.oficinas?.find((o) => o.ploomesId === item.oficinaId);
   const salvar = () => {
     const e = validarMudancaProducao(item, { oficinaId, dataCombinada, motivo });
@@ -110,7 +111,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           </div>
           {erro && <p className="campo__erro" role="alert">{erro}</p>}
           {editavel ? <button type="button" className="botao botao--signal" onClick={salvar}>Salvar combinado</button>
-            : <p className="producao-vazio">Edição liberada em breve para esta OS.</p>}
+            : <p className="producao-vazio">{item.prevista ? 'OS ainda não chegou na Costura: só leitura.' : 'Edição liberada em breve para esta OS.'}</p>}
         </section>
         <section className="producao-secao">
           <h3>Prazo</h3>

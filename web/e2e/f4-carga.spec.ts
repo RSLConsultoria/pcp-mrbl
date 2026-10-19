@@ -105,3 +105,24 @@ test('Carga: perfil sem ADM vê a capacidade mas não edita', async ({ page }) =
   await expect(page.getByText('100 pç/semana')).toBeVisible();
   await expect(page.getByRole('button', { name: /Editar capacidade/ })).toHaveCount(0);
 });
+
+test('Carga: OS prevista abre o painel só leitura, mesmo com a OS na lista de editáveis', async ({ page }) => {
+  await page.route(LOGIN, (r) => r.fulfill({ json: sessao('ADM') }));
+  await page.route(BOARD, (r) => r.fulfill({ json: { ...base, producao, oficinas, mensagensWhatsappSemAssociacao: [],
+    dealsProducaoEditaveis: ['720001', '720015'], previsaoSemHistorico: false } }));
+  await page.goto('./#producao');
+  await page.getByLabel('E-mail').fill('pcp@teste.local');
+  await page.getByLabel('Senha').fill('senha-ficticia');
+  await page.getByRole('button', { name: 'Entrar' }).click();
+  await page.getByRole('group', { name: 'Visão' }).getByRole('button', { name: 'Carga' }).click();
+  await celula(page, 'OFICINA ALFA, semana 26/10: 86 / 100 peças').click();
+  const lista = page.getByRole('region', { name: 'OS da célula' });
+  await lista.getByRole('button', { name: /OS 10015/ }).click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 10015' });
+  await expect(painel).toContainText('OS ainda não chegou na Costura: só leitura.');
+  await expect(painel.getByRole('button', { name: 'Salvar combinado' })).toHaveCount(0);
+  await expect(painel.getByRole('button', { name: 'Colocar na fila' })).toHaveCount(0);
+  // A OS real, também editável, mantém os controles.
+  await lista.getByRole('button', { name: /OS 20001/ }).click();
+  await expect(page.getByRole('complementary', { name: 'Detalhes da OS 20001' }).getByRole('button', { name: 'Salvar combinado' })).toBeVisible();
+});

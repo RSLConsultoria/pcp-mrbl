@@ -6,6 +6,7 @@ import { lerCapacidade, montarCarga, textoCelula, type OsNaCelula } from '../reg
 // Visão Carga do Controle de produção (19/10): oficinas x semanas, "peças / capacidade"
 // com cor. Recebe a lista já filtrada (reais e previstas). Clique na célula lista as OS;
 // clique na OS abre o painel. ADM edita a capacidade clicando no nome da oficina.
+const TITULO_COR: Record<string, string> = { VERDE: 'Dentro da capacidade', AMARELO: 'Perto do limite', VERMELHO: 'Acima da capacidade', SEM_CAPACIDADE: 'Sem capacidade cadastrada' };
 const pc = (n: number) => Math.round(n).toLocaleString('pt-BR');
 
 export function CargaProducao({ lista, oficinas, hojeIso, oficinaId, ehAdm, executar, onAbrir }: {
@@ -62,6 +63,7 @@ export function CargaProducao({ lista, oficinas, hojeIso, oficinaId, ehAdm, exec
             </th>
             {l.celulas.map((c, k) => <td key={c.semana}>
               <button type="button" className={`carga__celula carga__celula--${c.cor.toLowerCase()}`}
+                title={TITULO_COR[c.cor]}
                 aria-label={`${l.oficina}, semana ${carga.semanas[k].rotulo}: ${textoCelula(c)} peças`}
                 onClick={() => setCelula({ titulo: `${l.oficina} · semana ${carga.semanas[k].rotulo}`, os: c.os })}>{textoCelula(c)}</button>
             </td>)}
