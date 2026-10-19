@@ -4,7 +4,7 @@ import { workflow, node, trigger, ifElse, splitInBatches, nextBatch, expr } from
 
 const agendaProducao = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'A cada 5 minutos',
     parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } },
@@ -37,7 +37,7 @@ const lerSnapshotProducao = node({
 
 const buscarProducao = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
+  version: 4.2,
   config: {
     name: 'Buscar Produção no Ploomes',
     retryOnFail: true,
@@ -69,7 +69,7 @@ const buscarProducao = node({
 
 const buscarPrevistas = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
+  version: 4.2,
   config: {
     name: 'Buscar Previstas no Ploomes',
     executeOnce: true,

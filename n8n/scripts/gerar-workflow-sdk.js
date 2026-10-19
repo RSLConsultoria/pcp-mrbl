@@ -431,7 +431,7 @@ export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
 // extra: executeOnce quando o node vem depois de outro que devolve várias páginas.
 const buscarPloomes = (varName, nome, url, extra) => `const ${varName} = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
+  version: 4.2,
   config: {
     name: '${nome}',
     ${extra || ''}retryOnFail: true,
@@ -474,7 +474,7 @@ const urlSnapshotProducao = lote.urlLeitura(DOC, lote.LEITURAS_SYNC_PRODUCAO);
 const syncProducao = IMPORT_API + [
   `const agendaProducao = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'A cada 5 minutos',
     parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } },
@@ -535,7 +535,7 @@ RETRY = RETRY_API;
 const whatsappSaida = IMPORT + [
   `const agendaWhatsapp = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'A cada 2 minutos',
     parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 2 }] } },
@@ -550,7 +550,7 @@ const whatsappSaida = IMPORT + [
   'const deveEnviarWhatsapp = ' + condicao('Deve Enviar?', "{{ $('Selecionar Saida WhatsApp').first().json.status_envio }}", 'string', 'equals', "'ENVIANDO'") + ';',
   `const enviarWhatsapp = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.4,
+  version: 4.2,
   config: {
     name: 'Enviar pela Evolution',
     onError: 'continueRegularOutput',
@@ -574,7 +574,7 @@ const whatsappSaida = IMPORT + [
   // e pode vir depois de a mensagem sair). Fechada ou sem resposta: nem envia.
   `const consultarConexao = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.4,
+  version: 4.2,
   config: {
     name: 'Consultar Conexão',
     onError: 'continueRegularOutput',
@@ -824,7 +824,7 @@ RETRY = RETRY_API;
 const retentarInterpretacao = IMPORT + [
   `const agendaRetentar = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'A cada 15 minutos',
     parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
@@ -873,7 +873,7 @@ RETRY = RETRY_API;
 const mediasPrevisao = IMPORT_API + [
   `const agendaMedias = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'Todo dia às 3h',
     parameters: { rule: { interval: [{ field: 'days', daysInterval: 1, triggerAtHour: 3 }] } },

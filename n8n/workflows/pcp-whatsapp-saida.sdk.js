@@ -4,7 +4,7 @@ import { workflow, node, trigger, ifElse, expr } from '@n8n/workflow-sdk';
 
 const agendaWhatsapp = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'A cada 2 minutos',
     parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 2 }] } },
@@ -101,7 +101,7 @@ const deveEnviarWhatsapp = ifElse({
 
 const enviarWhatsapp = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.4,
+  version: 4.2,
   config: {
     name: 'Enviar pela Evolution',
     onError: 'continueRegularOutput',
@@ -134,7 +134,7 @@ const resultadoWhatsapp = node({
 
 const consultarConexao = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.4,
+  version: 4.2,
   config: {
     name: 'Consultar Conexão',
     onError: 'continueRegularOutput',

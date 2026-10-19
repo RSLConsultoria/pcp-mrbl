@@ -4,7 +4,7 @@ import { workflow, node, trigger, ifElse, splitInBatches, nextBatch, expr } from
 
 const agendaMedias = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'Todo dia às 3h',
     parameters: { rule: { interval: [{ field: 'days', daysInterval: 1, triggerAtHour: 3 }] } },
@@ -37,7 +37,7 @@ const lerMediasAtuais = node({
 
 const buscarRegistros = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
+  version: 4.2,
   config: {
     name: 'Buscar Registros no Ploomes',
     retryOnFail: true,
@@ -69,7 +69,7 @@ const buscarRegistros = node({
 
 const buscarNegocios = node({
   type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
+  version: 4.2,
   config: {
     name: 'Buscar Negócios no Ploomes',
     executeOnce: true,

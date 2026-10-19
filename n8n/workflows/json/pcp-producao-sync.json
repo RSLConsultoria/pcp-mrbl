@@ -5,7 +5,7 @@
    "id": "9598bb38-e691-4a89-8797-2450b20c2423",
    "name": "A cada 5 minutos",
    "type": "n8n-nodes-base.scheduleTrigger",
-   "typeVersion": 1.4,
+   "typeVersion": 1.3,
    "position": [
     0,
     0
@@ -54,7 +54,7 @@
    "id": "8b5064f9-6985-461c-8959-cc5966796b25",
    "name": "Buscar Produção no Ploomes",
    "type": "n8n-nodes-base.httpRequest",
-   "typeVersion": 4.5,
+   "typeVersion": 4.2,
    "position": [
     440,
     0
@@ -106,7 +106,7 @@
    "id": "31790e8a-f645-4d4a-8301-cf450cdf6e35",
    "name": "Buscar Previstas no Ploomes",
    "type": "n8n-nodes-base.httpRequest",
-   "typeVersion": 4.5,
+   "typeVersion": 4.2,
    "position": [
     660,
     0

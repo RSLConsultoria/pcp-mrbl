@@ -4,7 +4,7 @@ import { workflow, node, trigger, ifElse, expr } from '@n8n/workflow-sdk';
 
 const agendaRetentar = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
-  version: 1.4,
+  version: 1.3,
   config: {
     name: 'A cada 15 minutos',
     parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
