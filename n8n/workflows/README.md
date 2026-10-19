@@ -38,7 +38,7 @@ Na API (`pcp-api` e `pcp-api-homolog`), depois de gravar uma `associar_whatsapp`
 
 **Novas tentativas do intérprete (16/10).** Toda mensagem que precisa do intérprete fica com `interpretacao_status` = `PENDENTE`, `interpretacao_tentativas` e `interpretacao_proxima`. A entrada já grava a mensagem com a 1ª tentativa reservada (tentativas 1, próxima em 10 min); a associação manual grava tentativas 0 e próxima em 10 min (se o disparo falhar, o agendamento pega); o Interpretar WhatsApp reserva cada tentativa (node **Gravar Tentativa de Interpretação**, tentativas + 1, próxima em 10 min) antes de chamar o modelo. Se a chamada falhar (erro, cota, fora do ar, resposta inválida), nada mais é gravado além do `ERROS_APP`. O workflow novo **PCP MRBL - Retentar Interpretação** (`workflows/json/pcp-retentar-interpretacao.json`), a cada 15 minutos, lê PRODUCAO, WHATSAPP_MENSAGENS e WHATSAPP_SUGESTOES, deduplica as linhas físicas (vale a primeira) e, num batchUpdate só (**Marcar Tentativas** → **Gravar Tentativas**), marca `ERRO` nas mensagens que já tiveram 5 tentativas sem sugestão (a conversa mostra "Não foi possível interpretar esta mensagem.") e **conta a tentativa** das vencidas (tentativas + 1, próxima em 10 min). Só depois de gravar manda até 10 vencidas por rodada, uma a uma, ao Interpretar WhatsApp (Execute Workflow `each`) com `reservada: true`; nesse caso o Interpretar só renova a próxima, sem contar de novo. Assim, mesmo que o Interpretar nunca chegue a rodar (id errado, falha ao ler o contexto), a mensagem vira `ERRO` depois de 5 rodadas. Se a gravação das tentativas falhar, o workflow para sem disparar. Sucesso é ter sugestão para a mensagem (uma por mensagem, em qualquer status): por isso não é preciso limpar o status. Interpretação válida, inclusive `OBSERVACAO`, gera sugestão e encerra as tentativas.
 
-**Ordem de publicação da F4 (WhatsApp), depois do aceite do dono:**
+**Ordem de publicação da F4 (WhatsApp).** Não publique a F4 sozinha: o go-live é conjunto com a visão de futuro e vale a **sequência única** da seção seguinte. Os passos abaixo detalham as etapas da F4 que entram nela:
 
 0. **Colunas:** acrescente as cinco colunas novas no fim da `WHATSAPP_MENSAGENS` (`envio_tentativas`, `envio_proxima`, `interpretacao_status`, `interpretacao_tentativas`, `interpretacao_proxima`), sem reordenar.
 1. **Subworkflow do intérprete:** crie-o no n8n (modelo e credencial ficam fora do repositório) e **publique-o**. No n8n 2.x o Execute Workflow chama a **versão publicada** do subworkflow; um rascunho salvo não vale.
@@ -60,13 +60,12 @@ O usuário "ALOCAR" do Ploomes ("Será produzido por") pode aparecer como linha 
 
 As ações de produção (alterar, WhatsApp, sugestões, associação) recusam OS prevista com 409 "Esta OS ainda não chegou na Costura.".
 
-**Ordem de publicação da visão de futuro, depois do aceite do dono:**
+**Sequência única de publicação (F4 + visão de futuro), depois do aceite do dono.** O go-live é conjunto; siga esta ordem e use os passos da F4 acima como detalhe:
 
-0. **Planilha:** crie a aba `PREVISAO_MEDIAS` (só o cabeçalho), as seis colunas novas no fim da `PRODUCAO` e `capacidade_semana` no fim da `OFICINAS`, sem reordenar nada. O board e o sync leem a aba nova: sem ela, o `batchGet` dá 400.
-1. **Homologação dos campos:** numa leitura real (sem gravar), confirme o texto dos registros marcados e as FieldKeys; troque os `CONFIGURAR_*`, rode os testes e o build e commite.
-2. **Conferência com o BI (fora do repositório):** calcule a previsão de 5 OS reais e compare com o BI do dono antes de seguir.
-3. **PCP MRBL - Médias de Previsão:** crie a partir do JSON (commit fixo), execute uma vez à mão, confira a `PREVISAO_MEDIAS` e só então ative.
-4. **PCP MRBL - Sincronizar Produção:** republique com o JSON novo (passa a ter 12 nodes).
+1. **Planilha primeiro, antes de qualquer API ou sync:** todas as abas e colunas das duas frentes, sem reordenar nada. F4: abas `PRODUCAO`, `OFICINAS`, `WHATSAPP_MENSAGENS`, `WHATSAPP_SUGESTOES` e as cinco colunas novas no fim da `WHATSAPP_MENSAGENS` (passo 0 da F4). Visão de futuro: aba `PREVISAO_MEDIAS` (só o cabeçalho), as seis colunas novas no fim da `PRODUCAO` e `capacidade_semana` no fim da `OFICINAS`. O board e o sync leem as abas novas: sem elas, o `batchGet` dá 400.
+2. **Homologação dos campos:** numa leitura real (sem gravar), confirme o texto dos registros marcados e as FieldKeys; troque os `CONFIGURAR_*`, rode os testes e o build e commite. Ainda aqui, restrinja o `$expand=OtherProperties` às FieldKeys realmente usadas e filtre por `StageId` das etapas 12 a 16 na URL das previstas e no Médias de Previsão, medindo memória e tempo na primeira execução manual (sem mudar o comportamento, só reduzir o volume lido).
+3. **Conferência com o BI (fora do repositório):** calcule a previsão de 5 OS reais e compare com o BI do dono, incluindo pelo menos uma OS na etapa 16 e uma com peças do corte = 0, antes de seguir.
+4. **Workflows:** subworkflow do intérprete e Interpretar WhatsApp (publicados), ids em `ids-subworkflows.js`, Receber e Enviar WhatsApp (reaplicar o caminho secreto), **PCP MRBL - Médias de Previsão** (a partir do JSON em commit fixo, execute uma vez à mão, confira a `PREVISAO_MEDIAS` e só então ative), **Sincronizar Produção** (JSON novo, 12 nodes) e **Retentar Interpretação** (ativar por último, depois da API).
 5. **API:** homologação (`dI2NUYzxfApYM8iA`) e, com o ok do dono, produção (`WpuXpcSa5oGiEkTm`).
 6. **Site:** merge na `main` e push; peça para todo mundo recarregar.
 
