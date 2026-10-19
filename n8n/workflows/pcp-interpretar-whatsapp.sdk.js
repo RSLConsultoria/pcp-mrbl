@@ -107,7 +107,7 @@ const interpretarComModeloManual = node({
     onError: 'continueErrorOutput',
     parameters: {
       source: 'database',
-      workflowId: { __rl: true, value: 'CONFIGURAR_INTERPRETE', mode: 'id' },
+      workflowId: { __rl: true, value: 'pTRkYh6xs7HGM7CM', mode: 'id' },
       mode: 'once',
       options: { waitForSubWorkflow: true }
     },
