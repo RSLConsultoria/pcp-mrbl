@@ -75,7 +75,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
           : tela === 'saidas' ? <Saidas board={board} q={q} hoje={hoje} onSelecionarParaPedido={selecionarParaPedido} />
           : tela === 'pedidos' ? <Pedidos board={board} q={q} filtro={filtro} janela={janela} selecao={selecao} executar={executar}
               onJanela={setJanela} onSelecao={setSelecao} />
-          : tela === 'producao' ? <Producao board={board} q={q} hoje={hoje} executar={executar} />
+          : tela === 'producao' ? <Producao board={board} q={q} hoje={hoje} executar={executar} ehAdm={ehAdm} />
           : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} />}
       </main>
     </div>
