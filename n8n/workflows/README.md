@@ -12,12 +12,13 @@ Esta seção documenta o contrato já implementado e testado localmente para o G
 
 Quando a homologação for autorizada, crie as abas abaixo somente com o cabeçalho exato na linha 1. Nunca ordene nem apague suas linhas.
 
-> **Obrigatório antes de publicar qualquer API desta branch, inclusive a homologação:** crie as abas **PRODUCAO**, **OFICINAS**, **WHATSAPP_MENSAGENS** e **WHATSAPP_SUGESTOES**, com os cabeçalhos abaixo, **antes** de rodar o Utilitário Deploy. O homolog usa a mesma planilha, e o `values:batchGet` do board e da ação já lê essas quatro abas: aba inexistente dá 400 e derruba o board e todas as ações (inclusive as da F3).
+> **Obrigatório antes de publicar qualquer API desta branch, inclusive a homologação:** crie as abas **PRODUCAO**, **OFICINAS**, **WHATSAPP_MENSAGENS**, **WHATSAPP_SUGESTOES** e **PREVISAO_MEDIAS**, com os cabeçalhos abaixo, **antes** de rodar o Utilitário Deploy. O homolog usa a mesma planilha, e o `values:batchGet` do board e da ação já lê essas cinco abas: aba inexistente dá 400 e derruba o board e todas as ações (inclusive as da F3).
 
-- **PRODUCAO**: `deal_id` | `os` | `oficina_id` | `oficina_nome` | `inicio_costura` | `data_combinada` | `lead_time` | `pecas` | `cliente` | `peca` | `referencia` | `em_costura` | `atualizado_em_ploomes` | `sincronizado_em` | `valor_corte`. A coluna `valor_corte` (16/10, "Valor Total - Corte Real" do Ploomes, número em R$) entra **no fim**, sem reordenar as existentes. **Crie-a antes de publicar o Sincronizar Produção:** o sync grava essa coluna e recusa a gravação inteira se ela faltar na aba.
-- **OFICINAS**: `ploomes_id` | `nome` | `grupo_jid` | `grupo_nome` | `ativo` | `atualizado_em`. O sync só pode alterar `ploomes_id`, `nome` e `atualizado_em`; os demais campos são humanos.
+- **PRODUCAO**: `deal_id` | `os` | `oficina_id` | `oficina_nome` | `inicio_costura` | `data_combinada` | `lead_time` | `pecas` | `cliente` | `peca` | `referencia` | `em_costura` | `atualizado_em_ploomes` | `sincronizado_em` | `valor_corte`. A coluna `valor_corte` (16/10, "Valor Total - Corte Real" do Ploomes, número em R$) entra **no fim**, sem reordenar as existentes. **Crie-a antes de publicar o Sincronizar Produção:** o sync grava essa coluna e recusa a gravação inteira se ela faltar na aba. Visão de futuro (19/10): mais seis colunas no fim, nesta ordem e depois de valor_corte: etapa_ordem | etapa_nome | etapa_inicio | prevista | inicio_costura_previsto | fim_costura_previsto. A OS na Costura fica em_costura = SIM e prevista = NAO; a OS das etapas 12 a 16 fica em_costura = NAO e prevista = SIM. Crie-as antes de publicar o Sincronizar Produção: o sync grava todas e recusa a gravação inteira se faltar uma.
+- **OFICINAS**: `ploomes_id` | `nome` | `grupo_jid` | `grupo_nome` | `ativo` | `atualizado_em`. O sync só pode alterar `ploomes_id`, `nome` e `atualizado_em`; os demais campos são humanos. Visão de futuro (19/10): capacidade_semana no fim (depois de atualizado_em), em peças por semana; vazio = sem capacidade. Só a ação alterar_capacidade_oficina (ADM) grava essa coluna; o sync não mexe nela.
 - **WHATSAPP_MENSAGENS**: `id` | `evolution_id` | `quando` | `grupo_jid` | `grupo_nome` | `participante_jid` | `participante_nome` | `direcao` | `tipo` | `tipo_conteudo` | `texto` | `resposta_a_evolution_id` | `deal_id` | `os` | `oficina_id` | `associacao` | `status_envio` | `erro` | `criado_em` | `envio_tentativas` | `envio_proxima` | `interpretacao_status` | `interpretacao_tentativas` | `interpretacao_proxima`. As cinco últimas (novas tentativas do envio e do intérprete, 16/10) entram **no fim**, nessa ordem, sem reordenar as colunas existentes. **Crie-as antes de publicar a API, a entrada e o Interpretar WhatsApp:** a entrada e a associação manual gravam `interpretacao_*`, e a gravação recusa a operação inteira se faltar a coluna (a entrada responderia 503 à Evolution). Ids das mensagens enviadas pelo site: `WA-E-<chave do clique>` (a mesma ação repetida não cria segunda linha) e, no reenvio, `WA-RE-<id da original>` (um reenvio por original; a linha existente é o vínculo).
 - **WHATSAPP_SUGESTOES**: `id` | `mensagem_id` | `deal_id` | `os` | `tipo` | `valor` | `resumo` | `evidencia` | `confianca` | `status` | `criado_em` | `decidido_em` | `decidido_por` | `versao`.
+- **PREVISAO_MEDIAS** (19/10): tipo | etapa | faixa | oficina_id | valor | amostra | calculado_em | chave. Gravada só pelo workflow PCP MRBL - Médias de Previsão. chave = tipo|etapa|faixa|oficina_id (a linha é casada por ela). tipo: DURACAO (etapa, faixa), DURACAO_GERAL, DURACAO_PCP, FILA (etapa, faixa; vale só com amostra >= 5), FILA_GERAL, COSTURA_OFICINA (17, faixa, oficina_id). Chave que sumiu do cálculo fica com valor vazio e amostra 0: nunca ordene nem apague linhas. Aba só com o cabeçalho funciona (a tela avisa "Previsão sem histórico").
 
 As operações da F4 recusam a ação antes da primeira escrita se faltar uma coluna usada por ela. O navegador não recebe `grupo_jid`, `participante_jid`, IDs internos da Evolution nem credenciais. O workflow de entrada apenas registra e sugere: ele não pode conter node de envio ou resposta ao grupo.
 
@@ -48,6 +49,28 @@ Na API (`pcp-api` e `pcp-api-homolog`), depois de gravar uma `associar_whatsapp`
 6. **PCP MRBL - Retentar Interpretação:** crie a partir de `workflows/json/pcp-retentar-interpretacao.json` e ative.
 
 Se a API for publicada com o marcador, a associação continua funcionando, mas nenhuma interpretação é disparada (o disparo falha e segue para a resposta); a mensagem fica a interpretar e o Retentar a pega quando o id estiver certo.
+
+**Visão de futuro e carga das oficinas (19/10).** O motor de previsão (`n8n/src/previsao.js`) reimplementa a regra do BI do dono. O workflow novo **PCP MRBL - Médias de Previsão** (`workflows/json/pcp-medias-previsao.json`) roda todo dia às 3h (fuso de São Paulo): lê todos os registros de interação com o marcador 60151285 e os negócios dos funis PCP (60011710) e Produção (60015827), calcula durações, filas e a Costura por oficina e grava a `PREVISAO_MEDIAS`. Falha de leitura, página inválida ou nenhum registro reconhecido: nada é gravado (as médias anteriores ficam) e vai uma linha `medias_previsao` para o `ERROS_APP`. O **Sincronizar Produção** passa a ler também as OS em aberto desses dois funis (node **Buscar Previstas no Ploomes**), filtra as etapas 12 a 16 pelo número no nome do estágio (12 e 13 só com "PCP completo pelo Ploomes?" = sim) e grava a chegada e o fim previstos da Costura nas colunas novas da `PRODUCAO`.
+
+O Sincronizar Produção passa a depender também da consulta das previstas (todos os cards em aberto dos funis PCP e Produção a cada 5 min): se ela falhar após os retries, o ciclo vai para o erro e a Costura também não atualiza. Acompanhe a duração e os 429 na homologação.
+
+Marcadores `CONFIGURAR_*` em `n8n/src/previsao.js` (não são segredo; trocar pelas chaves reais na homologação, rodar `npm test && npm run build` e commitar): `CAMPO_PECAS_PEDIDO`, `CAMPO_PCP_COMPLETO`, `CAMPO_REGISTRO_INICIO`, `CAMPO_REGISTRO_TERMINO` e `CAMPOS_ENTRADA_ETAPA` (12 a 16). Enquanto houver marcador, o campo é lido como vazio: nenhuma OS das etapas 12 e 13 entra, a previsão usa o fallback (duração 1, fila 0) e o Médias de Previsão só registra o aviso. Enquanto houver `CONFIGURAR_*`, o Médias de Previsão grava 1 linha por dia no ERROS_APP (esperado). Conferir também, numa leitura real, o formato do texto dos registros (onde fica o número da etapa; o parser é `etapaDoTextoRegistro`) e se o filtro `Tags/any(t: t/TagId eq 60151285)` é aceito pelo Ploomes.
+
+O usuário "ALOCAR" do Ploomes ("Será produzido por") pode aparecer como linha na OFICINAS: é de propósito (escolher ALOCAR na tela grava esse usuário); a Carga não o mostra como oficina e manda essas OS para "A alocar".
+
+As ações de produção (alterar, WhatsApp, sugestões, associação) recusam OS prevista com 409 "Esta OS ainda não chegou na Costura.".
+
+**Ordem de publicação da visão de futuro, depois do aceite do dono:**
+
+0. **Planilha:** crie a aba `PREVISAO_MEDIAS` (só o cabeçalho), as seis colunas novas no fim da `PRODUCAO` e `capacidade_semana` no fim da `OFICINAS`, sem reordenar nada. O board e o sync leem a aba nova: sem ela, o `batchGet` dá 400.
+1. **Homologação dos campos:** numa leitura real (sem gravar), confirme o texto dos registros marcados e as FieldKeys; troque os `CONFIGURAR_*`, rode os testes e o build e commite.
+2. **Conferência com o BI (fora do repositório):** calcule a previsão de 5 OS reais e compare com o BI do dono antes de seguir.
+3. **PCP MRBL - Médias de Previsão:** crie a partir do JSON (commit fixo), execute uma vez à mão, confira a `PREVISAO_MEDIAS` e só então ative.
+4. **PCP MRBL - Sincronizar Produção:** republique com o JSON novo (passa a ter 12 nodes).
+5. **API:** homologação (`dI2NUYzxfApYM8iA`) e, com o ok do dono, produção (`WpuXpcSa5oGiEkTm`).
+6. **Site:** merge na `main` e push; peça para todo mundo recarregar.
+
+Rollback: volte API, sync e site juntos e desative o Médias de Previsão. As colunas e a aba novas podem ficar (as versões anteriores não as leem).
 
 ### A. Antes do deploy: credencial e planilha
 
@@ -104,6 +127,7 @@ Nada daqui muda o que a API atual (antiga) faz.
 - O **"Faltantes Painel"** lê a FALTANTES e **mostra as linhas `POS_SAIDA`**. Avise quem usa o painel.
 - Falha de gravação: o site mostra "Falha ao gravar na planilha. Avise o PCP antes de tentar de novo." e a ERROS_APP ganha uma linha (parte da ação pode ter sido gravada). Confira a aba antes de repetir a ação.
 - O cache do board dura 55 s: mudança feita direto na planilha pode levar até isso para aparecer.
+- A PREVISAO_MEDIAS é só do workflow de médias: não edite à mão, não ordene e não apague linhas.
 
 ### G. Rollback (os dois lados juntos)
 
