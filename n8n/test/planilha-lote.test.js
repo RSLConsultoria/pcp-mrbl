@@ -349,3 +349,24 @@ test('F4: cabecalho obrigatorio ausente falha antes de gerar qualquer requisicao
   const p = planilha([['PRODUCAO', [['deal_id', 'os'], ['700001', '90001']]], ['HISTORICO_APP', [['id']]]]);
   assert.throws(() => req([op('PRODUCAO', 'update', 'deal_id', { deal_id: '700001', data_combinada: '2026-10-20' })], [], p), /Cabeçalho obrigatório.*PRODUCAO.*data_combinada/);
 });
+
+test('PREVISAO_MEDIAS: append da chave nova depois da última linha e update só de valor/amostra/calculado_em', () => {
+  const CAB = ['tipo', 'etapa', 'faixa', 'oficina_id', 'valor', 'amostra', 'calculado_em', 'chave'];
+  const p = planilha([['PREVISAO_MEDIAS', [CAB, ['DURACAO', 15, '02. Médio', '', 3, 1, 'T0', 'DURACAO|15|02. Médio|']]]]);
+  const ops = ctx.operacoesMediasPrevisao([
+    { tipo: 'DURACAO', etapa: 15, faixa: '02. Médio', oficina_id: '', valor: 4, amostra: 2 },
+    { tipo: 'FILA_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 1.5, amostra: 2 }
+  ], p.linhas.PREVISAO_MEDIAS, 'T1');
+  const r = req(ops, [], p);
+  assert.equal(r.length, 2);
+  assert.equal(decodeURIComponent(r[0].url), BASE + "/'PREVISAO_MEDIAS'!A3:append?valueInputOption=RAW&insertDataOption=OVERWRITE");
+  assert.deepEqual(r[0].body.values, [['FILA_GERAL', 17, '', '', 1.5, 2, 'T1', 'FILA_GERAL|17||']]);
+  assert.deepEqual(r[1].body.data, [{ range: "'PREVISAO_MEDIAS'!E2:G2", values: [[4, 2, 'T1']] }]);
+  assert.equal(r[1].repetir, true);
+});
+
+test('PREVISAO_MEDIAS sem a coluna chave: falha antes de qualquer requisição', () => {
+  const p = planilha([['PREVISAO_MEDIAS', [['tipo', 'etapa', 'faixa', 'oficina_id', 'valor', 'amostra', 'calculado_em']]]]);
+  const ops = ctx.operacoesMediasPrevisao([{ tipo: 'FILA_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 1.5, amostra: 2 }], [], 'T1');
+  assert.throws(() => req(ops, [], p), /Cabeçalho obrigatório ausente: PREVISAO_MEDIAS\.chave/);
+});

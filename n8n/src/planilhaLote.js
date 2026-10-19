@@ -24,6 +24,8 @@ var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PED
 var LEITURAS_WHATSAPP_ENTRADA = ['OFICINAS', 'PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'FALTANTES', 'CAIXAS GANHAS'];
 // Agendamento das novas tentativas do intérprete (workflow Retentar Interpretação).
 var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
+// Workflow diário "PCP MRBL - Médias de Previsão".
+var LEITURAS_MEDIAS_PREVISAO = ['PREVISAO_MEDIAS'];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
 // appendOrUpdate = atualiza se achar a chave, senao inclui; append = inclui.
@@ -44,12 +46,15 @@ var DESTINOS_ESCRITA = [
   { aba: 'WHATSAPP_MENSAGENS', operacao: 'appendOrUpdate', chave: 'id' },
   { aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id' },
   { aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id' },
-  { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id' }
+  { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id' },
+  // Médias da previsão (19/10): linha casada pela coluna chave (tipo|etapa|faixa|oficina_id).
+  { aba: 'PREVISAO_MEDIAS', operacao: 'append', chave: 'chave' },
+  { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
 var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
-var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1 };
+var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1, PREVISAO_MEDIAS: 1 };
 var ABA_HISTORICO = 'HISTORICO_APP';
 // Falha numa gravacao (depois das tentativas): uma linha na aba ERROS_APP (colunas
 // quando, usuario, tipo, deal_id, passo, url, erro) e 500 com este aviso para o site.

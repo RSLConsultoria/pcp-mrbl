@@ -105,3 +105,120 @@ test('projeção sem médias usa o fallback do BI (duração 1, fila 0); sem pe�
   assert.equal(ctx.projetarOs({ etapa: 17, dtInicio: '', pecas: 30, oficinaId: '' }, vazio, HOJE), null);
   assert.equal(ctx.projetarOs({ etapa: 11, dtInicio: '', pecas: 30, oficinaId: '' }, vazio, HOJE), null);
 });
+
+test('etapa no texto do registro de interação (parser tolerante; formato real a confirmar)', () => {
+  assert.equal(ctx.etapaDoTextoRegistro('<p>Etapa: 17</p><p>Início 01/10</p>'), 17);
+  assert.equal(ctx.etapaDoTextoRegistro('Passagem pelo estágio 14 concluída'), 14);
+  assert.equal(ctx.etapaDoTextoRegistro('Mudou para 15. Preparação 1 em 02/10/2026'), 15);
+  assert.equal(ctx.etapaDoTextoRegistro('Sem número de etapa'), null);
+  assert.equal(ctx.etapaDoTextoRegistro('Etapa 99'), null);
+});
+
+test('FieldKeys por configurar são lidas como vazias', () => {
+  assert.equal(ctx.campoConfigurado('CONFIGURAR_CAMPO_PCP_COMPLETO'), false);
+  assert.equal(ctx.campoConfigurado('deal_00000000-0000-0000-0000-000000000000'), true);
+  const deal = { Id: 1, OtherProperties: [{ FieldKey: 'CONFIGURAR_CAMPO_PECAS_PEDIDO', IntegerValue: 999 }] };
+  assert.equal(ctx.normalizarDealPrevisao(deal).pecas, 0);
+  assert.equal(ctx.normalizarDealPrevisao(deal).pcpCompleto, false);
+});
+
+// Histórico fictício: hoje = 19/10/2026, janela a partir de 22/04/2026.
+const DEALS = {
+  800001: { dealId: '800001', pecas: 100, oficinaId: 'of-1', pcpCompleto: true },
+  800002: { dealId: '800002', pecas: 120, oficinaId: 'of-1', pcpCompleto: false },
+  800003: { dealId: '800003', pecas: 40, oficinaId: 'of-2', pcpCompleto: true }
+};
+const r = (dealId, etapa, inicio, termino) => ({ dealId, etapa, inicio, termino });
+const REGISTROS = [
+  r('800001', 15, '2026-10-01', '2026-10-04'),  // 3 dias
+  r('800002', 15, '2026-09-01', '2026-09-06'),  // 5 dias
+  r('800003', 13, '2026-09-10', '2026-09-11'),  // 1 dia (Pequeno); 13 não é produção
+  r('800001', 15, '2026-03-01', '2026-03-11'),  // fora da janela
+  r('800002', 15, '2026-10-10', ''),            // em aberto: entra só como destino de fila
+  r('800001', 16, '2026-10-04', '2026-10-05'),  // 16 não conta como etapa anterior na fila
+  r('800001', 17, '2026-10-05', '2026-10-11'),  // 6 dias; fila 17 = 1 (desde 04/10)
+  r('800002', 17, '2026-09-08', '2026-09-16'),  // 8 dias; fila 17 = 2 (desde 06/09)
+  r('800001', 17, '2025-12-01', '2025-12-05'),  // fora da janela, mas entra na média da oficina
+  r('800001', 19, '2026-10-12', '2026-10-12'),  // marco: 0 dia entra; fila 19 = 1
+  r('800003', 19, '2026-09-12', '2026-09-12'),  // não passou pela produção: fora
+  r('800001', 18, '2026-09-20', '2026-09-20')   // 0 dia fora; fila negativa fora
+];
+
+test('médias por etapa/faixa, gerais, só PCP, filas e Costura por oficina', () => {
+  const linhas = limpo(ctx.calcularMediasPrevisao(REGISTROS, DEALS, HOJE));
+  const l = (tipo, etapa, faixa, oficina_id, valor, amostra) => ({ tipo, etapa, faixa, oficina_id, valor, amostra });
+  assert.deepEqual(linhas, [
+    l('COSTURA_OFICINA', 17, '02. Médio', 'of-1', 6, 3),
+    l('DURACAO', 13, '01. Pequeno', '', 1, 1),
+    l('DURACAO', 15, '02. Médio', '', 4, 2),
+    l('DURACAO', 16, '02. Médio', '', 1, 1),
+    l('DURACAO', 17, '02. Médio', '', 7, 2),
+    l('DURACAO', 19, '02. Médio', '', 0, 1),
+    l('DURACAO_GERAL', 13, '', '', 1, 1),
+    l('DURACAO_GERAL', 15, '', '', 4, 2),
+    l('DURACAO_GERAL', 16, '', '', 1, 1),
+    l('DURACAO_GERAL', 17, '', '', 7, 2),
+    l('DURACAO_GERAL', 19, '', '', 0, 1),
+    l('DURACAO_PCP', 13, '', '', 1, 1),
+    l('DURACAO_PCP', 15, '', '', 3, 1),
+    l('DURACAO_PCP', 16, '', '', 1, 1),
+    l('DURACAO_PCP', 17, '', '', 6, 1),
+    l('DURACAO_PCP', 19, '', '', 0, 1),
+    l('FILA', 17, '02. Médio', '', 1.5, 2),
+    l('FILA', 19, '02. Médio', '', 1, 1),
+    l('FILA_GERAL', 17, '', '', 1.5, 2),
+    l('FILA_GERAL', 19, '', '', 1, 1)
+  ]);
+});
+
+test('médias tiram outliers por IQR antes da média da faixa', () => {
+  const regs = [3, 4, 5, 4, 60].map((d, i) => r('80000' + (i + 1), 15, '2026-09-01', ctx.isoDoDia(ctx.diaNumero('2026-09-01') + d)));
+  const deals = {};
+  regs.forEach((x) => { deals[x.dealId] = { dealId: x.dealId, pecas: 100, oficinaId: '', pcpCompleto: false }; });
+  const linha = limpo(ctx.calcularMediasPrevisao(regs, deals, HOJE)).find((x) => x.tipo === 'DURACAO');
+  assert.deepEqual(linha, { tipo: 'DURACAO', etapa: 15, faixa: '02. Médio', oficina_id: '', valor: 4, amostra: 4 });
+});
+
+test('operações da PREVISAO_MEDIAS: atualiza valores, anexa chave nova e esvazia a que sumiu, sem apagar', () => {
+  const novas = [
+    { tipo: 'DURACAO', etapa: 15, faixa: '02. Médio', oficina_id: '', valor: 4, amostra: 2 },
+    { tipo: 'FILA_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 1.5, amostra: 2 }
+  ];
+  const atuais = [
+    { row_number: 2, tipo: 'DURACAO', etapa: 15, faixa: '02. Médio', oficina_id: '', valor: 3, amostra: 1, chave: 'DURACAO|15|02. Médio|' },
+    { row_number: 3, tipo: 'DURACAO', etapa: 18, faixa: '02. Médio', oficina_id: '', valor: 2, amostra: 1, chave: 'DURACAO|18|02. Médio|' },
+    { row_number: 4, tipo: 'DURACAO', etapa: 13, faixa: '02. Médio', oficina_id: '', valor: '', amostra: 0, chave: 'DURACAO|13|02. Médio|' }
+  ];
+  assert.deepEqual(limpo(ctx.operacoesMediasPrevisao(novas, atuais, 'T1')), [
+    { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave', linha: { chave: 'DURACAO|15|02. Médio|', valor: 4, amostra: 2, calculado_em: 'T1' } },
+    { aba: 'PREVISAO_MEDIAS', operacao: 'append', chave: 'chave', linha: { tipo: 'FILA_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 1.5, amostra: 2, calculado_em: 'T1', chave: 'FILA_GERAL|17||' } },
+    { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave', linha: { chave: 'DURACAO|18|02. Médio|', valor: '', amostra: 0, calculado_em: 'T1' } }
+  ]);
+});
+
+test('montarAtualizacaoMedias: sem registro reconhecido não grava nada', () => {
+  const r0 = limpo(ctx.montarAtualizacaoMedias([{ DealId: 1, Content: 'Etapa: 17' }], [], [], HOJE, 'T1'));
+  assert.equal(r0.ok, false);
+  assert.match(r0.erro, /Nenhum registro de etapa reconhecido/);
+});
+
+test('montarAtualizacaoMedias: com as FieldKeys configuradas lê registros e negócios do Ploomes', () => {
+  const c = carregar();
+  c.CAMPO_REGISTRO_INICIO = 'record_INICIO_FICTICIO';
+  c.CAMPO_REGISTRO_TERMINO = 'record_TERMINO_FICTICIO';
+  const reg = (dealId, etapa, ini, fim) => ({
+    DealId: dealId, Content: `<p>Etapa: ${etapa}</p>`,
+    OtherProperties: [
+      { FieldKey: 'record_INICIO_FICTICIO', DateTimeValue: ini + 'T03:00:00Z' },
+      { FieldKey: 'record_TERMINO_FICTICIO', DateTimeValue: fim + 'T03:00:00Z' }
+    ]
+  });
+  const deal = { Id: 800001, OtherProperties: [
+    { FieldKey: 'deal_9990FF2B-430A-4A4A-9C82-02E953AE9BAD', IntegerValue: 100 },
+    { FieldKey: 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4', UserValueId: 501, UserValueName: 'OFICINA FICTÍCIA' }
+  ] };
+  const r1 = limpo(c.montarAtualizacaoMedias([reg(800001, 17, '2026-10-05', '2026-10-11')], [deal], [], HOJE, 'T1'));
+  assert.equal(r1.ok, true);
+  assert.equal(r1.registros, 1);
+  assert.deepEqual(r1.operacoes.map((o) => o.linha.chave), ['COSTURA_OFICINA|17|02. Médio|501', 'DURACAO|17|02. Médio|', 'DURACAO_GERAL|17||']);
+});
