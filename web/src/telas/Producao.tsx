@@ -3,8 +3,8 @@ import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } f
 import type { Executar } from '../hooks/useAcao';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
-import { lerVisao, salvarVisao, type VisaoProducao } from '../regras/producaoTabela';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { lerAgrupamento, lerVisao, salvarAgrupamento, salvarVisao, type AgrupamentoGantt, type VisaoProducao } from '../regras/producaoTabela';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -178,6 +178,7 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
   const [soComFalta, setSoComFalta] = useState(false);
   const [situacao, setSituacao] = useState<SituacaoPrazo | ''>('');
   const [visao, setVisao] = useState<VisaoProducao>(lerVisao);
+  const [agrupamento, setAgrupamento] = useState<AgrupamentoGantt>(lerAgrupamento);
   const [aberta, setAberta] = useState<string | null>(null);
   const hojeIso = diaIso(hoje);
   const producao = board.producao ?? PRODUCAO_VAZIA;
@@ -188,15 +189,41 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
   const grupos = useMemo(() => agruparPorOficina(filtradas), [filtradas]);
   // A tabela parte da mesma ordem do Gantt: grupo a grupo.
   const ordemGantt = useMemo(() => grupos.flatMap(([, itens]) => itens), [grupos]);
+  const porEntrega = useMemo(() => agrupamento === 'ENTREGA' ? ordenarPorEntrega(filtradas) : [], [agrupamento, filtradas]);
   const trocarVisao = (v: VisaoProducao) => { setVisao(v); salvarVisao(v); };
+  const trocarAgrupamento = (a: AgrupamentoGantt) => { setAgrupamento(a); salvarAgrupamento(a); };
   const selecionada = producao.find((p) => p.dealId === aberta) ?? null;
   const semAssociacao = board.mensagensWhatsappSemAssociacao ?? [];
+
+  // Linha do Gantt: igual nos dois agrupamentos; por entrega, mostra a oficina da OS.
+  const linhaGantt = (p: ProducaoItem, comOficina: boolean) => {
+    const prazo = prazoProducao(p);
+    const status = statusProducao(p, hojeIso);
+    const alertaAviamentos = resumoFaltasAviamentos(p);
+    const inicio = p.inicioCostura || prazo.data;
+    const esquerda = inicio ? Math.max(0, indiceDia(inicio, janela.inicio)) * LARGURA_DIA : 0;
+    const fim = prazo.data ? Math.min(janela.dias - 1, indiceDia(prazo.data, janela.inicio)) : 0;
+    const largura = p.inicioCostura && prazo.data ? Math.max(16, (fim - Math.max(0, indiceDia(p.inicioCostura, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
+    return <div className="gantt__linha" key={p.dealId}>
+      <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong>{comOficina ? <span className="gantt__os-texto"><span>{p.peca || p.referencia || 'Sem descrição'}</span><span className={`gantt__oficina ${p.oficina === 'ALOCAR' ? 'gantt__oficina--alocar' : ''}`}>{p.oficina || 'Sem oficina'}</span></span> : <span>{p.peca || p.referencia || 'Sem descrição'}</span>}<span className="gantt__alertas">{alertaAviamentos.costura > 0 && <em className="gantt__sinal gantt__sinal--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.costura}</em>}{alertaAviamentos.acabamento > 0 && <em className="gantt__sinal gantt__sinal--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.acabamento}</em>}</span></button>
+      <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
+        {prazo.data ? <button type="button" onClick={() => setAberta(p.dealId)} title={tituloBarraProducao(p)}
+          className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${alertaAviamentos.costura ? 'gantt__barra--bloqueio' : alertaAviamentos.acabamento ? 'gantt__barra--falta' : ''}`}
+          style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.costura > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoCostura}>🚫</span>}{alertaAviamentos.acabamento > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoAcabamento}>⚠️</span>}{textoBarraProducao(p)}</span></button>
+          : <button type="button" className="gantt__sem-prazo" onClick={() => setAberta(p.dealId)}>Sem prazo</button>}
+      </div>
+    </div>;
+  };
 
   return <div className="producao-tela">
     <div className="producao-filtros">
       <label>Oficina<select value={oficinaId} onChange={(e) => setOficinaId(e.target.value)}><option value="">Todas</option>{(board.oficinas ?? []).map((o) => <option key={o.ploomesId} value={o.ploomesId}>{o.nome}</option>)}</select></label>
       <label>Situação do prazo<select value={situacao} onChange={(e) => setSituacao(e.target.value as SituacaoPrazo | '')}><option value="">Todas</option>{SITUACOES_PRAZO.map((s) => <option key={s.valor} value={s.valor}>{s.rotulo}</option>)}</select></label>
       <label className="producao-check"><input type="checkbox" checked={soComFalta} onChange={(e) => setSoComFalta(e.target.checked)} /> Só com falta na costura</label>
+      {visao === 'GANTT' && <div className="producao-agrupar" role="group" aria-label="Agrupar">
+        <span>Agrupar</span>
+        <div className="producao-visao">{(['OFICINA', 'ENTREGA'] as const).map((a) => <button key={a} type="button" aria-pressed={agrupamento === a} onClick={() => trocarAgrupamento(a)}>{a === 'OFICINA' ? 'Oficina' : 'Entrega'}</button>)}</div>
+      </div>}
       <div className="producao-visao" role="group" aria-label="Visão">
         {(['GANTT', 'TABELA'] as const).map((v) => <button key={v} type="button" aria-pressed={visao === v} onClick={() => trocarVisao(v)}>{v === 'GANTT' ? 'Gantt' : 'Tabela'}</button>)}
       </div>
@@ -214,29 +241,13 @@ export function Producao({ board, q, hoje, executar }: { board: Board; q: string
     </details>}
     {visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} onAbrir={setAberta} /> : <div className="gantt__rolagem">
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>
-        <div className="gantt__cabecalho gantt__fixo"><strong>Oficina / OS</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>
+        <div className="gantt__cabecalho gantt__fixo"><strong>{agrupamento === 'ENTREGA' ? 'OS por entrega' : 'Oficina / OS'}</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>
         <div className="gantt__dias" style={{ width: janela.dias * LARGURA_DIA }}>{dias.map((d) => <div key={d} className={`${d === hojeIso ? 'gantt__dia--hoje' : ''} ${[0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()) ? 'gantt__dia--fim' : ''}`}><span>{d.slice(8)}</span></div>)}</div>
-        {grupos.map(([oficina, itens]) => <div className="gantt__grupo" key={oficina}>
+        {agrupamento === 'ENTREGA' ? <div className="gantt__grupo">{porEntrega.map((p) => linhaGantt(p, true))}</div>
+          : grupos.map(([oficina, itens]) => <div className="gantt__grupo" key={oficina}>
           <div className={`gantt__grupo-nome gantt__fixo ${oficina === 'ALOCAR' ? 'gantt__grupo-nome--alocar' : ''}`}><strong>{oficina}</strong><span>{itens.length} OS</span></div>
           <div className="gantt__grupo-faixa" />
-          {itens.map((p) => {
-            const prazo = prazoProducao(p);
-            const status = statusProducao(p, hojeIso);
-            const alertaAviamentos = resumoFaltasAviamentos(p);
-            const inicio = p.inicioCostura || prazo.data;
-            const esquerda = inicio ? Math.max(0, indiceDia(inicio, janela.inicio)) * LARGURA_DIA : 0;
-            const fim = prazo.data ? Math.min(janela.dias - 1, indiceDia(prazo.data, janela.inicio)) : 0;
-            const largura = p.inicioCostura && prazo.data ? Math.max(16, (fim - Math.max(0, indiceDia(p.inicioCostura, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
-            return <div className="gantt__linha" key={p.dealId}>
-              <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong><span>{p.peca || p.referencia || 'Sem descrição'}</span><span className="gantt__alertas">{alertaAviamentos.costura > 0 && <em className="gantt__sinal gantt__sinal--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.costura}</em>}{alertaAviamentos.acabamento > 0 && <em className="gantt__sinal gantt__sinal--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.acabamento}</em>}</span></button>
-              <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
-                {prazo.data ? <button type="button" onClick={() => setAberta(p.dealId)} title={tituloBarraProducao(p)}
-                  className={`gantt__barra gantt__barra--${status.status.toLowerCase()} ${prazo.origem === 'LEAD_TIME' ? 'gantt__barra--lead' : ''} ${!p.inicioCostura ? 'gantt__barra--marco' : ''} ${alertaAviamentos.costura ? 'gantt__barra--bloqueio' : alertaAviamentos.acabamento ? 'gantt__barra--falta' : ''}`}
-                  style={{ left: esquerda + 3, width: largura }}><span>{alertaAviamentos.costura > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoCostura}>🚫</span>}{alertaAviamentos.acabamento > 0 && <span className="gantt__alerta" aria-label={alertaAviamentos.textoAcabamento}>⚠️</span>}{textoBarraProducao(p)}</span></button>
-                  : <button type="button" className="gantt__sem-prazo" onClick={() => setAberta(p.dealId)}>Sem prazo</button>}
-              </div>
-            </div>;
-          })}
+          {itens.map((p) => linhaGantt(p, false))}
         </div>)}
         {filtradas.length === 0 && <p className="gantt__vazio">Nenhuma OS encontrada com estes filtros.</p>}
       </div>

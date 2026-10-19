@@ -149,6 +149,15 @@
 .producao-visao button[aria-pressed="true"] { background: var(--navy); color: #fff; }
 .producao-visao button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
+/* Agrupar: Oficina | Entrega, só no Gantt (19/10) */
+.producao-filtros .producao-agrupar { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12px; font-weight: 600; color: var(--suave); }
+.producao-agrupar .producao-visao { display: inline-flex; border: 1px solid var(--borda); border-radius: 4px; overflow: hidden; background: #fff; }
+.producao-filtros .producao-agrupar + .producao-visao { margin-left: 0; }
+.gantt__os .gantt__os-texto { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.gantt__os-texto > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt__os .gantt__oficina { padding: 1px 6px; border-radius: 3px; background: #f1f3f6; color: var(--leve); font-size: 10px; font-weight: 600; letter-spacing: .03em; }
+.gantt__os .gantt__oficina--alocar { background: #fff5e8; color: #915713; }
+
 /* Visão em tabela */
 .producao-tabela__area { flex: 1; min-height: 220px; display: flex; flex-direction: column; gap: 8px; }
 .producao-tabela__barra { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
@@ -181,5 +190,5 @@
 .producao-tabela__situacao--em_breve { color: #985a10; font-weight: 650; }
 .producao-tabela__situacao--sem_prazo { color: var(--leve); }
 @media (max-width: 900px) { .producao-filtros { flex-wrap: wrap; } }
-@media (max-width: 600px) { .producao-filtros .producao-visao { margin-left: 0; align-self: flex-start; } }
+@media (max-width: 600px) { .producao-filtros .producao-visao, .producao-filtros .producao-agrupar { margin-left: 0; align-self: flex-start; } }
 .producao-tabela__totais { color: var(--suave); font-variant-numeric: tabular-nums; }

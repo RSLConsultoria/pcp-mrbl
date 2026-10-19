@@ -26,8 +26,8 @@ const producao = [
   { dealId: '710004', os: '90004', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '', dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 40, valorCorte: 3200, cliente: 'CLIENTE MODELO', peca: 'JAQUETA TESTE', referencia: 'REF-D', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] }
 ];
 
-async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoAcaoMs = 0) {
-  const producaoAtual = structuredClone(producao);
+async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoAcaoMs = 0, extras: typeof producao = []) {
+  const producaoAtual = structuredClone([...producao, ...extras]);
   await page.route(LOGIN, (r) => r.fulfill({ json: SESSAO }));
   await page.route(ACAO, async (r) => {
     const corpo = r.request().postDataJSON();
@@ -307,4 +307,43 @@ test('visão em tabela: clique ou Enter na linha abre o painel da OS', async ({ 
   await linhasTabela(page).filter({ hasText: '90003' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90003' })).toBeVisible();
+});
+
+test('Gantt agrupado por entrega: prazo mais cedo primeiro, sem prazo no fim, filtros e preferência lembrada', async ({ page }) => {
+  const extras = [
+    { ...producao[3], dealId: '710005', os: '90000', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 10, valorCorte: 500, peca: 'BERMUDA TESTE', referencia: 'REF-E' },
+    { ...producao[3], dealId: '710006', os: '90006', oficinaId: 'OF-2', oficina: 'OFICINA BETA', inicioCostura: '2026-10-02', dataCombinada: '2026-10-10', leadTime: '', pecas: 30, valorCorte: 900, peca: 'SAIA TESTE', referencia: 'REF-F' }
+  ];
+  await entrar(page, [], 0, extras);
+  const linhasOs = page.locator('.gantt__os strong');
+  const agrupar = page.getByRole('group', { name: 'Agrupar' });
+  await expect(agrupar.getByRole('button', { name: 'Oficina' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(linhasOs).toHaveText(['OS 90001', 'OS 90002', 'OS 90003', 'OS 90004', 'OS 90000', 'OS 90006']);
+
+  await agrupar.getByRole('button', { name: 'Entrega' }).click();
+  await expect(agrupar.getByRole('button', { name: 'Entrega' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.gantt__grupo-nome')).toHaveCount(0);
+  await expect(linhasOs).toHaveText(['OS 90001', 'OS 90006', 'OS 90002', 'OS 90003', 'OS 90004', 'OS 90000']);
+  // Etiqueta da oficina em cada linha; ALOCAR destacada.
+  const etiquetas = page.locator('.gantt__os .gantt__oficina');
+  await expect(etiquetas).toHaveText(['ALOCAR', 'OFICINA BETA', 'OFICINA MODELO', 'OFICINA MODELO', 'OFICINA MODELO', 'OFICINA MODELO']);
+  await expect(etiquetas.first()).toHaveClass(/gantt__oficina--alocar/);
+  // Barra e clique continuam iguais.
+  await expect(page.getByTitle('OS 90002 · 12/10 · 120 pç · R$ 12.346')).toContainText('120 pç · R$ 12.346');
+  await page.getByRole('button', { name: /OS 90006/ }).first().click();
+  await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90006' })).toBeVisible();
+  await page.getByRole('button', { name: 'Fechar painel' }).click();
+
+  // Filtro de oficina continua valendo, na ordem de entrega.
+  await page.getByRole('combobox', { name: /^Oficina/ }).selectOption('OF-1');
+  await expect(linhasOs).toHaveText(['OS 90002', 'OS 90003', 'OS 90004', 'OS 90000']);
+
+  // O seletor só existe no Gantt.
+  await page.getByRole('button', { name: 'Tabela' }).click();
+  await expect(page.getByRole('group', { name: 'Agrupar' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Gantt' }).click();
+
+  await page.reload();
+  await expect(page.getByRole('group', { name: 'Agrupar' }).getByRole('button', { name: 'Entrega' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(linhasOs).toHaveText(['OS 90001', 'OS 90006', 'OS 90002', 'OS 90003', 'OS 90004', 'OS 90000']);
 });
