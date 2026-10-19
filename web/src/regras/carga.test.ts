@@ -54,6 +54,14 @@ describe('cor e texto da célula', () => {
     expect(corCarga(0, 0)).toBe('VERDE');
     expect(corCarga(1, 0)).toBe('VERMELHO');
   });
+
+  it('soma fracionada que dá exatamente 80% e 100% não vira o limite seguinte por ponto flutuante', () => {
+    const quase80 = 240 + 1e-12; // erro típico de soma fracionada
+    const quase100 = 300 + 1e-12;
+    expect(corCarga(quase80, 300)).toBe('VERDE');
+    expect(corCarga(quase100, 300)).toBe('AMARELO');
+    expect(corCarga(0.1 * 3 * 1000, 1000 * 0.375)).toBe('VERDE');
+  });
   it('"peças / capacidade", ou só as peças', () => {
     expect(textoCelula({ pecas: 1235.6, capacidade: 1500 })).toBe('1.236 / 1.500');
     expect(textoCelula({ pecas: 12, capacidade: null })).toBe('12');

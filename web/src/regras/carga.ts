@@ -65,7 +65,8 @@ export function corCarga(pecas: number, capacidade: number | null | undefined): 
   if (capacidade === null || capacidade === undefined) return 'SEM_CAPACIDADE';
   if (capacidade <= 0) return pecas > 0 ? 'VERMELHO' : 'VERDE';
   const r = pecas / capacidade;
-  return r <= 0.8 ? 'VERDE' : r <= 1 ? 'AMARELO' : 'VERMELHO';
+  // Tolerância: somas fracionadas não podem passar do limite por erro de ponto flutuante.
+  return r <= 0.8 + 1e-9 ? 'VERDE' : r <= 1 + 1e-9 ? 'AMARELO' : 'VERMELHO';
 }
 
 export const semOficina = (p: Pick<Producao, 'oficinaId' | 'oficina'>): boolean =>
