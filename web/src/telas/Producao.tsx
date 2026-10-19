@@ -282,8 +282,10 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
     {visao === 'CARGA' ? <CargaProducao lista={paraCarga} oficinas={board.oficinas ?? []} hojeIso={hojeIso} oficinaId={oficinaId} ehAdm={ehAdm} executar={executar} onAbrir={setAberta} />
       : visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} incluirPrevistas={incluirPrevistas} onAbrir={setAberta} /> : <div className="gantt__rolagem">
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>
+        <div className="gantt__topo">
         <div className="gantt__cabecalho gantt__fixo"><strong>{agrupamento === 'ENTREGA' ? 'OS por entrega' : 'Oficina / OS'}</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>
         <div className="gantt__dias" style={{ width: janela.dias * LARGURA_DIA }}>{dias.map((d) => <div key={d} className={`${d === hojeIso ? 'gantt__dia--hoje' : ''} ${[0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()) ? 'gantt__dia--fim' : ''}`}><span>{d.slice(8)}</span></div>)}</div>
+        </div>
         {indiceHoje >= 0 && indiceHoje < janela.dias && <div className="gantt__hoje-coluna" aria-hidden="true" data-testid="gantt-hoje-coluna" style={{ '--dia-hoje': indiceHoje } as CSSProperties} />}
         {agrupamento === 'ENTREGA' ? <div className="gantt__grupo">{porEntrega.map((p) => linhaGantt(p, true))}</div>
           : grupos.map(([oficina, itens]) => <div className="gantt__grupo" key={oficina}>

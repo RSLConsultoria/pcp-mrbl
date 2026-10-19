@@ -365,3 +365,32 @@ test('Gantt destaca a coluna inteira de hoje atrás das barras, que continuam cl
   await page.getByTitle('OS 90002 · 12/10 · 120 pç · R$ 12.346').click();
   await expect(page.getByRole('complementary', { name: 'Detalhes da OS 90002' })).toBeVisible();
 });
+
+test('Gantt mantém o cabeçalho e a régua de dias congelados ao rolar, alinhados ao dia de hoje', async ({ page }) => {
+  const extras = Array.from({ length: 30 }, (_, i) => ({ ...producao[0], dealId: `72${String(i).padStart(4, '0')}`, os: `91${String(i).padStart(3, '0')}` }));
+  await entrar(page, [], 0, extras);
+  const rolagem = page.locator('.gantt__rolagem');
+  const topo = page.locator('.gantt__topo');
+  await expect(topo).toBeVisible();
+  const antes = await topo.boundingBox();
+  const area = await rolagem.boundingBox();
+  await rolagem.evaluate((el) => { el.scrollTop = 600; });
+  expect(await rolagem.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+  const depois = await topo.boundingBox();
+  expect(Math.abs(depois!.y - antes!.y)).toBeLessThan(1.5);
+  expect(depois!.y).toBeGreaterThanOrEqual(area!.y - 1);
+  const hojeCab = await page.locator('.gantt__dia--hoje').boundingBox();
+  expect(hojeCab!.y).toBeGreaterThanOrEqual(area!.y - 1);
+  expect(hojeCab!.y + hojeCab!.height).toBeLessThanOrEqual(area!.y + 60);
+  // Rolagem horizontal: a régua e a coluna de hoje seguem juntas e o título fica fixo.
+  await rolagem.evaluate((el) => { el.scrollLeft = 120; });
+  const cab = await page.locator('.gantt__dia--hoje').boundingBox();
+  const col = await page.getByTestId('gantt-hoje-coluna').boundingBox();
+  expect(Math.abs(col!.x - cab!.x)).toBeLessThan(1.5);
+  const titulo = await page.locator('.gantt__cabecalho').boundingBox();
+  expect(Math.abs(titulo!.x - area!.x)).toBeLessThan(3);
+  expect(Math.abs(titulo!.y - antes!.y)).toBeLessThan(1.5);
+  await page.getByRole('button', { name: 'Entrega', exact: true }).click();
+  await rolagem.evaluate((el) => { el.scrollTop = 400; });
+  expect(Math.abs((await topo.boundingBox())!.y - antes!.y)).toBeLessThan(1.5);
+});
