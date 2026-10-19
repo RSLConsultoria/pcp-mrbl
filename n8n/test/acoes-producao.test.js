@@ -280,3 +280,28 @@ test('modelo de material enviado saiu da F4 por decisão do dono e é recusado',
   assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'X')), { status: 400, body: { erro: 'Modelo de mensagem inválido.' } });
   assert.equal(ctx.modeloWhatsapp('MATERIAL_ENVIADO', { peca: 'CAMISA TESTE' }, '2026-10-13'), '');
 });
+
+test('OS prevista (ainda não chegou na Costura): todas as ações de produção recusam com 409', () => {
+  const { ctx, estado, cab } = contexto();
+  ctx.DEALS_PRODUCAO_EDITAVEIS = [];
+  const dados = linhas();
+  dados.producao[0].em_costura = 'NAO';
+  dados.producao[0].prevista = 'SIM';
+  dados.whatsappMensagens = [
+    { id: 'MSG-ERRO', deal_id: '700001', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us', direcao: 'ENVIADA', status_envio: 'ERRO' },
+    { id: 'MSG-LIVRE', direcao: 'RECEBIDA', associacao: 'SEM_ASSOCIACAO', deal_id: '', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us' }
+  ];
+  const acoes = [
+    { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-2', dataCombinada: '2026-10-20', motivo: 'Teste.' },
+    { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Bom dia.' },
+    { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true },
+    { tipo: 'aceitar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Teste.' },
+    { tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Teste.' },
+    { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-LIVRE', versao: 'v1' }
+  ];
+  for (const corpo of acoes) {
+    const r = ctx.processarAcao(estado, cab, corpo, dados, T0, () => 'X');
+    assert.equal(r.status, 409, corpo.tipo + ' ' + JSON.stringify(r.body));
+    assert.match(JSON.stringify(r.body), /ainda não chegou na Costura/, corpo.tipo);
+  }
+});

@@ -2501,6 +2501,8 @@ function faltasDoAcabamento(producao, caixas) {
   return faltasDaCaixaProducao(producao, caixas, 'ACABAMENTO');
 }
 
+var MSG_AINDA_NAO_COSTURA = 'Esta OS ainda não chegou na Costura.';
+
 function producaoEditavel(dealId, permitidos) {
   var lista = Array.isArray(permitidos) ? permitidos.map(texto) : [];
   return lista.length === 0 || lista.indexOf(texto(dealId)) >= 0;
@@ -2558,6 +2560,7 @@ function validarAcaoProducaoBasica(corpo, permitidos) {
 function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
   var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (linhaEhPrevista(producao)) return erroAcao(409, MSG_AINDA_NAO_COSTURA);
   if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(corpo.mensagemId); })[0];
   if (!mensagem) return erroAcao(404, 'Mensagem do WhatsApp não encontrada.');
@@ -2594,6 +2597,7 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
 function processarReenvioWhatsapp(corpo, linhas, ctx) {
   var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (linhaEhPrevista(producao)) return erroAcao(409, MSG_AINDA_NAO_COSTURA);
   if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   var original = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(corpo.mensagemId); })[0];
   if (!original || texto(original.deal_id) !== texto(producao.deal_id)) return erroAcao(404, 'Mensagem do WhatsApp não encontrada para esta OS.');
@@ -2628,6 +2632,7 @@ function processarReenvioWhatsapp(corpo, linhas, ctx) {
 function processarEnvioWhatsapp(corpo, linhas, ctx) {
   var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (linhaEhPrevista(producao)) return erroAcao(409, MSG_AINDA_NAO_COSTURA);
   var temChave = texto(corpo.chave) !== '';
   var id = temChave ? idEnvioWhatsapp(corpo.chave) : ctx.gerarId();
   if (temChave) {
@@ -2679,6 +2684,7 @@ function historicoProducao(ctx, dealId, os, acao, descricao) {
 function processarAlteracaoProducao(corpo, linhas, ctx, permitidos) {
   var row = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
   if (!row) return erroAcao(404, 'OS não encontrada na produção.');
+  if (linhaEhPrevista(row)) return erroAcao(409, MSG_AINDA_NAO_COSTURA);
   var atual = {
     dealId: texto(row.deal_id), os: texto(row.os), oficinaId: texto(row.oficina_id),
     dataCombinada: texto(row.data_combinada), versao: texto(row.atualizado_em_ploomes)
@@ -2723,6 +2729,7 @@ function processarDecisaoSugestao(corpo, linhas, ctx) {
   if (!sugestao || texto(sugestao.deal_id) !== texto(corpo.dealId)) return erroAcao(404, 'Sugestão não encontrada.');
   var producao = (linhas.producao || []).filter(function (p) { return p && texto(p.deal_id) === texto(corpo.dealId); })[0];
   if (!producao) return erroAcao(404, 'OS não encontrada na produção.');
+  if (linhaEhPrevista(producao)) return erroAcao(409, MSG_AINDA_NAO_COSTURA);
   var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(sugestao.mensagem_id); })[0];
   if (!mensagem) return erroAcao(409, 'Mensagem da sugestão não encontrada.');
   var destino = corpo.tipo === 'aceitar_sugestao_whatsapp' ? 'ACEITA' : 'IGNORADA';
