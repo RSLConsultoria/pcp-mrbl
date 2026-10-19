@@ -2286,6 +2286,7 @@ function separarPrevistas(deals, dealsCostura) {
 function linhaPrevista(card, medias, hojeISO, sincronizadoEm) {
   var linha = linhaProducao(card, sincronizadoEm);
   var semOficina = !texto(card.oficinaId) || semAcento(card.oficina) === 'ALOCAR';
+  // O sync nao passa `chegada` a projetarOs (nao le os registros a cada 5 min): equivale ao spec 3.6, salvo chegada futura.
   var projecao = projetarOs({
     etapa: card.etapaOrdem, dtInicio: card.etapaInicio, pecas: card.pecasPrevisao,
     oficinaId: semOficina ? '' : texto(card.oficinaId)
