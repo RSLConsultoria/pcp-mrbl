@@ -7,7 +7,7 @@
 //   pelo "PCP MRBL - Retentar Interpretação").
 const IDS_SUBWORKFLOWS = {
   INTERPRETE: 'pTRkYh6xs7HGM7CM',
-  INTERPRETAR_WHATSAPP: 'CONFIGURAR_INTERPRETAR_WHATSAPP'
+  INTERPRETAR_WHATSAPP: 'DijEYc4iDDU3oRJU'
 };
 
 function idSubworkflowValido(id) {

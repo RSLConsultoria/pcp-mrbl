@@ -509,7 +509,7 @@ const dispararInterpretacao = node({
     onError: 'continueRegularOutput',
     parameters: {
       source: 'database',
-      workflowId: { __rl: true, value: 'CONFIGURAR_INTERPRETAR_WHATSAPP', mode: 'id' },
+      workflowId: { __rl: true, value: 'DijEYc4iDDU3oRJU', mode: 'id' },
       mode: 'once',
       options: { waitForSubWorkflow: false }
     },
