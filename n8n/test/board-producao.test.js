@@ -66,8 +66,8 @@ test('board devolve valorCorte nulo sem a coluna ou com valor vazio', () => {
 test('board lista oficinas ativas e informa grupo configurado sem expor JIDs ou IDs da Evolution', () => {
   const r = limpo(ctx.montarRespostaBoard({}, [], [], T0, extras())).body;
   assert.deepEqual(r.oficinas, [
-    { ploomesId: 'of-1', nome: 'OFICINA MODELO', grupoConfigurado: true, grupoNome: 'GRUPO MODELO' },
-    { ploomesId: 'of-3', nome: 'OFICINA SEM GRUPO', grupoConfigurado: false, grupoNome: '' }
+    { ploomesId: 'of-1', nome: 'OFICINA MODELO', grupoConfigurado: true, grupoNome: 'GRUPO MODELO', capacidadeSemana: null },
+    { ploomesId: 'of-3', nome: 'OFICINA SEM GRUPO', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null }
   ]);
   assert.deepEqual(r.mensagensWhatsappSemAssociacao, [{
     id: 'MSG-2', quando: '2026-10-13T11:00:00.000Z', participanteNome: 'Outra Pessoa', direcao: 'RECEBIDA',

@@ -137,6 +137,12 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
 // sucesso = { ok: true }. O processarAcao repete as checagens.
 function preValidarAcao(estado, cabecalho, corpo, agora) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (corpo && corpo.tipo === TIPO_CAPACIDADE_OFICINA) {
+    if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+    if (sessao.perfil !== 'ADM') return { ok: false, status: 403, body: { erro: ERRO_CAPACIDADE_SO_ADM } };
+    var vCap = validarCapacidadeOficina(corpo);
+    return vCap.ok ? { ok: true } : { ok: false, status: vCap.status, body: { erro: vCap.erro } };
+  }
   if (sessao && corpo && TIPOS_PRODUCAO.indexOf(corpo.tipo) >= 0) {
     var vProd = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
     return vProd.ok ? { ok: true } : { ok: false, status: vProd.status, body: { erro: vProd.erro } };
@@ -234,12 +240,28 @@ function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   return saida;
 }
 
+// Capacidade da oficina (19/10): só ADM; grava só a OFICINAS.
+function processarAcaoCapacidade(estado, sessao, corpo, linhas, agora) {
+  if (sessao.perfil !== 'ADM') return { status: 403, body: { erro: ERRO_CAPACIDADE_SO_ADM } };
+  var r = processarCapacidadeOficina(corpo, linhas || {}, { agora: new Date(agora).toISOString() });
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos);
+  saida.ploomes = null;
+  saida.interpretar = null;
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
+}
+
 // POST /pcp-acao. "linhas" = { faltantes, caixasPcp, ganhas?, pedidos?,
 // pedidosItens?, etapas? } (linhas da planilha).
 // Sucesso: { status, body, operacoes: [{ aba, operacao, chave, linha }],
 // historicos: [linhas do HISTORICO_APP], gravacao, historico }.
 function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   var sessao = sessaoDoCabecalho(estado, cabecalho, agora);
+  if (sessao && corpo && corpo.tipo === TIPO_CAPACIDADE_OFICINA) {
+    return processarAcaoCapacidade(estado, sessao, corpo, linhas, agora);
+  }
   if (sessao && corpo && TIPOS_PRODUCAO.indexOf(corpo.tipo) >= 0) {
     return processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId);
   }

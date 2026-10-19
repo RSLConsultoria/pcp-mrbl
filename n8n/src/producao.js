@@ -747,9 +747,47 @@ function oficinasProducaoBoard(oficinas) {
       ploomesId: texto(o.ploomes_id),
       nome: texto(o.nome),
       grupoConfigurado: texto(o.grupo_jid) !== '',
-      grupoNome: texto(o.grupo_nome)
+      grupoNome: texto(o.grupo_nome),
+      // Carga das oficinas (19/10): peças por semana; vazio = sem capacidade (sem cor de alerta).
+      capacidadeSemana: numeroOuNulo(o.capacidade_semana)
     };
   }).sort(function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); });
+}
+
+// ---------- capacidade das oficinas (19/10) ----------
+
+var TIPO_CAPACIDADE_OFICINA = 'alterar_capacidade_oficina';
+var ERRO_CAPACIDADE_SO_ADM = 'Só administradores podem alterar a capacidade das oficinas.';
+var MAX_CAPACIDADE_OFICINA = 1000000;
+
+// capacidade: inteiro >= 0 (peças por semana) ou vazio/null (sem capacidade).
+function validarCapacidadeOficina(corpo) {
+  corpo = corpo || {};
+  var oficinaId = texto(corpo.oficinaId);
+  if (!oficinaId) return erroAcao(400, 'Informe a oficina.');
+  var v = corpo.capacidade;
+  if (v === null || v === undefined || texto(v) === '') return { ok: true, acao: { oficinaId: oficinaId, capacidade: '' } };
+  var n = typeof v === 'number' ? v : /^\d+$/.test(texto(v)) ? Number(texto(v)) : NaN;
+  if (!isFinite(n) || n < 0 || Math.floor(n) !== n || n > MAX_CAPACIDADE_OFICINA) {
+    return erroAcao(400, 'Informe a capacidade em peças por semana: número inteiro, 0 ou mais.');
+  }
+  return { ok: true, acao: { oficinaId: oficinaId, capacidade: n } };
+}
+
+// Só planilha (OFICINAS.capacidade_semana): não vai ao Ploomes nem ao HISTORICO_APP,
+// que é por OS. Não depende de DEALS_PRODUCAO_EDITAVEIS: não é card.
+function processarCapacidadeOficina(corpo, linhas, ctx) {
+  var v = validarCapacidadeOficina(corpo);
+  if (!v.ok) return v;
+  var oficina = (linhas.oficinas || []).filter(function (o) {
+    return o && texto(o.ploomes_id) === v.acao.oficinaId && linhaAtivaProducao(o.ativo);
+  })[0];
+  if (!oficina) return erroAcao(404, 'Oficina não encontrada.');
+  return {
+    ok: true, versao: ctx.agora, ploomes: null, historicos: [],
+    operacoes: [{ aba: 'OFICINAS', operacao: 'update', chave: 'ploomes_id',
+      linha: { ploomes_id: v.acao.oficinaId, capacidade_semana: v.acao.capacidade, atualizado_em: ctx.agora } }]
+  };
 }
 
 function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {

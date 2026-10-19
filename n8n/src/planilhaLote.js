@@ -49,6 +49,7 @@ var DESTINOS_ESCRITA = [
   { aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id' },
   { aba: 'WHATSAPP_SUGESTOES', operacao: 'append', chave: 'id' },
   { aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id' },
+  { aba: 'OFICINAS', operacao: 'update', chave: 'ploomes_id' },  // capacidade_semana (só ADM)
   // Médias da previsão (19/10): linha casada pela coluna chave (tipo|etapa|faixa|oficina_id).
   { aba: 'PREVISAO_MEDIAS', operacao: 'append', chave: 'chave' },
   { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave' }
