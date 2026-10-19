@@ -97,10 +97,26 @@ test('projeção: OS no Encaixe soma as etapas do meio sem a 16', () => {
   assert.deepEqual(limpo(p), { inicioCostura: '2026-10-31', fimCostura: '2026-11-07' });
 });
 
+test('projeção: OS na Primeira Peça (16) não soma a duração da própria etapa 16', () => {
+  // Decisão do dono (19/10): a fila até a Costura já é medida a partir do término da 15 e contém o tempo da 16.
+  const m = ctx.tabelaMedias([
+    { tipo: 'DURACAO_GERAL', etapa: 15, faixa: '', oficina_id: '', valor: 2, amostra: 9 },
+    { tipo: 'DURACAO_GERAL', etapa: 16, faixa: '', oficina_id: '', valor: 5, amostra: 9 },
+    { tipo: 'DURACAO_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 7, amostra: 9 },
+    { tipo: 'FILA_GERAL', etapa: 17, faixa: '', oficina_id: '', valor: 3, amostra: 20 }
+  ]);
+  // Na 16: FimBase = max(19/10 + 0; 19/10) = 19/10 (sem os 5 dias da 16); Início = 19 + 3 = 22/10; Fim = 22 + 7 = 29/10.
+  const p16 = ctx.projetarOs({ etapa: 16, dtInicio: '2026-10-19', pecas: 30, oficinaId: '' }, m, HOJE);
+  assert.deepEqual(limpo(p16), { inicioCostura: '2026-10-22', fimCostura: '2026-10-29' });
+  // Na 15 continua igual: FimBase = 19 + 2 = 21/10; Início = 24/10; Fim = 31/10.
+  const p15 = ctx.projetarOs({ etapa: 15, dtInicio: '2026-10-19', pecas: 30, oficinaId: '' }, m, HOJE);
+  assert.deepEqual(limpo(p15), { inicioCostura: '2026-10-24', fimCostura: '2026-10-31' });
+});
+
 test('projeção sem médias usa o fallback do BI (duração 1, fila 0); sem peças não prevê', () => {
   const vazio = ctx.tabelaMedias([]);
   assert.deepEqual(limpo(ctx.projetarOs({ etapa: 16, dtInicio: '', pecas: 30, oficinaId: '' }, vazio, HOJE)),
-    { inicioCostura: '2026-10-20', fimCostura: '2026-10-21' });
+    { inicioCostura: '2026-10-19', fimCostura: '2026-10-20' });  // na 16 a duração da própria etapa não entra
   assert.equal(ctx.projetarOs({ etapa: 14, dtInicio: '', pecas: 0, oficinaId: '' }, vazio, HOJE), null);
   assert.equal(ctx.projetarOs({ etapa: 17, dtInicio: '', pecas: 30, oficinaId: '' }, vazio, HOJE), null);
   assert.equal(ctx.projetarOs({ etapa: 11, dtInicio: '', pecas: 30, oficinaId: '' }, vazio, HOJE), null);

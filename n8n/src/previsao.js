@@ -172,7 +172,9 @@ function projetarOs(os, t, hojeISO) {
   var dtInicio = diaNumero(os.dtInicio);
   var chegada = diaNumero(os.chegada);
   var inicioEfetivo = dtInicio !== null ? dtInicio : Math.max(chegada !== null ? chegada : hoje, hoje) + filaEtapaPrevisao(t, s, faixa);
-  var fimBase = Math.max(inicioEfetivo + duracaoEtapaPrevisao(t, s, faixa), hoje);
+  // Decisão do dono (19/10): na etapa 16 a duração dela não entra; a fila até a Costura já parte do término da 15 e contém esse tempo.
+  var durAtual = s === ETAPA_PRIMEIRA_PECA ? 0 : duracaoEtapaPrevisao(t, s, faixa);
+  var fimBase = Math.max(inicioEfetivo + durAtual, hoje);
   var meio = 0;
   for (var o = s + 1; o < ETAPA_COSTURA; o++) {
     if (o === ETAPA_PRIMEIRA_PECA) continue;

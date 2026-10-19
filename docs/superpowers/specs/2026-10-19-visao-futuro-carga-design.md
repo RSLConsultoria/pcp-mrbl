@@ -54,7 +54,7 @@ Entram OS em aberto com etapa atual de 12 a 16; nas etapas 12 e 13 só com "PCP 
 
 ```
 InicioEfetivo = dtInicio preenchido ? dtInicio : max(chegada, hoje) + fila(S)
-FimBase       = max(InicioEfetivo + dur(S), hoje)
+FimBase       = max(InicioEfetivo + dur(S), hoje)   // com S = 16, dur(16) = 0 (decisão do dono, 19/10: a fila até a Costura já contém o tempo da 16)
 DiasMeio(A)   = Σ_{S<O<A, O≠16} (dur(O) + fila(O))
 Inicio(A)     = FimBase + DiasMeio(A) + fila(A)      // A ≥ 14
 Fim(A)        = Inicio(A) + dur(A)
