@@ -2792,15 +2792,15 @@ function modeloWhatsapp(tipo, p, hojeISO) {
   var fim = nome + (quantidade ? ', ' + quantidade : '');
   var prazo = prazoDaProducao(p);
   if (tipo === 'CONFIRMAR_DATA') {
-    return 'Bom dia. Confirmando a entrega de ' + meio + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
+    return 'Olá. Confirmando a entrega de ' + meio + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
   }
   if (tipo === 'COBRANCA_PRAZO') {
     var status = statusPrazo(p, hojeISO);
     if (status.status === 'ATRASADO') {
-      return 'Bom dia. A entrega de ' + meio + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
+      return 'Olá. A entrega de ' + meio + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
     }
-    if (!prazo.data) return 'Bom dia. Qual a previsão de entrega de ' + fim + '?';
-    return 'Bom dia. A entrega de ' + meio + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
+    if (!prazo.data) return 'Olá. Qual a previsão de entrega de ' + fim + '?';
+    return 'Olá. A entrega de ' + meio + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
   }
   return '';
 }
@@ -4706,7 +4706,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 // ===== adaptador: Selecionar Envio =====
 // Um item por grupo (deal) pronto para virar um registro compilado:
 // { grupo: { deal_id, os, linhas } }. Buscar Contato roda uma vez por grupo.
-var DEALS_PERMITIDOS = ['607479158', '607493886', '607493902', '607520448'];  // TESTE: so os cards de teste ate o go-live
+var DEALS_PERMITIDOS = ['607479158', '607493886', '607493902', '607520448', '607612577'];  // TESTE: so os cards de teste ate o go-live
 var rows = $input.all().map(function (i) { return i.json; });
 if (DEALS_PERMITIDOS.length) {
   rows = rows.filter(function (l) { return l && DEALS_PERMITIDOS.indexOf(texto(l.deal_id)) >= 0; });

@@ -139,7 +139,7 @@ test('revisa e coloca uma cobrança padrão na fila', async ({ page }) => {
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
   const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
   const mensagem = painel.getByLabel('Mensagem');
-  await expect(mensagem).toHaveValue(/^Bom dia\. A entrega de \*COLETE TESTE\*/);
+  await expect(mensagem).toHaveValue(/^Olá\. A entrega de \*COLETE TESTE\*/);
   await mensagem.fill('Pode confirmar o prazo atualizado de *COLETE TESTE*?');
   await painel.getByRole('button', { name: 'Colocar na fila' }).click();
   await expect.poll(() => acoes.at(-1)).toMatchObject({

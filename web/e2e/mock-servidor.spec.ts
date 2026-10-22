@@ -208,7 +208,7 @@ test('mock: produção só oferece cobrança e confirmação; material enviado �
   await page.getByRole('button', { name: /OS 90002/ }).first().click();
   const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
   await expect(painel.getByRole('combobox', { name: /^Modelo/ }).locator('option')).toHaveText(['Cobrança de prazo', 'Confirmar data']);
-  await expect(painel.getByLabel('Mensagem')).toHaveValue(/^Bom dia\. A entrega de \*PECA TESTE B\*, 160 peças, está prevista para/);
+  await expect(painel.getByLabel('Mensagem')).toHaveValue(/^Olá\. A entrega de \*PECA TESTE B\*, 160 peças, está prevista para/);
   const r = await acaoNoMock(page, { tipo: 'enviar_whatsapp', dealId: '700002', versao: 'v2', modelo: 'MATERIAL_ENVIADO', texto: 'Material enviado.', chave: 'c-material-0001' });
   expect(r).toEqual({ status: 400, corpo: { erro: 'Modelo de mensagem inválido.' } });
 });

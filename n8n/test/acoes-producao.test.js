@@ -123,7 +123,7 @@ test('ignorar sugestao registra decisao sem tocar no Ploomes', () => {
 test('enviar whatsapp apenas enfileira o texto para o grupo cadastrado', () => {
   const { ctx, estado, cab } = contexto();
   let seq = 0;
-  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Bom dia. Qual a previsão de entrega de *CAMISA TESTE*?' };
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Olá. Qual a previsão de entrega de *CAMISA TESTE*?' };
   const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'ID-' + (++seq)));
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.ploomes, null);
@@ -131,7 +131,7 @@ test('enviar whatsapp apenas enfileira o texto para o grupo cadastrado', () => {
   assert.deepEqual(r.operacoes, [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: {
     id: 'ID-1', evolution_id: '', quando: '2026-10-13T14:00:00.000Z', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE',
     participante_jid: '', participante_nome: 'Pessoa PCP', direcao: 'ENVIADA', tipo: 'COBRANCA_PRAZO', tipo_conteudo: 'TEXTO',
-    texto: 'Bom dia. Qual a previsão de entrega de *CAMISA TESTE*?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001',
+    texto: 'Olá. Qual a previsão de entrega de *CAMISA TESTE*?', resposta_a_evolution_id: '', deal_id: '700001', os: '90001',
     oficina_id: 'of-1', associacao: 'MANUAL', status_envio: 'PENDENTE', erro: '', criado_em: '2026-10-13T14:00:00.000Z'
   } }]);
   assert.equal(r.historicos[0].acao, 'WHATSAPP_ENFILEIRAR');
@@ -140,7 +140,7 @@ test('enviar whatsapp apenas enfileira o texto para o grupo cadastrado', () => {
 
 test('enviar whatsapp exige grupo, modelo valido e versao atual', () => {
   const { ctx, estado, cab } = contexto();
-  const base = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Bom dia. A entrega de *CAMISA TESTE* segue no prazo?' };
+  const base = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Olá. A entrega de *CAMISA TESTE* segue no prazo?' };
   const semGrupo = linhas();
   semGrupo.oficinas[0].grupo_jid = '';
   assert.equal(ctx.processarAcao(estado, cab, base, semGrupo, T0, () => 'X').status, 409);
@@ -150,7 +150,7 @@ test('enviar whatsapp exige grupo, modelo valido e versao atual', () => {
 
 test('enviar whatsapp aceita texto sem o número da OS: a oficina conhece a peça', () => {
   const { ctx, estado, cab } = contexto();
-  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'CONFIRMAR_DATA', texto: 'Bom dia. Confirmando a entrega de *CAMISA TESTE* para 18/10. Segue combinado?' };
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'CONFIRMAR_DATA', texto: 'Olá. Confirmando a entrega de *CAMISA TESTE* para 18/10. Segue combinado?' };
   const r = limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'ID-1'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.operacoes[0].linha.texto, corpo.texto);
@@ -278,7 +278,7 @@ test('reenviar whatsapp só uma vez por mensagem original e o board marca a orig
 
 test('modelo de material enviado saiu da F4 por decisão do dono e é recusado', () => {
   const { ctx, estado, cab } = contexto();
-  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'MATERIAL_ENVIADO', texto: 'Bom dia. O material foi enviado.' };
+  const corpo = { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'MATERIAL_ENVIADO', texto: 'Olá. O material foi enviado.' };
   assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo, linhas(), T0, () => 'X')), { status: 400, body: { erro: 'Modelo de mensagem inválido.' } });
   assert.equal(ctx.modeloWhatsapp('MATERIAL_ENVIADO', { peca: 'CAMISA TESTE' }, '2026-10-13'), '');
 });
@@ -295,7 +295,7 @@ test('OS prevista (ainda não chegou na Costura): todas as ações de produção
   ];
   const acoes = [
     { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-2', dataCombinada: '2026-10-20', motivo: 'Teste.' },
-    { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Bom dia.' },
+    { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Olá.' },
     { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true },
     { tipo: 'aceitar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Teste.' },
     { tipo: 'ignorar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'SUG-1', versao: 'v1', motivo: 'Teste.' },

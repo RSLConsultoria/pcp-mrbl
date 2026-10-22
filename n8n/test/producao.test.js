@@ -195,16 +195,16 @@ test('validarAlteracaoProducao recusa data impossível e formulário sem mudanç
 test('modelos de WhatsApp citam a peça em negrito, sem o número da OS', () => {
   const p = prod({ peca: 'PECA TESTE B', pecas: 160, dataCombinada: '2026-10-20' });
   assert.equal(ctx.modeloWhatsapp('COBRANCA_PRAZO', p, '2026-10-13'),
-    'Bom dia. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?');
+    'Olá. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?');
   assert.equal(ctx.modeloWhatsapp('COBRANCA_PRAZO', p, '2026-10-21'),
-    'Bom dia. A entrega de *PECA TESTE B*, 160 peças, estava prevista para 20/10. Qual a nova data de entrega?');
+    'Olá. A entrega de *PECA TESTE B*, 160 peças, estava prevista para 20/10. Qual a nova data de entrega?');
   assert.equal(ctx.modeloWhatsapp('COBRANCA_PRAZO', prod({ peca: 'PECA TESTE B', pecas: 160, dataCombinada: '', leadTime: '' }), '2026-10-13'),
-    'Bom dia. Qual a previsão de entrega de *PECA TESTE B*, 160 peças?');
+    'Olá. Qual a previsão de entrega de *PECA TESTE B*, 160 peças?');
   assert.equal(ctx.modeloWhatsapp('CONFIRMAR_DATA', p, '2026-10-13'),
-    'Bom dia. Confirmando a entrega de *PECA TESTE B*, 160 peças, para 20/10. Segue combinado?');
+    'Olá. Confirmando a entrega de *PECA TESTE B*, 160 peças, para 20/10. Segue combinado?');
   // Sem quantidade, sem vírgulas soltas; 1 peça no singular; milhar no formato brasileiro.
   assert.equal(ctx.modeloWhatsapp('COBRANCA_PRAZO', prod({ peca: 'PECA TESTE B', pecas: '', dataCombinada: '2026-10-20' }), '2026-10-13'),
-    'Bom dia. A entrega de *PECA TESTE B* está prevista para 20/10. Segue dentro do prazo?');
+    'Olá. A entrega de *PECA TESTE B* está prevista para 20/10. Segue dentro do prazo?');
   assert.match(ctx.modeloWhatsapp('CONFIRMAR_DATA', prod({ pecas: 1 }), '2026-10-13'), /\*CAMISA TESTE\*, 1 peça, para/);
   assert.match(ctx.modeloWhatsapp('CONFIRMAR_DATA', prod({ pecas: 1600 }), '2026-10-13'), /1\.600 peças/);
   for (const tipo of ['COBRANCA_PRAZO', 'CONFIRMAR_DATA']) assert.doesNotMatch(ctx.modeloWhatsapp(tipo, p, '2026-10-13'), /90001|OS /);

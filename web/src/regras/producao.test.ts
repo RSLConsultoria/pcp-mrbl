@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Producao } from '../api/tipos';
-import { agruparPorOficina, ordenarPorEntrega, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, opcoesAssociacaoMensagem, janelaGantt, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
+import { agruparPorOficina, ordenarPorEntrega, chaveEnvioWhatsapp, filtrarProducoes, indicadoresProducao, opcoesAssociacaoMensagem, janelaGantt, intervaloBarraProducao, modeloMensagemProducao, prazoProducao, reais, resumoFaltasAviamentos, situacaoPrazo, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, totaisProducao, validarMudancaProducao } from './producao';
 
 const prod = (extra: Partial<Producao> = {}): Producao => ({
   dealId: '700001', os: '90001', oficinaId: 'of-1', oficina: 'OFICINA MODELO',
@@ -66,15 +66,15 @@ it('mudanca de data exige motivo; mudar somente oficina nao', () => {
 it('modelos de mensagem citam a peça em negrito, sem o número da OS, com o mesmo texto do servidor', () => {
   const p = prod({ peca: 'PECA TESTE B', pecas: 160, dataCombinada: '2026-10-20' });
   expect(modeloMensagemProducao('COBRANCA_PRAZO', p, '2026-10-13'))
-    .toBe('Bom dia. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?');
+    .toBe('Olá. A entrega de *PECA TESTE B*, 160 peças, está prevista para 20/10. Segue dentro do prazo?');
   expect(modeloMensagemProducao('COBRANCA_PRAZO', p, '2026-10-21'))
-    .toBe('Bom dia. A entrega de *PECA TESTE B*, 160 peças, estava prevista para 20/10. Qual a nova data de entrega?');
+    .toBe('Olá. A entrega de *PECA TESTE B*, 160 peças, estava prevista para 20/10. Qual a nova data de entrega?');
   expect(modeloMensagemProducao('COBRANCA_PRAZO', prod({ peca: 'PECA TESTE B', pecas: 160, dataCombinada: '', leadTime: '' }), '2026-10-13'))
-    .toBe('Bom dia. Qual a previsão de entrega de *PECA TESTE B*, 160 peças?');
+    .toBe('Olá. Qual a previsão de entrega de *PECA TESTE B*, 160 peças?');
   expect(modeloMensagemProducao('CONFIRMAR_DATA', p, '2026-10-13'))
-    .toBe('Bom dia. Confirmando a entrega de *PECA TESTE B*, 160 peças, para 20/10. Segue combinado?');
+    .toBe('Olá. Confirmando a entrega de *PECA TESTE B*, 160 peças, para 20/10. Segue combinado?');
   expect(modeloMensagemProducao('COBRANCA_PRAZO', prod({ peca: 'PECA TESTE B', pecas: null, dataCombinada: '2026-10-20' }), '2026-10-13'))
-    .toBe('Bom dia. A entrega de *PECA TESTE B* está prevista para 20/10. Segue dentro do prazo?');
+    .toBe('Olá. A entrega de *PECA TESTE B* está prevista para 20/10. Segue dentro do prazo?');
   expect(modeloMensagemProducao('CONFIRMAR_DATA', prod({ pecas: 1 }), '2026-10-13')).toContain(', 1 peça, para');
   expect(modeloMensagemProducao('CONFIRMAR_DATA', prod({ pecas: 1600 }), '2026-10-13')).toContain('1.600 peças');
   for (const tipo of ['COBRANCA_PRAZO', 'CONFIRMAR_DATA'] as const) expect(modeloMensagemProducao(tipo, p, '2026-10-13')).not.toMatch(/90001|OS /);
@@ -198,5 +198,22 @@ describe('OS previstas (19/10)', () => {
     expect(opcoesAssociacaoMensagem([real, prevDaOficina], 'of-1', undefined).map((p) => p.dealId)).toEqual(['700002']);
     expect(opcoesAssociacaoMensagem([real, prevDaOficina], 'of-1', ['700002']).map((p) => p.dealId)).toEqual(['700002']);
     expect(opcoesAssociacaoMensagem([real, prod({ dealId: '700003', oficinaId: 'of-2' })], 'of-1', ['999']).map((p) => p.dealId)).toEqual([]);
+  });
+});
+
+describe('intervalo da barra no Gantt', () => {
+  const hoje = '2026-10-22';
+  it('no prazo: do início da costura até o prazo', () => {
+    expect(intervaloBarraProducao(prod({ inicioCostura: '2026-10-10', dataCombinada: '2026-10-30' }), hoje)).toEqual({ inicio: '2026-10-10', fim: '2026-10-30' });
+  });
+  it('atrasada: a barra vai até hoje, para o atraso aparecer', () => {
+    expect(intervaloBarraProducao(prod({ inicioCostura: '2026-10-01', dataCombinada: '2026-10-15' }), hoje)).toEqual({ inicio: '2026-10-01', fim: hoje });
+  });
+  it('entrou na costura com o prazo já vencido: do início até hoje, não um pontinho', () => {
+    expect(intervaloBarraProducao(prod({ inicioCostura: '2026-10-21', dataCombinada: '', leadTime: '2026-10-16' }), hoje)).toEqual({ inicio: '2026-10-21', fim: hoje });
+  });
+  it('sem início: marco no prazo; sem prazo: sem barra', () => {
+    expect(intervaloBarraProducao(prod({ inicioCostura: '', dataCombinada: '2026-10-15' }), hoje)).toEqual({ inicio: '2026-10-15', fim: '2026-10-15' });
+    expect(intervaloBarraProducao(prod({ dataCombinada: '', leadTime: '' }), hoje)).toBeNull();
   });
 });

@@ -120,8 +120,8 @@ const estado = {
     {
       dealId: '700002', os: '90002', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-3), dataCombinada: diaIso(4), leadTime: diaIso(7), pecas: 160, valorCorte: 15840.5, cliente: 'CLIENTE BETA', peca: 'PECA TESTE B', referencia: 'REF-02', versao: 'v2',
       mensagens: [
-        { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. Pode confirmar a data de entrega de *PECA TESTE B*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
-        { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. A entrega de *PECA TESTE B* segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. Pode confirmar a data de entrega de *PECA TESTE B*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE B* segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
         { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
       ],
       sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
@@ -132,7 +132,7 @@ const estado = {
       // Novas tentativas (16/10): envio que ainda não saiu e resposta que o intérprete não conseguiu ler.
       mensagens: [
         { id: 'MSG-H-SEM-LEITURA', quando: new Date(Date.now() - 2_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Vou ver com a costureira e já aviso.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' },
-        { id: 'MSG-H-FILA', quando: new Date(Date.now() - 1_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Bom dia. A entrega de *PECA TESTE H*, 45 peças, está prevista para a data combinada. Segue dentro do prazo?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 }
+        { id: 'MSG-H-FILA', quando: new Date(Date.now() - 1_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE H*, 45 peças, está prevista para a data combinada. Segue dentro do prazo?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 }
       ], sugestoes: [], historico: [] },
     // OS previstas (19/10): ainda nas etapas 12 a 16; a Costura projetada vem do servidor.
     { dealId: '700009', os: '90009', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 200, valorCorte: null, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE I', referencia: 'REF-09', versao: 'v1',

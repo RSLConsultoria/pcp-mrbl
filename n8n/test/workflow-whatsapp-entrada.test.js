@@ -90,7 +90,7 @@ function leituraEntrada() {
     vr('WHATSAPP_MENSAGENS', [['id', 'evolution_id', 'quando', 'grupo_jid', 'grupo_nome', 'participante_jid', 'participante_nome', 'direcao', 'tipo', 'tipo_conteudo', 'texto',
       'resposta_a_evolution_id', 'deal_id', 'os', 'oficina_id', 'associacao', 'status_envio', 'erro', 'criado_em',
       'envio_tentativas', 'envio_proxima', 'interpretacao_status', 'interpretacao_tentativas', 'interpretacao_proxima'],
-      ['WA-E-1', 'EV-1', '2026-10-13T12:00:00.000Z', 'grupo-ficticio@g.us', 'GRUPO TESTE', '', 'Pessoa PCP', 'ENVIADA', 'COBRANCA_PRAZO', 'TEXTO', 'Bom dia. A entrega de *PECA TESTE B* segue?',
+      ['WA-E-1', 'EV-1', '2026-10-13T12:00:00.000Z', 'grupo-ficticio@g.us', 'GRUPO TESTE', '', 'Pessoa PCP', 'ENVIADA', 'COBRANCA_PRAZO', 'TEXTO', 'Olá. A entrega de *PECA TESTE B* segue?',
       '', '700001', '90001', 'of-1', 'MANUAL', 'ENVIADA', '', '2026-10-13T12:00:00.000Z']]),
     vr('WHATSAPP_SUGESTOES', [['id', 'mensagem_id', 'deal_id', 'status']]),
     vr('FALTANTES', [['id', 'os', 'deal_id', 'secao', 'ciclo', 'descricao_item', 'unidade', 'qtd_falta', 'qtd_baixada', 'status'],
@@ -123,7 +123,7 @@ test('Montar Contexto do Intérprete manda OS, faltas, conversa e instruções, 
   assert.equal(j.pecas, 160);
   assert.equal(j.dataCombinada, '2026-10-20');
   assert.deepEqual(j.faltasCostura, { quantidade: 1, itens: ['VIÉS TESTE: falta 4 MT'] });
-  assert.deepEqual(j.conversa, [{ direcao: 'ENVIADA', quando: '2026-10-13T12:00:00.000Z', texto: 'Bom dia. A entrega de *PECA TESTE B* segue?' }]);
+  assert.deepEqual(j.conversa, [{ direcao: 'ENVIADA', quando: '2026-10-13T12:00:00.000Z', texto: 'Olá. A entrega de *PECA TESTE B* segue?' }]);
   assert.match(j.instrucoes, /citam a peça/);
   assert.doesNotMatch(JSON.stringify(j), /@g\.us|Pessoa PCP|participante/);
 });

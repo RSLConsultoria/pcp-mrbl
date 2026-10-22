@@ -155,6 +155,17 @@ export function resumoFaltasAviamentos(p: Pick<Producao, 'faltasCostura' | 'falt
   return { total: costura + acabamento, costura, acabamento, textoCostura, textoAcabamento };
 }
 
+// Dias que a barra ocupa no Gantt. Atrasada vai até hoje (decisão do dono, 22/10):
+// assim a OS que entrou na Costura com o prazo vencido não vira um pontinho.
+// Sem início: marco no prazo. Sem prazo: sem barra.
+export function intervaloBarraProducao(p: Pick<Producao, 'inicioCostura' | 'dataCombinada' | 'leadTime'>, hoje: string): { inicio: string; fim: string } | null {
+  const prazo = prazoProducao(p).data;
+  if (!prazo) return null;
+  if (!p.inicioCostura) return { inicio: prazo, fim: prazo };
+  const fim = prazo < hoje ? hoje : prazo;
+  return { inicio: p.inicioCostura, fim: fim < p.inicioCostura ? p.inicioCostura : fim };
+}
+
 export function janelaGantt(lista: Producao[], hoje: string): { inicio: string; fim: string; dias: number } {
   const datas = lista.flatMap((p) => p.prevista
     ? [p.inicioCosturaPrevisto ?? '', p.fimCosturaPrevisto ?? '']
@@ -191,10 +202,10 @@ export function modeloMensagemProducao(tipo: ModeloMensagemProducao, p: Producao
   const fim = quantidade ? `${nome}, ${quantidade}` : nome;
   const prazo = prazoProducao(p);
   if (tipo === 'CONFIRMAR_DATA') {
-    return `Bom dia. Confirmando a entrega de ${meio} para ${dataCurta(p.dataCombinada || prazo.data)}. Segue combinado?`;
+    return `Olá. Confirmando a entrega de ${meio} para ${dataCurta(p.dataCombinada || prazo.data)}. Segue combinado?`;
   }
   const status = statusProducao(p, hoje);
-  if (status.status === 'ATRASADO') return `Bom dia. A entrega de ${meio} estava prevista para ${dataCurta(prazo.data)}. Qual a nova data de entrega?`;
-  if (!prazo.data) return `Bom dia. Qual a previsão de entrega de ${fim}?`;
-  return `Bom dia. A entrega de ${meio} está prevista para ${dataCurta(prazo.data)}. Segue dentro do prazo?`;
+  if (status.status === 'ATRASADO') return `Olá. A entrega de ${meio} estava prevista para ${dataCurta(prazo.data)}. Qual a nova data de entrega?`;
+  if (!prazo.data) return `Olá. Qual a previsão de entrega de ${fim}?`;
+  return `Olá. A entrega de ${meio} está prevista para ${dataCurta(prazo.data)}. Segue dentro do prazo?`;
 }

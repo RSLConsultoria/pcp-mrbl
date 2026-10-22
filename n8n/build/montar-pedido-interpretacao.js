@@ -2792,15 +2792,15 @@ function modeloWhatsapp(tipo, p, hojeISO) {
   var fim = nome + (quantidade ? ', ' + quantidade : '');
   var prazo = prazoDaProducao(p);
   if (tipo === 'CONFIRMAR_DATA') {
-    return 'Bom dia. Confirmando a entrega de ' + meio + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
+    return 'Olá. Confirmando a entrega de ' + meio + ' para ' + dataCurtaProducao(texto(p.dataCombinada) || prazo.data) + '. Segue combinado?';
   }
   if (tipo === 'COBRANCA_PRAZO') {
     var status = statusPrazo(p, hojeISO);
     if (status.status === 'ATRASADO') {
-      return 'Bom dia. A entrega de ' + meio + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
+      return 'Olá. A entrega de ' + meio + ' estava prevista para ' + dataCurtaProducao(prazo.data) + '. Qual a nova data de entrega?';
     }
-    if (!prazo.data) return 'Bom dia. Qual a previsão de entrega de ' + fim + '?';
-    return 'Bom dia. A entrega de ' + meio + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
+    if (!prazo.data) return 'Olá. Qual a previsão de entrega de ' + fim + '?';
+    return 'Olá. A entrega de ' + meio + ' está prevista para ' + dataCurtaProducao(prazo.data) + '. Segue dentro do prazo?';
   }
   return '';
 }

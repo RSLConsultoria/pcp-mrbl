@@ -5,7 +5,7 @@ import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { CargaProducao } from './ProducaoCarga';
 import { lerAgrupamento, lerIncluirPrevistas, lerVisao, salvarAgrupamento, salvarIncluirPrevistas, salvarVisao, type AgrupamentoGantt, type VisaoProducao } from '../regras/producaoTabela';
-import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, janelaGantt, modeloMensagemProducao, opcoesAssociacaoMensagem, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
+import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, intervaloBarraProducao, janelaGantt, modeloMensagemProducao, opcoesAssociacaoMensagem, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
@@ -220,10 +220,10 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
     const prazo = prazoProducao(p);
     const status = statusProducao(p, hojeIso);
     const alertaAviamentos = resumoFaltasAviamentos(p);
-    const inicio = p.inicioCostura || prazo.data;
-    const esquerda = inicio ? Math.max(0, indiceDia(inicio, janela.inicio)) * LARGURA_DIA : 0;
-    const fim = prazo.data ? Math.min(janela.dias - 1, indiceDia(prazo.data, janela.inicio)) : 0;
-    const largura = p.inicioCostura && prazo.data ? Math.max(16, (fim - Math.max(0, indiceDia(p.inicioCostura, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
+    const intervalo = intervaloBarraProducao(p, hojeIso);
+    const esquerda = intervalo ? Math.max(0, indiceDia(intervalo.inicio, janela.inicio)) * LARGURA_DIA : 0;
+    const fim = intervalo ? Math.min(janela.dias - 1, indiceDia(intervalo.fim, janela.inicio)) : 0;
+    const largura = p.inicioCostura && intervalo ? Math.max(16, (fim - Math.max(0, indiceDia(intervalo.inicio, janela.inicio)) + 1) * LARGURA_DIA - 6) : 14;
     return <div className="gantt__linha" key={p.dealId}>
       <button className="gantt__os gantt__fixo" type="button" onClick={() => setAberta(p.dealId)}><strong>OS {p.os}</strong>{comOficina ? <span className="gantt__os-texto"><span>{p.peca || p.referencia || 'Sem descrição'}</span><span className={`gantt__oficina ${p.oficina === 'ALOCAR' ? 'gantt__oficina--alocar' : ''}`}>{p.oficina || 'Sem oficina'}</span></span> : <span>{p.peca || p.referencia || 'Sem descrição'}</span>}<span className="gantt__alertas">{alertaAviamentos.costura > 0 && <em className="gantt__sinal gantt__sinal--costura" aria-label={alertaAviamentos.textoCostura}>🚫 {alertaAviamentos.costura}</em>}{alertaAviamentos.acabamento > 0 && <em className="gantt__sinal gantt__sinal--acabamento" aria-label={alertaAviamentos.textoAcabamento}>⚠️ {alertaAviamentos.acabamento}</em>}</span></button>
       <div className="gantt__pista" style={{ width: janela.dias * LARGURA_DIA }}>
