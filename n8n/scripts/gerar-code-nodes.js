@@ -43,7 +43,8 @@ const NODES = {
   'montar-contexto-associador': 'Montar Contexto do Associador',
   'finalizar-associacao': 'Finalizar Associação',
   'montar-pedido-interpretacao-entrada': 'Montar Pedido de Interpretação (Entrada)',
-  'montar-envio-whatsapp': 'Montar Envio WhatsApp'
+  'montar-envio-whatsapp': 'Montar Envio WhatsApp',
+  'fechar-perguntas-vencidas': 'Fechar Perguntas Vencidas'
 };
 
 const corpo = ARQUIVOS

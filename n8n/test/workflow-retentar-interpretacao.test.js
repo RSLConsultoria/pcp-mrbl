@@ -40,7 +40,7 @@ test('workflow Retentar Interpretação: conta as tentativas antes de disparar, 
   assert.equal(w.settings.saveDataSuccessExecution, 'none');
   assert.deepEqual(no(w, 'A cada 15 minutos').parameters.rule.interval, [{ field: 'minutes', minutesInterval: 15 }]);
   assert.deepEqual(destinos(w, 'A cada 15 minutos'), ['Ler Interpretações Pendentes']);
-  assert.deepEqual(destinos(w, 'Ler Interpretações Pendentes'), ['Marcar Tentativas']);
+  assert.deepEqual(destinos(w, 'Ler Interpretações Pendentes'), ['Marcar Tentativas', 'Fechar Perguntas Vencidas']);
   assert.deepEqual(destinos(w, 'Marcar Tentativas'), ['Gravar Tentativas']);
   // Sem gravar a tentativa, não dispara (falha na gravação para o workflow).
   assert.deepEqual(destinos(w, 'Gravar Tentativas'), ['Selecionar Interpretações']);
@@ -77,4 +77,11 @@ test('Marcar Tentativas grava ERRO nas esgotadas e reserva as vencidas num batch
   const nada = leitura();
   nada.valueRanges[1].values.splice(1);
   assert.deepEqual(rodarAdaptador('marcar-tentativas-interpretacao', nada), []);
+});
+
+test('agendamento fecha perguntas do associador vencidas (22/10), sem parar o resto', () => {
+  const w = workflow();
+  assert.deepEqual(destinos(w, 'Fechar Perguntas Vencidas'), ['Gravar Perguntas Fechadas']);
+  assert.equal(no(w, 'Gravar Perguntas Fechadas').onError, 'continueRegularOutput');
+  assert.equal(no(w, 'Gravar Perguntas Fechadas').parameters.method, 'POST');
 });

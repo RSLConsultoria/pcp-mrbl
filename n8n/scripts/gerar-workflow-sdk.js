@@ -868,7 +868,8 @@ export default workflow('pcp-mrbl-interpretar-whatsapp', 'PCP MRBL - Interpretar
 // associacao manual), que nao conta de novo (reservada: true).
 const POS_RETENTAR = {};
 [['A cada 15 minutos', 0, 0], ['Ler Interpretações Pendentes', 1, 0], ['Marcar Tentativas', 2, 0],
-  ['Gravar Tentativas', 3, 0], ['Selecionar Interpretações', 4, 0], ['Interpretar de Novo', 5, 0]]
+  ['Gravar Tentativas', 3, 0], ['Selecionar Interpretações', 4, 0], ['Interpretar de Novo', 5, 0],
+  ['Fechar Perguntas Vencidas', 2, 260], ['Gravar Perguntas Fechadas', 3, 260]]
   .forEach(([n, c, y]) => { POS_RETENTAR[n] = [c * DX, y]; });
 posAtual = POS_RETENTAR;
 RETRY = RETRY_API;
@@ -888,7 +889,11 @@ const retentarInterpretacao = IMPORT + [
   executarWorkflow('interpretarDeNovo', 'Interpretar de Novo', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, true, 'continueRegularOutput', 'each'),
   code('marcarTentativas', 'Marcar Tentativas', 'marcar-tentativas-interpretacao'),
   // batchUpdate idempotente, com retry; se falhar, o workflow para sem disparar.
-  httpGoogle('gravarTentativas', 'Gravar Tentativas', 'POST', "expr('{{ $json.url }}')", true)
+  httpGoogle('gravarTentativas', 'Gravar Tentativas', 'POST', "expr('{{ $json.url }}')", true),
+  // Perguntas do associador com mais de 24 h (22/10). Falha aqui não para as novas tentativas.
+  code('fecharPerguntasVencidas', 'Fechar Perguntas Vencidas', 'fechar-perguntas-vencidas'),
+  httpGoogle('gravarPerguntasFechadas', 'Gravar Perguntas Fechadas', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", '')
 ].join('\n\n') + `
 
 export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar Interpretação', {
@@ -902,7 +907,8 @@ export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar 
   .to(marcarTentativas)
   .to(gravarTentativas)
   .to(selecionarInterpretacoes)
-  .to(interpretarDeNovo);
+  .to(interpretarDeNovo)
+  .add(lerPendentesInterpretacao).to(fecharPerguntasVencidas).to(gravarPerguntasFechadas);
 `;
 
 // Médias de Previsão (19/10): todo dia às 3h lê os registros de etapa marcados no
