@@ -439,9 +439,36 @@ function prepararEntradaWhatsapp(payload, dados, contexto) {
     : { interpretacao_status: '', interpretacao_tentativas: '', interpretacao_proxima: '' });
   var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'append', chave: 'id', linha: linhaMensagem }];
   var prod = producoes.filter(function (p) { return p.dealId === associacao.dealId; })[0] || {};
+  // Associador por IA (22/10): só quando as regras fixas não resolveram e a
+  // oficina tem OS na Costura. Com pergunta aberta no grupo, vai junto a pergunta.
+  var pedidoAssociador = null;
+  if (msg.tipoConteudo === 'TEXTO' && !associacao.dealId) {
+    var todosCandidatos = candidatosAssociacaoWhatsapp(dados.producao, msg.oficinaId, dados.mensagens, dataISOEmSaoPaulo(agora));
+    var pergunta = perguntaAbertaWhatsapp(dados.mensagens, msg.grupoJid, agora);
+    var original = null;
+    var perguntados = [];
+    if (pergunta) {
+      var daPergunta = texto(pergunta.pergunta_candidatos).split(';');
+      perguntados = todosCandidatos.filter(function (c) { return daPergunta.indexOf(c.dealId) >= 0; });
+      original = linhasWhatsappUnicas((dados.mensagens || []).filter(function (m) {
+        return m && texto(m.id) === texto(pergunta.pergunta_mensagem_id);
+      }), false)[0] || null;
+      if (!original || !perguntados.length) { pergunta = null; original = null; }
+    }
+    if (todosCandidatos.length) {
+      var doGrupo = (dados.mensagens || []).filter(function (m) { return m && texto(m.grupo_jid) === msg.grupoJid; });
+      pedidoAssociador = {
+        mensagem: linhaMensagem, candidatos: todosCandidatos, pergunta: pergunta, original: original,
+        entrada: contextoAssociadorWhatsapp({ texto: msg.texto, quando: msg.quando || agora }, todosCandidatos, doGrupo,
+          pergunta ? { texto: pergunta.texto, candidatos: perguntados.map(function (c) { return c.os; }), mensagemOriginal: original.texto } : null)
+      };
+    }
+  }
   return {
     ok: true,
     precisaInterpretar: precisaInterpretar,
+    precisaAssociar: !!pedidoAssociador,
+    pedidoAssociador: pedidoAssociador,
     mensagemId: mensagemId,
     quando: msg.quando || agora,
     dealId: associacao.dealId,

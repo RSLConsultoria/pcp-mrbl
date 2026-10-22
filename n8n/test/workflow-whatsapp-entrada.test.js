@@ -141,3 +141,23 @@ test('Preparar Entrada WhatsApp continua aceitando a leitura com as abas novas',
   assert.equal(saida.json.precisaInterpretar, true);
   assert.equal(saida.json.preparacao.dealId, '700001');
 });
+
+test('sem associação: chama o associador, grava a decisão e dispara a interpretação', () => {
+  const w = workflow();
+  assert.deepEqual(destinos(w, 'Precisa Interpretar?', 1), ['Precisa Associar?']);
+  assert.deepEqual(destinos(w, 'Precisa Associar?', 0), ['Montar Contexto do Associador']);
+  assert.deepEqual(destinos(w, 'Montar Contexto do Associador'), ['Associar com Modelo']);
+  assert.deepEqual(destinos(w, 'Associar com Modelo'), ['Finalizar Associação']);
+  assert.deepEqual(destinos(w, 'Associar com Modelo', 1), ['Montar Erro de Interpretação']);
+  assert.deepEqual(destinos(w, 'Finalizar Associação', 1), ['Montar Erro de Interpretação']);
+  assert.equal(no(w, 'Associar com Modelo').parameters.workflowId.value, require('../scripts/ids-subworkflows').IDS_SUBWORKFLOWS.ASSOCIADOR);
+  assert.deepEqual(destinos(w, 'Finalizar Associação'), ['Gravar Associação']);
+  assert.deepEqual(destinos(w, 'Gravar Associação'), ['Interpretar Associada?']);
+  assert.deepEqual(destinos(w, 'Interpretar Associada?', 0), ['Montar Pedido de Interpretação (Entrada)']);
+  assert.deepEqual(destinos(w, 'Montar Pedido de Interpretação (Entrada)'), ['Disparar Interpretação']);
+  assert.match(no(w, 'Interpretar Associada?').parameters.conditions.conditions[0].leftValue, /Finalizar Associação/);
+  const assoc = no(w, 'Associar com Modelo');
+  assert.equal(assoc.parameters.options.waitForSubWorkflow, true);
+  assert.equal(no(w, 'Disparar Interpretação').parameters.options.waitForSubWorkflow, false);
+  assert.ok(!w.nodes.some((n) => n.type === 'n8n-nodes-base.httpRequest' && /evolution/i.test(String(n.parameters.url))));
+});

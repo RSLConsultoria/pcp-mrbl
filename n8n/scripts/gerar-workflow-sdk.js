@@ -76,7 +76,11 @@ const POS_WHATSAPP_ENTRADA = {};
   ['Precisa Interpretar?', 6, 0], ['Montar Contexto do Intérprete', 7, 0], ['Interpretar com Modelo', 8, 0],
   ['Finalizar Entrada WhatsApp', 9, 0], ['Tem Sugestão?', 10, 0], ['Gravar Sugestão WhatsApp', 11, 0],
   ['Montar Erro de Recepção', 3, 260], ['Registrar Erro de Recepção', 4, 260], ['Solicitar Reentrega', 5, 260],
-  ['Montar Erro de Interpretação', 9, 260], ['Registrar Erro de Interpretação', 10, 260]]
+  ['Montar Erro de Interpretação', 9, 260], ['Registrar Erro de Interpretação', 10, 260],
+  // Associador por IA (22/10): quando nenhuma regra fixa liga a mensagem a uma OS.
+  ['Precisa Associar?', 7, 520], ['Montar Contexto do Associador', 8, 520], ['Associar com Modelo', 9, 520],
+  ['Finalizar Associação', 10, 520], ['Gravar Associação', 11, 520], ['Interpretar Associada?', 12, 520],
+  ['Montar Pedido de Interpretação (Entrada)', 13, 520], ['Disparar Interpretação', 14, 520]]
   .forEach(([n, c, y]) => { POS_WHATSAPP_ENTRADA[n] = [c * DX, y]; });
 
 const POS_INTERPRETAR = {};
@@ -712,7 +716,42 @@ const whatsappEntrada = IMPORT + [
 });`,
   code('montarErroInterpretacaoWhatsapp', 'Montar Erro de Interpretação', 'montar-erro-whatsapp-entrada'),
   httpGoogle('registrarErroInterpretacaoWhatsapp', 'Registrar Erro de Interpretação', 'POST', "expr('{{ $json.url }}')", true,
-    "onError: 'continueRegularOutput',\n    ", '')
+    "onError: 'continueRegularOutput',\n    ", ''),
+  'const precisaAssociarWhatsapp = ' + condicao('Precisa Associar?', "{{ $('Preparar Entrada WhatsApp').first().json.precisaAssociar }}", 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  code('montarContextoAssociador', 'Montar Contexto do Associador', 'montar-contexto-associador'),
+  `const associarComModelo = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.2,
+  config: {
+    name: 'Associar com Modelo',
+    onError: 'continueErrorOutput',
+    parameters: {
+      source: 'database',
+      workflowId: { __rl: true, value: '${IDS_SUBWORKFLOWS.ASSOCIADOR}', mode: 'id' },
+      mode: 'once',
+      options: { waitForSubWorkflow: true }
+    },
+    position: ${posicao('Associar com Modelo')}
+  },
+  output: [{ associacao: {} }]
+});`,
+  `const finalizarAssociacao = node({
+  type: 'n8n-nodes-base.code',
+  version: 2,
+  config: {
+    name: 'Finalizar Associação',
+    onError: 'continueErrorOutput',
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: ${lerBuild('finalizar-associacao')} },
+    position: ${posicao('Finalizar Associação')}
+  },
+  output: [{ url: '', interpretar: null }]
+});`,
+  httpGoogle('gravarAssociacao', 'Gravar Associação', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  'const interpretarAssociada = ' + condicao('Interpretar Associada?', "{{ !!$('Finalizar Associação').first().json.interpretar }}", 'boolean', 'true', "''")
+    .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  code('montarPedidoInterpretacaoEntrada', 'Montar Pedido de Interpretação (Entrada)', 'montar-pedido-interpretacao-entrada'),
+  executarWorkflow('dispararInterpretacaoEntrada', 'Disparar Interpretação', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, false, 'continueRegularOutput')
 ].join('\n\n') + `
 
 export default workflow('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsApp', {
@@ -741,7 +780,17 @@ export default workflow('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsAp
     finalizarEntradaWhatsapp.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp)))
   .add(finalizarEntradaWhatsapp).to(temSugestaoWhatsapp)
   .add(temSugestaoWhatsapp.onTrue(
-    gravarSugestaoWhatsapp.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp))));
+    gravarSugestaoWhatsapp.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp))))
+  .add(precisaInterpretarWhatsapp.onFalse(precisaAssociarWhatsapp))
+  .add(precisaAssociarWhatsapp.onTrue(
+    montarContextoAssociador.to(
+      associarComModelo.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp)))))
+  .add(associarComModelo).to(
+    finalizarAssociacao.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp)))
+  .add(finalizarAssociacao).to(
+    gravarAssociacao.onError(montarErroInterpretacaoWhatsapp.to(registrarErroInterpretacaoWhatsapp)))
+  .add(gravarAssociacao).to(interpretarAssociada)
+  .add(interpretarAssociada.onTrue(montarPedidoInterpretacaoEntrada.to(dispararInterpretacaoEntrada)));
 `;
 
 // Associacao manual (ajuste de 16/10): a API dispara este workflow sem esperar com

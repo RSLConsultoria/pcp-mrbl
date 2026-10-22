@@ -39,7 +39,10 @@ const NODES = {
   'selecionar-interpretacoes-pendentes': 'Selecionar Interpretações',
   'marcar-tentativas-interpretacao': 'Marcar Tentativas',
   'montar-medias-previsao': 'Montar Médias',
-  'montar-erro-medias': 'Montar Erro Médias'
+  'montar-erro-medias': 'Montar Erro Médias',
+  'montar-contexto-associador': 'Montar Contexto do Associador',
+  'finalizar-associacao': 'Finalizar Associação',
+  'montar-pedido-interpretacao-entrada': 'Montar Pedido de Interpretação (Entrada)'
 };
 
 const corpo = ARQUIVOS

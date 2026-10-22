@@ -5,9 +5,11 @@
 // - INTERPRETE: subworkflow do modelo (credencial fora do repositório).
 // - INTERPRETAR_WHATSAPP: "PCP MRBL - Interpretar WhatsApp" (chamado pela API e
 //   pelo "PCP MRBL - Retentar Interpretação").
+// - ASSOCIADOR: subworkflow do associador por IA (22/10; mesma credencial Groq).
 const IDS_SUBWORKFLOWS = {
   INTERPRETE: 'pTRkYh6xs7HGM7CM',
-  INTERPRETAR_WHATSAPP: 'DijEYc4iDDU3oRJU'
+  INTERPRETAR_WHATSAPP: 'DijEYc4iDDU3oRJU',
+  ASSOCIADOR: 'CONFIGURAR_ASSOCIADOR'
 };
 
 function idSubworkflowValido(id) {
