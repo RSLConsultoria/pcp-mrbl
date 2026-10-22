@@ -79,14 +79,15 @@ Valores novos de `associacao`: `IA`, `IA_DUVIDA`, `NAO_OS`. Valor novo de `tipo`
 
 - Subworkflow novo **"PCP MRBL - Associador WhatsApp (Groq)"**, no molde do intérprete (`openai/gpt-oss-120b`, `reasoning_effort: low`, credencial WhatsPCPGroq). Só devolve JSON; nunca envia.
 - "Receber WhatsApp": depois de preparar, se a mensagem precisa do associador, monta o contexto, chama o subworkflow, valida e grava (ligação, pergunta enfileirada ou `NAO_OS`). Lógica pura em `n8n/src/whatsapp.js` (ou `associador.js`), ES5, com testes.
-- "Enviar WhatsApp": manda `quoted` à Evolution quando a linha tem `resposta_a_evolution_id`.
+- "Enviar WhatsApp": manda `quoted` à Evolution quando a linha tem `resposta_a_evolution_id`. O corpo é montado num Code node próprio ("Montar Envio WhatsApp"), porque a Evolution não guarda mensagens: a citação leva id, grupo, participante e texto da mensagem original. Campos extras nunca passam pelos nós que gravam na planilha (o mapeamento automático criaria colunas).
+- A chamada ao associador acontece no "Receber WhatsApp", depois de confirmar o recebimento; quando a mensagem precisa de interpretação, ele dispara o workflow "Interpretar WhatsApp" que já existe (sem esperar).
 - Expiração das perguntas: o agendamento "Retentar Interpretação" (15 min) também fecha perguntas com mais de 24 h e passa a original para `SEM_ASSOCIACAO`.
 - Falhas do Groq: registram em ERROS_APP; a mensagem fica `SEM_ASSOCIACAO` (sem nova tentativa automática da associação).
 
 ## 6. App
 
 - Conversa da OS: selo **"ligada pela IA"** nas mensagens `IA`, com o motivo no título; a pergunta da IA aparece como mensagem do PCP com o selo **"pergunta da IA"**.
-- **Trocar OS**: numa mensagem `IA`, o PCP pode ligar a outra OS da mesma oficina (ação `associar_whatsapp` passa a aceitar `IA`, além de `SEM_ASSOCIACAO`). Uma sugestão pendente gerada por ela vira `IGNORADA` e a mensagem é reinterpretada para a nova OS.
+- **Trocar OS**: numa mensagem `IA`, o PCP pode ligar a outra OS da mesma oficina (ação `associar_whatsapp` passa a aceitar `IA`, além de `SEM_ASSOCIACAO`). Uma sugestão pendente gerada por ela vira `IGNORADA`; sem sugestão, a mensagem é interpretada para a nova OS. (Cada mensagem tem no máximo uma sugestão, com id fixo; depois de trocar, o PCP ajusta a data à mão se precisar.)
 - `NAO_OS` não aparece em "aguardando associação". `IA_DUVIDA` aparece lá com a etiqueta "perguntado à oficina".
 - Regras otimistas espelhadas em `web/src/regras/otimista.ts`; simulador (`mock-api.mjs`) com associador falso.
 
