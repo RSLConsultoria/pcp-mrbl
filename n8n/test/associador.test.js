@@ -72,3 +72,92 @@ test('contexto do associador: sem JID, telefone nem nome de participante', () =>
   assert.equal(e.pergunta, null);
   assert.ok(e.instrucoes.length > 0 && e.schema.resultado);
 });
+
+const msgLinha = { id: 'WA-R-1', evolution_id: 'EVO-1', grupo_jid: 'grupo-teste@g.us', grupo_nome: 'GRUPO TESTE', oficina_id: 'of-1', direcao: 'RECEBIDA', texto: 'a blusa sai dia 27', quando: '2026-10-22T13:00:00.000Z', associacao: 'SEM_ASSOCIACAO' };
+const ctxDecisao = { agora: '2026-10-22T13:00:05.000Z', gerarId: () => 'WA-P-1' };
+const cands = () => ctx.candidatosAssociacaoWhatsapp(producao, 'of-1', [], '2026-10-22');
+
+test('decisão OS: liga a mensagem como IA e pede interpretação', () => {
+  const r = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: msgLinha, candidatos: cands(), pergunta: null, original: null },
+    { resultado: 'OS', os: '90001', confianca: 0.92, motivo: 'fala da blusa' }, ctxDecisao));
+  assert.equal(r.ok, true);
+  assert.equal(r.resultado, 'OS');
+  assert.equal(r.operacoes.length, 1);
+  assert.deepEqual(
+    { id: r.operacoes[0].linha.id, deal_id: r.operacoes[0].linha.deal_id, os: r.operacoes[0].linha.os, associacao: r.operacoes[0].linha.associacao, associacao_confianca: r.operacoes[0].linha.associacao_confianca, interpretacao_status: r.operacoes[0].linha.interpretacao_status },
+    { id: 'WA-R-1', deal_id: '700001', os: '90001', associacao: 'IA', associacao_confianca: 0.92, interpretacao_status: 'PENDENTE' });
+  assert.deepEqual(r.interpretar, { mensagemId: 'WA-R-1', dealId: '700001' });
+});
+
+test('decisão DUVIDA: marca IA_DUVIDA e enfileira a pergunta citando a mensagem', () => {
+  const r = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: msgLinha, candidatos: cands(), pergunta: null, original: null },
+    { resultado: 'DUVIDA', candidatos: ['90001', '90002'], confianca: 0.5, motivo: 'duas peças' }, ctxDecisao));
+  assert.equal(r.resultado, 'DUVIDA');
+  assert.equal(r.operacoes[0].linha.associacao, 'IA_DUVIDA');
+  const p = r.operacoes[1];
+  assert.equal(p.operacao, 'append');
+  assert.equal(p.linha.tipo, 'PERGUNTA_ASSOCIACAO');
+  assert.equal(p.linha.texto, 'Olá! Essa mensagem é sobre *BLUSA TESTE* ou *CALCA TESTE*?');
+  assert.equal(p.linha.resposta_a_evolution_id, 'EVO-1');
+  assert.equal(p.linha.pergunta_candidatos, '700001;700002');
+  assert.equal(p.linha.pergunta_mensagem_id, 'WA-R-1');
+  assert.equal(p.linha.status_envio, 'PENDENTE');
+  assert.equal(r.interpretar, null);
+});
+
+test('decisão NAO_OS e SEM_ASSOCIACAO não perguntam nem interpretam', () => {
+  const nao = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: msgLinha, candidatos: cands(), pergunta: null, original: null },
+    { resultado: 'NAO_OS', confianca: 0.9, motivo: 'saudação' }, ctxDecisao));
+  assert.equal(nao.operacoes.length, 1);
+  assert.equal(nao.operacoes[0].linha.associacao, 'NAO_OS');
+  const sem = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: msgLinha, candidatos: cands(), pergunta: null, original: null },
+    { resultado: 'OS', os: '90001', confianca: 0.5, motivo: 'incerto' }, ctxDecisao));
+  assert.equal(sem.resultado, 'SEM_ASSOCIACAO');
+  assert.equal(sem.operacoes[0].linha.associacao, undefined);
+  assert.equal(sem.operacoes[0].linha.associacao_motivo, 'incerto');
+  assert.equal(sem.interpretar, null);
+});
+
+test('modo resposta: escolheu a OS liga original e resposta e fecha a pergunta', () => {
+  const pergunta = { id: 'WA-P-1', tipo: 'PERGUNTA_ASSOCIACAO', pergunta_candidatos: '700001;700002', pergunta_mensagem_id: 'WA-R-1', grupo_jid: 'grupo-teste@g.us' };
+  const resposta = { ...msgLinha, id: 'WA-R-2', evolution_id: 'EVO-2', texto: 'é a blusa' };
+  const r = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: resposta, candidatos: cands().filter((c) => c.os !== '90003'), pergunta, original: msgLinha },
+    { resultado: 'OS', os: '90001', confianca: 0.95, motivo: 'respondeu blusa' }, ctxDecisao));
+  assert.equal(r.resultado, 'OS');
+  const porId = Object.fromEntries(r.operacoes.map((o) => [o.linha.id, o.linha]));
+  assert.equal(porId['WA-R-2'].associacao, 'IA');
+  assert.equal(porId['WA-R-2'].interpretacao_status, '');
+  assert.equal(porId['WA-R-1'].deal_id, '700001');
+  assert.equal(porId['WA-R-1'].interpretacao_status, 'PENDENTE');
+  assert.equal(porId['WA-P-1'].pergunta_fechada_em, '2026-10-22T13:00:05.000Z');
+  assert.equal(porId['WA-P-1'].deal_id, '700001');
+  assert.deepEqual(r.interpretar, { mensagemId: 'WA-R-1', dealId: '700001' });
+});
+
+test('modo resposta: não respondeu segue o fluxo normal, sem nova pergunta', () => {
+  const pergunta = { id: 'WA-P-1', pergunta_candidatos: '700001;700002', pergunta_mensagem_id: 'WA-R-1' };
+  const entrada = { mensagem: { ...msgLinha, id: 'WA-R-3' }, candidatos: cands(), pergunta, original: msgLinha };
+  const nao = limpo(ctx.decidirAssociacaoWhatsapp(entrada, { resultado: 'NAO_OS', confianca: 0.9, motivo: 'outro assunto' }, ctxDecisao));
+  assert.deepEqual(nao.operacoes.map((o) => [o.linha.id, o.linha.associacao]), [['WA-R-3', 'NAO_OS']]);
+  const duvida = limpo(ctx.decidirAssociacaoWhatsapp(entrada, { resultado: 'DUVIDA', candidatos: ['90001', '90002'], confianca: 0.5, motivo: 'x' }, ctxDecisao));
+  assert.equal(duvida.resultado, 'SEM_ASSOCIACAO');
+  assert.equal(duvida.operacoes.length, 1);
+});
+
+test('saída inválida do modelo falha', () => {
+  const r = ctx.decidirAssociacaoWhatsapp({ mensagem: msgLinha, candidatos: cands(), pergunta: null, original: null }, { resultado: 'OS', os: '12345', confianca: 0.9 }, ctxDecisao);
+  assert.equal(r.ok, false);
+});
+
+test('perguntas com mais de 24 h fecham e a original volta para SEM_ASSOCIACAO', () => {
+  const linhas = [
+    { id: 'WA-P-1', tipo: 'PERGUNTA_ASSOCIACAO', direcao: 'ENVIADA', status_envio: 'ENVIADA', grupo_jid: 'g@g.us', quando: '2026-10-21T10:00:00.000Z', pergunta_mensagem_id: 'WA-R-1', pergunta_fechada_em: '' },
+    { id: 'WA-R-1', direcao: 'RECEBIDA', associacao: 'IA_DUVIDA', grupo_jid: 'g@g.us', quando: '2026-10-21T09:59:00.000Z' },
+    { id: 'WA-P-2', tipo: 'PERGUNTA_ASSOCIACAO', direcao: 'ENVIADA', status_envio: 'ENVIADA', grupo_jid: 'h@g.us', quando: '2026-10-22T10:00:00.000Z', pergunta_mensagem_id: 'WA-R-9', pergunta_fechada_em: '' }
+  ];
+  const r = limpo(ctx.fecharPerguntasVencidasWhatsapp(linhas, '2026-10-22T11:00:00.000Z'));
+  assert.deepEqual(r.operacoes.map((o) => o.linha), [
+    { id: 'WA-P-1', pergunta_fechada_em: '2026-10-22T11:00:00.000Z' },
+    { id: 'WA-R-1', associacao: 'SEM_ASSOCIACAO' }
+  ]);
+});
