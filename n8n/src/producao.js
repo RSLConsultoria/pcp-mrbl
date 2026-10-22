@@ -443,9 +443,14 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
   if (texto(corpo.versao) !== texto(producao.atualizado_em_ploomes)) return erroAcao(409, 'Esta OS mudou. Atualize a página e tente de novo.');
   var mensagem = (linhas.whatsappMensagens || []).filter(function (m) { return m && texto(m.id) === texto(corpo.mensagemId); })[0];
   if (!mensagem) return erroAcao(404, 'Mensagem do WhatsApp não encontrada.');
-  if (semAcento(mensagem.direcao) !== 'RECEBIDA' || texto(mensagem.deal_id) || semAcento(mensagem.associacao) !== 'SEM_ASSOCIACAO') {
+  // Livre: sem OS (SEM_ASSOCIACAO ou IA_DUVIDA). Troca (22/10): ligada pela IA a outra OS.
+  var assoc = semAcento(mensagem.associacao);
+  var troca = assoc === 'IA' && !!texto(mensagem.deal_id);
+  var livre = !texto(mensagem.deal_id) && (assoc === 'SEM_ASSOCIACAO' || assoc === 'IA_DUVIDA');
+  if (semAcento(mensagem.direcao) !== 'RECEBIDA' || !(troca || livre)) {
     return erroAcao(409, 'Esta mensagem já foi associada ou não pode ser associada.');
   }
+  if (troca && texto(mensagem.deal_id) === texto(producao.deal_id)) return erroAcao(409, 'A mensagem já está nesta OS.');
   if (!texto(producao.oficina_id) || texto(mensagem.oficina_id) !== texto(producao.oficina_id)) {
     return erroAcao(409, 'A mensagem e a OS precisam pertencer ao mesmo grupo.');
   }
@@ -465,11 +470,23 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
     ? { mensagemId: texto(mensagem.id), dealId: texto(producao.deal_id) } : null;
   // A interpretar desde já: se o disparo falhar, o agendamento de 15 min pega a mensagem.
   if (interpretar) Object.assign(linha, camposInterpretacaoPendenteWhatsapp(0, ctx.agora));
+  var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }];
+  // Na troca, a sugestão pendente da OS antiga deixa de valer (uma sugestão por mensagem).
+  if (troca) {
+    (linhas.whatsappSugestoes || []).filter(function (s) {
+      return s && texto(s.mensagem_id) === texto(mensagem.id) && semAcento(s.status) === 'PENDENTE';
+    }).forEach(function (s) {
+      operacoes.push({ aba: 'WHATSAPP_SUGESTOES', operacao: 'update', chave: 'id',
+        linha: { id: texto(s.id), status: 'IGNORADA', decidido_em: ctx.agora, decidido_por: ctx.usuario } });
+    });
+  }
+  var textoHistorico = troca
+    ? ctx.usuario + ' trocou a OS de uma mensagem do WhatsApp: ' + texto(mensagem.os) + ' → ' + texto(producao.os) + '.'
+    : ctx.usuario + ' associou manualmente uma mensagem do WhatsApp à OS ' + texto(producao.os) + '.';
   return {
     ok: true, versao: texto(producao.atualizado_em_ploomes), ploomes: null, interpretar: interpretar,
-    operacoes: [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }],
-    historicos: [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), 'WHATSAPP_ASSOCIAR',
-      ctx.usuario + ' associou manualmente uma mensagem do WhatsApp à OS ' + texto(producao.os) + '.')]
+    operacoes: operacoes,
+    historicos: [historicoProducao(ctx, texto(producao.deal_id), texto(producao.os), 'WHATSAPP_ASSOCIAR', textoHistorico)]
   };
 }
 
@@ -679,7 +696,7 @@ function mensagemProducaoBoard(m, reenviadas) {
 }
 
 function mensagemProducaoBoardBase(m, reenviadas) {
-  return {
+  var base = {
     reenviada: !!(reenviadas && reenviadas[idReenvioWhatsapp(m.id)]),
     id: texto(m.id),
     quando: texto(m.quando),
@@ -690,6 +707,10 @@ function mensagemProducaoBoardBase(m, reenviadas) {
     statusEnvio: semAcento(m.status_envio),
     tipoConteudo: semAcento(m.tipo_conteudo) || 'TEXTO'
   };
+  // Associador por IA (22/10): motivo da ligação e a pergunta feita à oficina.
+  if (base.associacao === 'IA' && texto(m.associacao_motivo)) base.associacaoMotivo = texto(m.associacao_motivo);
+  if (semAcento(m.tipo) === 'PERGUNTA_ASSOCIACAO') base.pergunta = true;
+  return base;
 }
 
 function sugestaoProducaoBoard(s) {
@@ -806,7 +827,9 @@ function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
     if (o && texto(o.ploomes_id)) oficinasPorId[texto(o.ploomes_id)] = o;
   });
   return linhasWhatsappUnicas((mensagens || []).filter(function (m) {
-    return m && semAcento(m.direcao) === 'RECEBIDA' && !texto(m.deal_id) && semAcento(m.associacao) === 'SEM_ASSOCIACAO';
+    // IA_DUVIDA (22/10): a IA perguntou à oficina; o PCP pode associar antes da resposta.
+    var a = semAcento(m && m.associacao);
+    return m && semAcento(m.direcao) === 'RECEBIDA' && !texto(m.deal_id) && (a === 'SEM_ASSOCIACAO' || a === 'IA_DUVIDA');
   }), false).sort(function (a, b) {
     return texto(a.quando) < texto(b.quando) ? 1 : texto(a.quando) > texto(b.quando) ? -1 : 0;
   }).slice(0, 30).map(function (m) {
@@ -817,6 +840,7 @@ function mensagensSemAssociacaoProducaoBoard(mensagens, oficinas) {
     base.oficinaId = oficinaId;
     base.oficina = texto(oficina.nome);
     base.grupoNome = texto(m.grupo_nome) || texto(oficina.grupo_nome);
+    if (semAcento(m.associacao) === 'IA_DUVIDA') base.perguntado = true;
     return base;
   });
 }

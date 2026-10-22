@@ -307,3 +307,32 @@ test('OS prevista (ainda não chegou na Costura): todas as ações de produção
     assert.match(JSON.stringify(r.body), /ainda não chegou na Costura/, corpo.tipo);
   }
 });
+
+test('associar aceita mensagem ligada pela IA: troca a OS e ignora a sugestão pendente', () => {
+  const { ctx, estado, cab } = contexto();
+  ctx.DEALS_PRODUCAO_EDITAVEIS = ['700001', '700003'];
+  const dados = linhas();
+  dados.producao.push({ deal_id: '700003', os: '90003', oficina_id: 'of-1', oficina_nome: 'OFICINA A', atualizado_em_ploomes: 'v3' });
+  dados.whatsappMensagens = [{ id: 'MSG-IA', direcao: 'RECEBIDA', associacao: 'IA', deal_id: '700001', os: '90001', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us', texto: 'sai dia 20', tipo_conteudo: 'TEXTO' }];
+  dados.whatsappSugestoes = [{ id: 'SUG-IA', mensagem_id: 'MSG-IA', deal_id: '700001', os: '90001', status: 'PENDENTE' }];
+  const r = limpo(ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700003', mensagemId: 'MSG-IA', versao: 'v3' }, dados, T0, () => 'H'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const msg = r.operacoes.find((o) => o.aba === 'WHATSAPP_MENSAGENS').linha;
+  assert.deepEqual({ deal_id: msg.deal_id, os: msg.os, associacao: msg.associacao }, { deal_id: '700003', os: '90003', associacao: 'MANUAL' });
+  assert.equal(r.operacoes.find((o) => o.aba === 'WHATSAPP_SUGESTOES').linha.status, 'IGNORADA');
+  assert.match(r.historicos[0].texto, /trocou a OS de uma mensagem do WhatsApp: 90001 → 90003/);
+  const mesma = ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-IA', versao: 'v1' }, dados, T0, () => 'H');
+  assert.equal(mesma.status, 409);
+});
+
+test('associar aceita IA_DUVIDA e recusa NAO_OS', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  dados.whatsappMensagens = [
+    { id: 'MSG-D', direcao: 'RECEBIDA', associacao: 'IA_DUVIDA', deal_id: '', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us', texto: 'vai atrasar', tipo_conteudo: 'TEXTO' },
+    { id: 'MSG-N', direcao: 'RECEBIDA', associacao: 'NAO_OS', deal_id: '', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us', texto: 'bom dia', tipo_conteudo: 'TEXTO' }
+  ];
+  dados.whatsappSugestoes = [];
+  assert.equal(ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-D', versao: 'v1' }, dados, T0, () => 'H').status, 200);
+  assert.equal(ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-N', versao: 'v1' }, dados, T0, () => 'H').status, 409);
+});

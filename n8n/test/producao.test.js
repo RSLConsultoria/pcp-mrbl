@@ -285,3 +285,17 @@ test('sincronização com previstas: upsert das previstas e encerramento nas dua
   ]);
   assert.deepEqual(r.operacoes.filter((o) => o.aba === 'OFICINAS').map((o) => o.linha.ploomes_id), ['of-1', '501']);
 });
+
+test('board: IA_DUVIDA aparece como perguntado; NAO_OS fica fora; IA leva o motivo', () => {
+  const ctx = carregar();
+  const msgs = [
+    { id: 'A', direcao: 'RECEBIDA', associacao: 'IA_DUVIDA', deal_id: '', oficina_id: 'of-1', quando: '2026-10-22T10:00:00.000Z', texto: 'x' },
+    { id: 'B', direcao: 'RECEBIDA', associacao: 'NAO_OS', deal_id: '', oficina_id: 'of-1', quando: '2026-10-22T10:00:00.000Z', texto: 'bom dia' }
+  ];
+  const lista = limpo(ctx.mensagensSemAssociacaoProducaoBoard(msgs, []));
+  assert.deepEqual(lista.map((m) => [m.id, m.perguntado]), [['A', true]]);
+  const base = limpo(ctx.mensagemProducaoBoard({ id: 'C', associacao: 'IA', associacao_motivo: 'fala da blusa', direcao: 'RECEBIDA' }));
+  assert.equal(base.associacaoMotivo, 'fala da blusa');
+  const pergunta = limpo(ctx.mensagemProducaoBoard({ id: 'P', tipo: 'PERGUNTA_ASSOCIACAO', direcao: 'ENVIADA', associacao: 'MANUAL' }));
+  assert.equal(pergunta.pergunta, true);
+});
