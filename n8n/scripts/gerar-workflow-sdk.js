@@ -67,7 +67,7 @@ const POS_WHATSAPP_SAIDA = {};
 [['A cada 2 minutos', 0, 0], ['Execucao Agendada?', 1, 0], ['Ler Fila WhatsApp', 2, 0],
   ['Selecionar Saida WhatsApp', 3, 0], ['Gravar Tentativa WhatsApp', 4, 0], ['Deve Enviar?', 5, 0],
   ['Consultar Conexão', 6, 0], ['Conferir Conexão', 7, 0], ['Conectada?', 8, 0],
-  ['Enviar pela Evolution', 9, -100], ['Resultado WhatsApp', 10, -100], ['Resultado sem Conexão', 10, 100], ['Gravar Resultado WhatsApp', 11, 0]]
+  ['Montar Envio WhatsApp', 9, -100], ['Enviar pela Evolution', 10, -100], ['Resultado WhatsApp', 11, -100], ['Resultado sem Conexão', 11, 100], ['Gravar Resultado WhatsApp', 12, 0]]
   .forEach(([n, c, y]) => { POS_WHATSAPP_SAIDA[n] = [c * DX, y]; });
 
 const POS_WHATSAPP_ENTRADA = {};
@@ -552,6 +552,8 @@ const whatsappSaida = IMPORT + [
   code('selecionarWhatsapp', 'Selecionar Saida WhatsApp', 'selecionar-whatsapp-saida'),
   escrever('gravarTentativaWhatsapp', 'Gravar Tentativa WhatsApp', 'update', 'WHATSAPP_MENSAGENS', ['id']),
   'const deveEnviarWhatsapp = ' + condicao('Deve Enviar?', "{{ $('Selecionar Saida WhatsApp').first().json.status_envio }}", 'string', 'equals', "'ENVIANDO'") + ';',
+  // Corpo do sendText com a citação (22/10): montado fora dos nós que gravam na planilha.
+  code('montarEnvioWhatsapp', 'Montar Envio WhatsApp', 'montar-envio-whatsapp'),
   `const enviarWhatsapp = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.2,
@@ -565,7 +567,7 @@ const whatsappSaida = IMPORT + [
       genericAuthType: 'httpHeaderAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr("{{ JSON.stringify({ number: $('Selecionar Saida WhatsApp').first().json.grupo_jid, text: $('Selecionar Saida WhatsApp').first().json.texto }) }}"),
+      jsonBody: expr("{{ JSON.stringify($json.corpo) }}"),
       options: { response: { response: { fullResponse: true, neverError: true } }, timeout: 30000 }
     },
     credentials: { httpHeaderAuth: { id: 'G24I6UDBgu3Z5X0b', name: 'Evolution API' } },
@@ -612,7 +614,7 @@ export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp',
     .to(selecionarWhatsapp)
     .to(gravarTentativaWhatsapp)
     .to(deveEnviarWhatsapp.onTrue(consultarConexao.to(conferirConexao).to(conectada
-      .onTrue(enviarWhatsapp.to(resultadoWhatsapp).to(gravarResultadoWhatsapp))
+      .onTrue(montarEnvioWhatsapp.to(enviarWhatsapp).to(resultadoWhatsapp).to(gravarResultadoWhatsapp))
       .onFalse(resultadoSemConexao.to(gravarResultadoWhatsapp)))))));
 `;
 

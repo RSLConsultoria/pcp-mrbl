@@ -213,3 +213,19 @@ function fecharPerguntasVencidasWhatsapp(mensagens, agora) {
   });
   return { operacoes: operacoes };
 }
+
+// Corpo do sendText. A Evolution não guarda mensagens: a citação leva a original inteira.
+function corpoEnvioWhatsapp(selecionada, mensagens) {
+  selecionada = selecionada || {};
+  var corpo = { number: texto(selecionada.grupo_jid), text: typeof selecionada.texto === 'string' ? selecionada.texto : '' };
+  var linha = linhasWhatsappUnicas((mensagens || []).filter(function (m) { return m && texto(m.id) === texto(selecionada.id); }), false)[0] || {};
+  var citada = texto(linha.resposta_a_evolution_id);
+  if (!citada) return corpo;
+  var original = (mensagens || []).filter(function (m) { return m && texto(m.evolution_id) === citada; })[0];
+  if (!original) return corpo;
+  corpo.quoted = {
+    key: { id: citada, remoteJid: corpo.number, fromMe: false, participant: texto(original.participante_jid) },
+    message: { conversation: typeof original.texto === 'string' ? original.texto : texto(original.texto) }
+  };
+  return corpo;
+}

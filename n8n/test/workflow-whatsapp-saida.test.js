@@ -32,8 +32,8 @@ test('workflow de saida usa o contrato instalado da Evolution e nao repete a cha
   assert.equal(enviar.parameters.url, 'http://evolution:8080/message/sendText/producao');
   assert.equal(enviar.credentials.httpHeaderAuth.id, 'G24I6UDBgu3Z5X0b');
   assert.equal(enviar.credentials.httpHeaderAuth.name, 'Evolution API');
-  assert.match(enviar.parameters.jsonBody, /number/);
-  assert.match(enviar.parameters.jsonBody, /text/);
+  // O corpo (number, text e a citação) vem pronto do Montar Envio WhatsApp.
+  assert.match(enviar.parameters.jsonBody, /\$json\.corpo/);
   assert.equal(enviar.parameters.options.timeout, 30000);
   assert.equal(enviar.retryOnFail, undefined);
 });
@@ -50,7 +50,7 @@ test('workflow grava ENVIANDO antes da chamada e sempre persiste o resultado', (
   assert.deepEqual(destinos(w, 'Deve Enviar?', 0), ['Consultar Conexão']);
   assert.deepEqual(destinos(w, 'Consultar Conexão'), ['Conferir Conexão']);
   assert.deepEqual(destinos(w, 'Conferir Conexão'), ['Conectada?']);
-  assert.deepEqual(destinos(w, 'Conectada?', 0), ['Enviar pela Evolution']);
+  assert.deepEqual(destinos(w, 'Conectada?', 0), ['Montar Envio WhatsApp']);
   assert.deepEqual(destinos(w, 'Conectada?', 1), ['Resultado sem Conexão']);
   assert.deepEqual(destinos(w, 'Resultado sem Conexão'), ['Gravar Resultado WhatsApp']);
   assert.deepEqual(destinos(w, 'Enviar pela Evolution'), ['Resultado WhatsApp']);
@@ -144,4 +144,11 @@ test('Conferir Conexão só libera com estado open; Resultado sem Conexão devol
   assert.equal(r.json.envio_tentativas, 1);
   assert.match(r.json.erro, /fora do ar/);
   assert.deepEqual(Object.keys(r.json).sort(), ['envio_proxima', 'envio_tentativas', 'erro', 'evolution_id', 'id', 'status_envio']);
+});
+
+test('envio passa pelo Montar Envio WhatsApp e manda o corpo pronto', () => {
+  const w = workflow();
+  assert.deepEqual(destinos(w, 'Conectada?', 0), ['Montar Envio WhatsApp']);
+  assert.deepEqual(destinos(w, 'Montar Envio WhatsApp'), ['Enviar pela Evolution']);
+  assert.match(no(w, 'Enviar pela Evolution').parameters.jsonBody, /\$json\.corpo/);
 });

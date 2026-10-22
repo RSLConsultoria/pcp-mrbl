@@ -42,7 +42,8 @@ const NODES = {
   'montar-erro-medias': 'Montar Erro Médias',
   'montar-contexto-associador': 'Montar Contexto do Associador',
   'finalizar-associacao': 'Finalizar Associação',
-  'montar-pedido-interpretacao-entrada': 'Montar Pedido de Interpretação (Entrada)'
+  'montar-pedido-interpretacao-entrada': 'Montar Pedido de Interpretação (Entrada)',
+  'montar-envio-whatsapp': 'Montar Envio WhatsApp'
 };
 
 const corpo = ARQUIVOS

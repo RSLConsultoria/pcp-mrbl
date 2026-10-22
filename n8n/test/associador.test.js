@@ -161,3 +161,15 @@ test('perguntas com mais de 24 h fecham e a original volta para SEM_ASSOCIACAO',
     { id: 'WA-R-1', associacao: 'SEM_ASSOCIACAO' }
   ]);
 });
+
+test('corpo do envio: cita a mensagem original quando a linha responde a ela', () => {
+  const linhas = [
+    { id: 'WA-P-1', resposta_a_evolution_id: 'EVO-1', grupo_jid: 'grupo-teste@g.us', texto: 'Olá! Essa mensagem é sobre *A* ou *B*?' },
+    { id: 'WA-R-1', evolution_id: 'EVO-1', participante_jid: '5500000000001@s.whatsapp.net', texto: 'a blusa sai dia 27', direcao: 'RECEBIDA' }
+  ];
+  assert.deepEqual(limpo(ctx.corpoEnvioWhatsapp({ id: 'WA-P-1', grupo_jid: 'grupo-teste@g.us', texto: 'Olá! Essa mensagem é sobre *A* ou *B*?' }, linhas)), {
+    number: 'grupo-teste@g.us', text: 'Olá! Essa mensagem é sobre *A* ou *B*?',
+    quoted: { key: { id: 'EVO-1', remoteJid: 'grupo-teste@g.us', fromMe: false, participant: '5500000000001@s.whatsapp.net' }, message: { conversation: 'a blusa sai dia 27' } }
+  });
+  assert.deepEqual(limpo(ctx.corpoEnvioWhatsapp({ id: 'X', grupo_jid: 'g@g.us', texto: 'oi' }, [{ id: 'X' }])), { number: 'g@g.us', text: 'oi' });
+});
