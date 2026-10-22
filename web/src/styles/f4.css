@@ -232,3 +232,7 @@
 .carga__detalhe ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .carga__detalhe li button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 1px solid #eef0f4; border-radius: 4px; background: #fff; font: 12.5px var(--font-sans); text-align: left; cursor: pointer; }
 .carga__detalhe li button:hover { background: var(--canvas); }
+
+/* Associador por IA (22/10): selos das mensagens ligadas ou perguntadas pela IA. */
+.producao-selo { display: inline-block; margin-top: 4px; padding: 1px 6px; border-radius: 8px; font-size: 11px; background: var(--borda); color: var(--suave); }
+.producao-selo--ia { background: var(--navy-tint); color: var(--navy); }

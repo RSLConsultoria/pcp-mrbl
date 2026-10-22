@@ -165,11 +165,23 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       }));
     case 'associar_whatsapp': {
       const mensagem = board.mensagensWhatsappSemAssociacao?.find((m) => m.id === acao.mensagemId);
-      if (!mensagem) return board;
-      const associado = { ...mensagem, associacao: 'MANUAL' as const };
-      const semAssociacao = board.mensagensWhatsappSemAssociacao?.filter((m) => m.id !== acao.mensagemId);
-      const atualizado = comProducao(board, acao.dealId, (p) => ({ ...p, mensagens: [associado, ...p.mensagens] }));
-      return { ...atualizado, mensagensWhatsappSemAssociacao: semAssociacao };
+      if (mensagem) {
+        const associado = { ...mensagem, associacao: 'MANUAL' as const };
+        const semAssociacao = board.mensagensWhatsappSemAssociacao?.filter((m) => m.id !== acao.mensagemId);
+        const atualizado = comProducao(board, acao.dealId, (p) => ({ ...p, mensagens: [associado, ...p.mensagens] }));
+        return { ...atualizado, mensagensWhatsappSemAssociacao: semAssociacao };
+      }
+      // Trocar OS (22/10): mensagem ligada pela IA vai para outra OS; a sugestão
+      // pendente dela fica IGNORADA (espelha processarAssociacaoWhatsapp).
+      const origem = board.producao?.find((p) => p.dealId !== acao.dealId && p.mensagens.some((m) => m.id === acao.mensagemId && m.associacao === 'IA'));
+      if (!origem) return board;
+      const movida = { ...origem.mensagens.find((m) => m.id === acao.mensagemId)!, associacao: 'MANUAL' as const };
+      const semNaOrigem = comProducao(board, origem.dealId, (p) => ({
+        ...p,
+        mensagens: p.mensagens.filter((m) => m.id !== acao.mensagemId),
+        sugestoes: p.sugestoes.map((s) => (s.mensagemId === acao.mensagemId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' as const } : s))
+      }));
+      return comProducao(semNaOrigem, acao.dealId, (p) => ({ ...p, mensagens: [movida, ...p.mensagens] }));
     }
     case 'enviar_whatsapp':
       return comProducao(board, acao.dealId, (p) => ({

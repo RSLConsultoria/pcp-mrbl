@@ -64,6 +64,17 @@ describe('aplicarOtimista: producao e sugestoes', () => {
     expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: 'Qual a previsão de entrega de *CAMISA TESTE*?', statusEnvio: 'PENDENTE' });
   });
 
+  it('trocar OS de mensagem ligada pela IA move a mensagem e ignora a sugestão pendente dela', () => {
+    const msg = { id: 'MSG-IA', quando: '2026-10-22T10:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA' as const,
+      texto: 'sai dia 22', associacao: 'IA' as const, statusEnvio: '' as const, tipoConteudo: 'TEXTO' as const };
+    const a = { ...prod(), mensagens: [msg], sugestoes: [{ ...prod().sugestoes[0], mensagemId: 'MSG-IA' }] };
+    const b = { ...prod(), dealId: '700002', os: '90002', sugestoes: [], mensagens: [] };
+    const r = aplicar(quadro({ producao: [a, b] }), { tipo: 'associar_whatsapp', dealId: '700002', mensagemId: 'MSG-IA', versao: 'v1' });
+    expect(r.producao?.[0].mensagens).toEqual([]);
+    expect(r.producao?.[0].sugestoes[0].status).toBe('IGNORADA');
+    expect(r.producao?.[1].mensagens[0]).toMatchObject({ id: 'MSG-IA', associacao: 'MANUAL' });
+  });
+
   it('a mensagem enfileirada mostra a hora em que entrou na fila, não um horário fixo', () => {
     const criadaAs = Date.parse('2026-10-22T17:26:42.000Z');
     const pendente: Pendente = {

@@ -101,7 +101,7 @@ const estado = {
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
   dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008'],
-  dealsProducaoEditaveis: ['700002', '700003', '700005'],
+  dealsProducaoEditaveis: ['700002', '700003', '700005', '700011'],
   oficinas: [
     { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL', capacidadeSemana: 300 },
     { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null }
@@ -114,6 +114,11 @@ const estado = {
     id: 'MSG-SEM-2', quando: new Date(Date.now() - 600_000).toISOString(), participanteNome: 'Pessoa da oficina',
     direcao: 'RECEBIDA', texto: `A PECA TESTE B fica pronta dia ${diaIso(6).slice(8, 10)}/${diaIso(6).slice(5, 7)}.`, associacao: 'SEM_ASSOCIACAO',
     statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
+  }, {
+    // Associador por IA (22/10): a IA ficou em dúvida e perguntou à oficina.
+    id: 'MSG-DUVIDA-1', quando: new Date(Date.now() - 300_000).toISOString(), participanteNome: 'Pessoa da oficina',
+    direcao: 'RECEBIDA', texto: 'Essa vai atrasar uns dias.', associacao: 'IA_DUVIDA', perguntado: true,
+    statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-01', oficina: 'OFICINA SOL', grupoNome: 'PRODUCAO · OFICINA SOL'
   }],
   producao: [
     { dealId: '700003', os: '90003', oficinaId: '', oficina: 'ALOCAR', inicioCostura: diaIso(-8), dataCombinada: diaIso(-2), leadTime: diaIso(1), pecas: 80, valorCorte: 7200, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE C', referencia: 'REF-03', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
@@ -122,7 +127,8 @@ const estado = {
       mensagens: [
         { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. Pode confirmar a data de entrega de *PECA TESTE B*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
         { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE B* segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
-        { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' }
+        { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-IA-1', quando: new Date(Date.now() - 1_000_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'A camisa sai amanhã cedo.', associacao: 'IA', associacaoMotivo: 'A oficina fala da PECA TESTE B.', statusEnvio: '', tipoConteudo: 'TEXTO' }
       ],
       sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
       historico: [{ quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'PCP Teste', texto: 'Data combinada ajustada após contato com a oficina.', ploomes: 'ENVIADO' }]
@@ -134,6 +140,8 @@ const estado = {
         { id: 'MSG-H-SEM-LEITURA', quando: new Date(Date.now() - 2_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Vou ver com a costureira e já aviso.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO', interpretacao: 'ERRO' },
         { id: 'MSG-H-FILA', quando: new Date(Date.now() - 1_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE H*, 45 peças, está prevista para a data combinada. Segue dentro do prazo?', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO', envioTentativas: 2 }
       ], sugestoes: [], historico: [] },
+    // Segunda OS editável da OFICINA SOL (22/10): destino do "Trocar OS".
+    { dealId: '700011', os: '90011', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-1), dataCombinada: diaIso(9), leadTime: diaIso(10), pecas: 30, valorCorte: 2700, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE K', referencia: 'REF-11', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
     // OS previstas (19/10): ainda nas etapas 12 a 16; a Costura projetada vem do servidor.
     { dealId: '700009', os: '90009', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 200, valorCorte: null, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE I', referencia: 'REF-09', versao: 'v1',
       prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', etapaInicio: diaIso(-1), inicioCosturaPrevisto: diaIso(5), fimCosturaPrevisto: diaIso(12), mensagens: [], sugestoes: [], historico: [] },
@@ -758,7 +766,19 @@ function associarWhatsapp(c, usuario) {
   if (!estado.dealsProducaoEditaveis.includes(p.dealId)) throw new Erro(403, 'Edição liberada em breve para esta OS.');
   conferirVersao(p.versao, c.versao, 'esta OS');
   const indice = estado.mensagensWhatsappSemAssociacao.findIndex((x) => x.id === c.mensagemId);
-  if (indice < 0) throw new Erro(404, 'Mensagem do WhatsApp não encontrada.');
+  if (indice < 0) {
+    // Trocar OS (22/10): mensagem ligada pela IA vai para outra OS da mesma oficina.
+    const origem = estado.producao.find((x) => x.mensagens.some((m) => m.id === c.mensagemId && m.associacao === 'IA'));
+    if (!origem) throw new Erro(404, 'Mensagem do WhatsApp não encontrada.');
+    if (origem.dealId === p.dealId) throw new Erro(409, 'A mensagem já está nesta OS.');
+    if (origem.oficinaId !== p.oficinaId) throw new Erro(409, 'A mensagem e a OS precisam pertencer ao mesmo grupo.');
+    const movida = origem.mensagens.find((m) => m.id === c.mensagemId);
+    origem.mensagens = origem.mensagens.filter((m) => m.id !== c.mensagemId);
+    origem.sugestoes = origem.sugestoes.map((s) => (s.mensagemId === c.mensagemId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' } : s));
+    p.mensagens.unshift({ ...movida, associacao: 'MANUAL' });
+    const ht = historicoProducao(p, usuario, `${usuario} trocou a OS de uma mensagem do WhatsApp: ${origem.os} → ${p.os}.`);
+    return { ok: true, versao: p.versao, historico: ht, historicos: [ht] };
+  }
   const mensagem = estado.mensagensWhatsappSemAssociacao[indice];
   if (mensagem.oficinaId !== p.oficinaId) throw new Erro(409, 'A mensagem e a OS precisam pertencer ao mesmo grupo.');
   estado.mensagensWhatsappSemAssociacao.splice(indice, 1);

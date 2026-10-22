@@ -28,6 +28,7 @@ function MensagemPendente({ mensagem, producao, editaveis, executar }: {
   return <li>
     <span>{mensagem.grupoNome || mensagem.oficina || 'Oficina'} · {mensagem.participanteNome || 'Participante'} · {dataHora(mensagem.quando)}</span>
     <p>{mensagem.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : mensagem.texto}</p>
+    {mensagem.perguntado && <small className="producao-selo producao-selo--ia">perguntado à oficina</small>}
     {opcoes.length > 0 ? <div className="producao-pendentes__associar">
       <label>Associar à OS<select value={dealId} onChange={(e) => setDealId(e.target.value)}>
         <option value="">Selecione</option>{opcoes.map((p) => <option key={p.dealId} value={p.dealId}>OS {p.os} · {p.peca || p.referencia}</option>)}
@@ -36,6 +37,27 @@ function MensagemPendente({ mensagem, producao, editaveis, executar }: {
         onClick={() => escolhida && void executar({ tipo: 'associar_whatsapp', dealId: escolhida.dealId, mensagemId: mensagem.id, versao: escolhida.versao }, 'Mensagem associada. A interpretação aparece em até 1 minuto.')}>Associar</button>
     </div> : <small>Nenhuma OS editável deste grupo está disponível.</small>}
   </li>;
+}
+
+// Mensagem ligada pela IA (22/10): o PCP pode mandá-la para outra OS da mesma oficina.
+function TrocarOs({ mensagemId, item, producao, editaveis, executar }: {
+  mensagemId: string;
+  item: ProducaoItem;
+  producao: ProducaoItem[];
+  editaveis: string[] | undefined;
+  executar: Executar;
+}) {
+  const opcoes = opcoesAssociacaoMensagem(producao, item.oficinaId, editaveis).filter((p) => p.dealId !== item.dealId);
+  const [dealId, setDealId] = useState('');
+  const escolhida = opcoes.find((p) => p.dealId === dealId);
+  if (!opcoes.length) return null;
+  return <div className="producao-pendentes__associar">
+    <label>Trocar para a OS<select value={dealId} onChange={(e) => setDealId(e.target.value)}>
+      <option value="">Selecione</option>{opcoes.map((p) => <option key={p.dealId} value={p.dealId}>OS {p.os} · {p.peca || p.referencia}</option>)}
+    </select></label>
+    <button type="button" className="botao botao--contorno" disabled={!escolhida}
+      onClick={() => escolhida && void executar({ tipo: 'associar_whatsapp', dealId: escolhida.dealId, mensagemId, versao: escolhida.versao }, 'Mensagem movida para a OS escolhida.')}>Trocar OS</button>
+  </div>;
 }
 
 function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: ProducaoItem; board: Board; hojeIso: string; executar: Executar; onFechar: () => void }) {
@@ -173,6 +195,9 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               <span>{m.direcao === 'ENVIADA' ? 'PCP' : m.participanteNome || 'Oficina'} · {dataHora(m.quando)}</span>
               <p>{m.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : m.texto}</p>
               {m.associacao === 'SEM_ASSOCIACAO' && <small>Mensagem ainda sem associação</small>}
+              {m.associacao === 'IA' && <small className="producao-selo producao-selo--ia" title={m.associacaoMotivo}>ligada pela IA</small>}
+              {m.pergunta && <small className="producao-selo producao-selo--ia">pergunta da IA</small>}
+              {m.associacao === 'IA' && editavel && <TrocarOs mensagemId={m.id} item={item} producao={board.producao ?? []} editaveis={board.dealsProducaoEditaveis} executar={executar} />}
               {m.statusEnvio === 'PENDENTE' && !!m.envioTentativas && <small>Aguardando nova tentativa ({m.envioTentativas} de 5)</small>}
               {m.interpretacao === 'ERRO' && <small>Não foi possível interpretar esta mensagem.</small>}
               {m.statusEnvio === 'ERRO' && <small>Falha no envio.</small>}

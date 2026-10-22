@@ -102,7 +102,9 @@ export interface MensagemProducao {
   participanteNome: string;
   direcao: 'ENVIADA' | 'RECEBIDA';
   texto: string;
-  associacao: 'CITACAO' | 'OS_NO_TEXTO' | 'ULTIMA_COBRANCA' | 'MANUAL' | 'SEM_ASSOCIACAO';
+  associacao: 'CITACAO' | 'OS_NO_TEXTO' | 'ULTIMA_COBRANCA' | 'MANUAL' | 'SEM_ASSOCIACAO' | 'IA' | 'IA_DUVIDA' | 'NAO_OS';
+  associacaoMotivo?: string; // associacao IA: por que a IA ligou a mensagem a esta OS
+  pergunta?: boolean; // pergunta do associador à oficina ("Essa mensagem é sobre ...?")
   statusEnvio: '' | 'PENDENTE' | 'ENVIANDO' | 'ENVIADA' | 'ERRO';
   tipoConteudo: 'TEXTO' | 'NAO_TEXTUAL';
   reenviada?: boolean; // tentativa com erro que já ganhou um reenvio (só um por mensagem)
@@ -111,6 +113,7 @@ export interface MensagemProducao {
 }
 
 export interface MensagemWhatsappSemAssociacao extends MensagemProducao {
+  perguntado?: boolean; // IA_DUVIDA: a IA perguntou à oficina qual é a peça
   oficinaId: string;
   oficina: string;
   grupoNome: string;

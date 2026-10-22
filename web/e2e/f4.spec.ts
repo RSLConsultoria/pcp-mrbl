@@ -26,7 +26,8 @@ const producao = [
   { dealId: '710004', os: '90004', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', inicioCostura: '', dataCombinada: '2026-10-18', leadTime: '2026-10-20', pecas: 40, valorCorte: 3200, cliente: 'CLIENTE MODELO', peca: 'JAQUETA TESTE', referencia: 'REF-D', versao: 'v1', faltasCostura: [], faltasAcabamento: [], mensagens: [], sugestoes: [], historico: [] }
 ];
 
-async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoAcaoMs = 0, extras: typeof producao = []) {
+async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoAcaoMs = 0, extras: typeof producao = [],
+  editaveis: string[] = ['710002'], pendentesExtras: Record<string, unknown>[] = []) {
   const producaoAtual = structuredClone([...producao, ...extras]);
   await page.route(LOGIN, (r) => r.fulfill({ json: SESSAO }));
   await page.route(ACAO, async (r) => {
@@ -45,8 +46,8 @@ async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoA
     await r.fulfill({ json: { ok: true, versao: corpo.versao, historico: null, historicos: [], mensagemId: corpo.tipo === 'reenviar_whatsapp' ? 'M-REENVIO' : undefined } });
   });
   await page.route(BOARD, (r) => r.fulfill({ json: { ...base, producao: producaoAtual, oficinas: [{ ploomesId: 'OF-1', nome: 'OFICINA MODELO', grupoConfigurado: true, grupoNome: 'GRUPO MODELO' }],
-    mensagensWhatsappSemAssociacao: [{ id: 'M2', quando: '2026-10-07T13:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'As duas ficam prontas amanhã.', associacao: 'SEM_ASSOCIACAO', statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', grupoNome: 'GRUPO MODELO' }],
-    dealsProducaoEditaveis: ['710002'] } }));
+    mensagensWhatsappSemAssociacao: [{ id: 'M2', quando: '2026-10-07T13:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'As duas ficam prontas amanhã.', associacao: 'SEM_ASSOCIACAO', statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', grupoNome: 'GRUPO MODELO' }, ...pendentesExtras],
+    dealsProducaoEditaveis: editaveis } }));
   await page.goto('./#producao');
   await page.getByLabel('E-mail').fill('pcp@teste.local');
   await page.getByLabel('Senha').fill('senha-ficticia');
@@ -393,4 +394,27 @@ test('Gantt mantém o cabeçalho e a régua de dias congelados ao rolar, alinhad
   await page.getByRole('button', { name: 'Entrega', exact: true }).click();
   await rolagem.evaluate((el) => { el.scrollTop = 400; });
   expect(Math.abs((await topo.boundingBox())!.y - antes!.y)).toBeLessThan(1.5);
+});
+
+// Associador por IA (22/10).
+test('mensagem ligada pela IA mostra o selo e pode trocar de OS', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  const comIa = { ...producao[3], dealId: '710005', os: '90005', peca: 'BLUSA TESTE',
+    mensagens: [{ id: 'M-IA', quando: '2026-10-07T14:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'A blusa sai amanhã.',
+      associacao: 'IA', associacaoMotivo: 'A oficina fala da BLUSA TESTE.', statusEnvio: '', tipoConteudo: 'TEXTO' }] } as (typeof producao)[number];
+  await entrar(page, acoes, 0, [comIa], ['710002', '710005']);
+  await page.getByRole('button', { name: /OS 90005/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90005' });
+  await expect(painel.getByText('ligada pela IA')).toBeVisible();
+  await painel.getByLabel('Trocar para a OS').selectOption('710002');
+  await painel.getByRole('button', { name: 'Trocar OS' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Mensagem movida para a OS escolhida.' })).toBeVisible();
+  await expect.poll(() => acoes.find((a) => a.tipo === 'associar_whatsapp')).toMatchObject({ dealId: '710002', mensagemId: 'M-IA' });
+});
+
+test('pendente perguntada à oficina aparece com a etiqueta', async ({ page }) => {
+  await entrar(page, [], 0, [], ['710002'], [{ id: 'M-DUVIDA', quando: '2026-10-07T13:30:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA',
+    texto: 'Essa vai atrasar.', associacao: 'IA_DUVIDA', perguntado: true, statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', grupoNome: 'GRUPO MODELO' }]);
+  await page.getByText('2 mensagens aguardando associação').click();
+  await expect(page.getByText('perguntado à oficina')).toBeVisible();
 });
