@@ -20,7 +20,7 @@ const execucaoAgendadaWhatsapp = ifElse({
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
-        conditions: [{ leftValue: expr("{{ $execution.mode }}"), operator: { type: 'string', operation: 'equals' }, rightValue: 'trigger' }],
+        conditions: [{ leftValue: expr("{{ $execution.mode }}"), operator: { type: 'string', operation: 'equals' }, rightValue: 'production' }],
         combinator: 'and'
       }
     },

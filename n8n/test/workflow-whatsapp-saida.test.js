@@ -64,7 +64,9 @@ test('execucao manual para antes de ler ou enviar a fila', () => {
   const w = workflow();
   const trava = no(w, 'Execucao Agendada?');
   assert.equal(trava.parameters.conditions.conditions[0].leftValue, '={{ $execution.mode }}');
-  assert.equal(trava.parameters.conditions.conditions[0].rightValue, 'trigger');
+  // No n8n, $execution.mode vale 'test' na execução manual e 'production'
+  // nas agendadas; 'trigger' é só o rótulo da lista de execuções.
+  assert.equal(trava.parameters.conditions.conditions[0].rightValue, 'production');
   assert.deepEqual(destinos(w, 'Execucao Agendada?', 1), []);
 });
 

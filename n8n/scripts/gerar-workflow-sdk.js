@@ -543,7 +543,7 @@ const whatsappSaida = IMPORT + [
   },
   output: [{}]
 });`,
-  'const execucaoAgendadaWhatsapp = ' + condicao('Execucao Agendada?', '{{ $execution.mode }}', 'string', 'equals', "'trigger'") + ';',
+  'const execucaoAgendadaWhatsapp = ' + condicao('Execucao Agendada?', '{{ $execution.mode }}', 'string', 'equals', "'production'") + ';',
   sheets('lerFilaWhatsapp', 'Ler Fila WhatsApp', 'WHATSAPP_MENSAGENS', ''),
   code('selecionarWhatsapp', 'Selecionar Saida WhatsApp', 'selecionar-whatsapp-saida'),
   escrever('gravarTentativaWhatsapp', 'Gravar Tentativa WhatsApp', 'update', 'WHATSAPP_MENSAGENS', ['id']),
