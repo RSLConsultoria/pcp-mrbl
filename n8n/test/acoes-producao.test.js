@@ -61,7 +61,8 @@ test('alterar_producao valida allowlist, versao e motivo e prepara planilha/Ploo
   assert.equal(r.ploomes.dealId, '700001');
   assert.deepEqual(r.ploomes.campos, { 'deal_89DE05E0-467F-4012-9B82-F1E077F968E4': 'of-2', 'deal_E53BDEC3-F829-413D-9421-91D5D7411349': '2026-10-20' });
   assert.equal(r.historicos[0].acao, 'PRODUCAO_ALTERAR_COMBINADO');
-  assert.match(r.historicos[0].texto, /Oficina confirmou/);
+  // Datas no histórico (e no registro do Ploomes) em dd/mm, como nos pedidos.
+  assert.equal(r.historicos[0].texto, 'Pessoa PCP alterou o combinado: oficina: OFICINA A → OFICINA B · data combinada: 18/10 → 20/10 · motivo: Oficina confirmou.');
   ctx.DEALS_PRODUCAO_EDITAVEIS = ['outro'];
   assert.equal(ctx.preValidarAcao(estado, cab, corpo, T0).status, 403);
 });
@@ -74,6 +75,7 @@ test('aceitar sugestao prepara mudanca sem resposta ao grupo; repeticao aceita e
   assert.deepEqual(r.operacoes.map((o) => o.aba), ['PRODUCAO', 'WHATSAPP_SUGESTOES']);
   assert.equal(r.ploomes.dealId, '700001');
   assert.equal('mensagem' in r || 'resposta' in r, false);
+  assert.equal(r.historicos[0].texto, 'Pessoa PCP aceitou a sugestão do WhatsApp: nova data 20/10 · Oficina confirmou.');
   const ja = linhas();
   ja.whatsappSugestoes[0].status = 'ACEITA';
   const outra = limpo(ctx.processarAcao(estado, cab, corpo, ja, T0, () => 'NAO-USA'));

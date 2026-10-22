@@ -30,7 +30,7 @@ export function TabelaProducao({ lista, hojeIso, incluirPrevistas = false, onAbr
 
   return <section className="producao-tabela__area" aria-label="Tabela de produção">
     <div className="producao-tabela__barra">
-      <strong>{visiveis.length} OS</strong>
+      <strong>{totais.os} OS</strong>
       <span className="producao-tabela__totais">{totais.pecas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} peças · {reais(totais.valor)}{totais.previstas > 0 && <> · + {totais.previstas} {totais.previstas === 1 ? 'prevista' : 'previstas'} · {totais.pecasPrevistas.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} pç</>}</span>
       {algumFiltro && <button type="button" className="botao botao--contorno" onClick={() => setFiltros({})}>Limpar filtros</button>}
       <details className="producao-tabela__colunas">

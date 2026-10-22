@@ -14,7 +14,11 @@ import { etapasOrdenadas, motivoMoverPedido, partesPorPrevisao, podeDividir, pro
 export interface ContextoOtimista {
   hoje: string; // 'aaaa-mm-dd'
   n: number; // número da ação na fila: dá ids provisórios únicos
+  agora?: string; // ISO de quando a ação entrou na fila: hora provisória das mensagens
 }
+
+// Hora provisória de uma mensagem enfileirada até o board trazer a do servidor.
+const quandoProvisorio = (ctx: ContextoOtimista): string => ctx.agora ?? `${ctx.hoje}T12:00:00.000Z`;
 
 // ---------- utilidades ----------
 
@@ -171,7 +175,7 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       return comProducao(board, acao.dealId, (p) => ({
         ...p,
         mensagens: [{
-          id: `novo:whatsapp:${ctx.n}`, quando: `${ctx.hoje}T12:00:00.000Z`, participanteNome: 'PCP', direcao: 'ENVIADA' as const,
+          id: `novo:whatsapp:${ctx.n}`, quando: quandoProvisorio(ctx), participanteNome: 'PCP', direcao: 'ENVIADA' as const,
           texto: acao.texto, associacao: 'MANUAL' as const, statusEnvio: 'PENDENTE' as const, tipoConteudo: 'TEXTO' as const
         }, ...p.mensagens]
       }));
@@ -182,7 +186,7 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
         return {
           ...p,
           mensagens: [
-            { ...original, id: `novo:whatsapp:${ctx.n}`, quando: `${ctx.hoje}T12:00:00.000Z`, statusEnvio: 'PENDENTE' as const, reenviada: false },
+            { ...original, id: `novo:whatsapp:${ctx.n}`, quando: quandoProvisorio(ctx), statusEnvio: 'PENDENTE' as const, reenviada: false },
             ...p.mensagens.map((m) => (m.id === original.id ? { ...m, reenviada: true } : m))
           ]
         };
@@ -298,6 +302,7 @@ export interface Pendente {
   versoesAntigas?: string[]; // versões do alvo antes da ação: a que a tela viu e as trocas seguidas até a enviada
   resposta?: Pick<RespostaAcao, 'pedidoId' | 'partes' | 'itemIds' | 'mensagemId'>; // o que a resposta traz para achar a ação no board
   confirmadaAs?: number; // relógio (ms) da confirmação
+  criadaAs?: number; // relógio (ms) da entrada na fila
   recargasDepois?: number; // boards pedidos depois da confirmação que ainda não mostravam a ação
 }
 
@@ -393,5 +398,7 @@ export function pendentesVivos(pendentes: readonly Pendente[], board: Board, _ma
 
 // Board da tela: o do servidor com as pendências aplicadas por cima, na ordem da fila.
 export function aplicarPendentes(board: Board, pendentes: readonly Pendente[], hoje: string): Board {
-  return pendentes.reduce((b, p) => aplicarOtimista(b, p.acao, { hoje, n: p.id }), board);
+  return pendentes.reduce((b, p) => aplicarOtimista(b, p.acao, {
+    hoje, n: p.id, ...(p.criadaAs !== undefined ? { agora: new Date(p.criadaAs).toISOString() } : {})
+  }), board);
 }

@@ -64,6 +64,16 @@ describe('aplicarOtimista: producao e sugestoes', () => {
     expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'novo:whatsapp:7', direcao: 'ENVIADA', texto: 'Qual a previsão de entrega de *CAMISA TESTE*?', statusEnvio: 'PENDENTE' });
   });
 
+  it('a mensagem enfileirada mostra a hora em que entrou na fila, não um horário fixo', () => {
+    const criadaAs = Date.parse('2026-10-22T17:26:42.000Z');
+    const pendente: Pendente = {
+      id: 3, estado: 'fila', confirmadaEm: 0, criadaAs,
+      acao: { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Teste', chave: 'c-0002-teste' }
+    };
+    const b = aplicarPendentes(quadro({ producao: [prod()] }), [pendente], '2026-10-22');
+    expect(b.producao?.[0].mensagens[0].quando).toBe('2026-10-22T17:26:42.000Z');
+  });
+
   it('associa mensagem pendente e a move para a conversa da OS', () => {
     const mensagem = { id: 'MSG-2', quando: '2026-10-08T10:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA' as const,
       texto: 'As duas ficam prontas amanhã.', associacao: 'SEM_ASSOCIACAO' as const, statusEnvio: '' as const, tipoConteudo: 'TEXTO' as const,

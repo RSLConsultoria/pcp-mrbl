@@ -117,14 +117,15 @@ export function opcoesAssociacaoMensagem(producao: Producao[], oficinaId: string
 }
 
 // Totais só da Costura (como os KPIs); as previstas vêm à parte, em contagem e peças.
-export function totaisProducao(lista: Pick<Producao, 'pecas' | 'valorCorte' | 'prevista'>[]): { pecas: number; valor: number; previstas: number; pecasPrevistas: number } {
-  const total = { pecas: 0, valor: 0, previstas: 0, pecasPrevistas: 0 };
+export function totaisProducao(lista: Pick<Producao, 'pecas' | 'valorCorte' | 'prevista'>[]): { os: number; pecas: number; valor: number; previstas: number; pecasPrevistas: number } {
+  const total = { os: 0, pecas: 0, valor: 0, previstas: 0, pecasPrevistas: 0 };
   for (const p of lista) {
     if (p.prevista) {
       total.previstas += 1;
       if (ehNumero(p.pecas)) total.pecasPrevistas += p.pecas;
       continue;
     }
+    total.os += 1;
     if (ehNumero(p.pecas)) total.pecas += p.pecas;
     if (ehNumero(p.valorCorte)) total.valor += p.valorCorte;
   }

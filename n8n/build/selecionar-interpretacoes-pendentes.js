@@ -2733,7 +2733,9 @@ function processarAlteracaoProducao(corpo, linhas, ctx, permitidos) {
   if (v.mudouData) {
     linha.data_combinada = v.acao.dataCombinada;
     campos[CAMPO_DATA_COMBINADA_PLOOMES] = v.acao.dataCombinada;
-    partes.push('data combinada: ' + (texto(row.data_combinada) || '—') + ' → ' + (v.acao.dataCombinada || '—'));
+    var dataAntes = texto(row.data_combinada);
+    partes.push('data combinada: ' + (dataAntes ? dataCurtaProducao(dataAntes) : '—') + ' → ' +
+      (v.acao.dataCombinada ? dataCurtaProducao(v.acao.dataCombinada) : '—'));
   }
   if (v.acao.motivo) partes.push('motivo: ' + v.acao.motivo);
   var historico = historicoProducao(ctx, atual.dealId, atual.os, 'PRODUCAO_ALTERAR_COMBINADO', ctx.usuario + ' alterou o combinado: ' + partes.join(' · '));
@@ -3776,7 +3778,7 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
     historicos: [],
     ploomes: ploomes,
     textoHistorico: decisao === 'IGNORAR' ? usuario + ' ignorou a sugestão do WhatsApp.' :
-      usuario + ' aceitou a sugestão do WhatsApp' + (tipo === 'NOVA_DATA_COMBINADA' ? ': nova data ' + texto(sugestao.valor) + ' · ' + motivo : ': ' + texto(sugestao.resumo))
+      usuario + ' aceitou a sugestão do WhatsApp' + (tipo === 'NOVA_DATA_COMBINADA' ? ': nova data ' + data.slice(8, 10) + '/' + data.slice(5, 7) + ' · ' + motivo : ': ' + texto(sugestao.resumo))
   };
 }
 

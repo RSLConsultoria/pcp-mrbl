@@ -104,7 +104,7 @@ export function criarFila(relogio_ms: () => number = Date.now): Fila {
     adicionar(acao) {
       const id = proximo++;
       const pronto = new Promise<RespostaAcao | null>((ok) => finais.set(id, ok));
-      publicar([...lista, { id, acao, estado: 'fila', confirmadaEm: 0 }]);
+      publicar([...lista, { id, acao, estado: 'fila', confirmadaEm: 0, criadaAs: relogio_ms() }]);
       void rodar();
       return pronto;
     },

@@ -769,6 +769,6 @@ function decidirSugestaoWhatsapp(corpo, sugestao, producao, mensagem, contexto) 
     historicos: [],
     ploomes: ploomes,
     textoHistorico: decisao === 'IGNORAR' ? usuario + ' ignorou a sugestão do WhatsApp.' :
-      usuario + ' aceitou a sugestão do WhatsApp' + (tipo === 'NOVA_DATA_COMBINADA' ? ': nova data ' + texto(sugestao.valor) + ' · ' + motivo : ': ' + texto(sugestao.resumo))
+      usuario + ' aceitou a sugestão do WhatsApp' + (tipo === 'NOVA_DATA_COMBINADA' ? ': nova data ' + data.slice(8, 10) + '/' + data.slice(5, 7) + ' · ' + motivo : ': ' + texto(sugestao.resumo))
   };
 }
