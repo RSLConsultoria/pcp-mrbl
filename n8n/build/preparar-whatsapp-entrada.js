@@ -5008,7 +5008,7 @@ var preparadaEntrada = prepararEntradaWhatsapp(payloadEntrada, {
 
 if (!preparadaEntrada.ok) throw new Error(preparadaEntrada.erro || 'Falha ao preparar a entrada do WhatsApp.');
 if (preparadaEntrada.ignorada) {
-  return [{ json: { gravar: false, precisaInterpretar: false, motivo: preparadaEntrada.motivo } }];
+  return [{ json: { gravar: false, precisaInterpretar: false, precisaAssociar: false, motivo: preparadaEntrada.motivo } }];
 }
 
 var opMensagem = Object.assign({}, preparadaEntrada.operacoes[0], { operacao: 'appendOrUpdate' });
@@ -5018,6 +5018,8 @@ var reqEntrada = reqsEntrada[0];
 return [{ json: {
   gravar: true,
   precisaInterpretar: preparadaEntrada.precisaInterpretar === true,
+  // Associador por IA (22/10): lido pelo node "Precisa Associar?".
+  precisaAssociar: preparadaEntrada.precisaAssociar === true,
   method: reqEntrada.method,
   url: reqEntrada.url,
   body: reqEntrada.body,

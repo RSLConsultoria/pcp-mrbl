@@ -161,3 +161,19 @@ test('sem associação: chama o associador, grava a decisão e dispara a interpr
   assert.equal(no(w, 'Disparar Interpretação').parameters.options.waitForSubWorkflow, false);
   assert.ok(!w.nodes.some((n) => n.type === 'n8n-nodes-base.httpRequest' && /evolution/i.test(String(n.parameters.url))));
 });
+
+// QA de 23/10: o "Precisa Associar?" lê o campo no topo da saída do adaptador.
+test('Preparar Entrada WhatsApp entrega precisaAssociar no topo quando nenhuma regra liga a mensagem', () => {
+  const [saida] = rodarAdaptador('preparar-whatsapp-entrada', {
+    'Receber WhatsApp': [{ body: {
+      event: 'messages.upsert', instance: 'producao',
+      data: { key: { remoteJid: 'grupo-ficticio@g.us', fromMe: false, id: 'EV-SEM-OS', participant: 'p@s.whatsapp.net' },
+        pushName: 'Pessoa Teste', messageTimestamp: 1792700000, message: { conversation: 'a peça B sai dia 29' } }
+    } }],
+    $input: [leituraEntrada()]
+  });
+  assert.equal(saida.json.gravar, true);
+  assert.equal(saida.json.precisaInterpretar, false);
+  assert.equal(saida.json.precisaAssociar, true);
+  assert.match(no(workflow(), 'Precisa Associar?').parameters.conditions.conditions[0].leftValue, /\.json\.precisaAssociar/);
+});
