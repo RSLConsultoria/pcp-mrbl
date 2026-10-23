@@ -11,6 +11,8 @@ var decisao = decidirAssociacaoWhatsapp(pedidoFim, saidaAssoc, {
 if (!decisao.ok) throw new Error('Saída inválida do associador: ' + decisao.erro);
 if (!decisao.operacoes.length) return [];
 var planilhaAssoc = planilhaDoLote($('Ler Contexto WhatsApp').first().json || {}, LEITURAS_WHATSAPP_ENTRADA);
+// A mensagem foi gravada depois da leitura: entra com a linha devolvida pela gravação.
+incluirLinhaGravadaWhatsapp(planilhaAssoc, pedidoFim.mensagem, $('Gravar Mensagem Recebida').first().json || {});
 return requisicoesDeEscrita(decisao.operacoes, [], planilhaAssoc, PLANILHA_ID).map(function (req, i) {
   return { json: Object.assign({ interpretar: i === 0 ? decisao.interpretar : null }, req) };
 });

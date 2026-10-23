@@ -4066,6 +4066,23 @@ function corpoEnvioWhatsapp(selecionada, mensagens) {
   return corpo;
 }
 
+// A entrada grava a mensagem DEPOIS de ler a planilha (QA de 23/10): para o
+// Finalizar Associação poder atualizá-la, a linha gravada entra na leitura com o
+// número que a gravação devolveu (updatedRange do values:append).
+function incluirLinhaGravadaWhatsapp(planilha, linha, respostaGravacao) {
+  var aba = 'WHATSAPP_MENSAGENS';
+  var range = texto(respostaGravacao && respostaGravacao.updates && respostaGravacao.updates.updatedRange);
+  var numero = range ? linhaInicialDoRange(range) : NaN;
+  if (!planilha || !planilha.linhas || !linha || !texto(linha.id) || !isFinite(numero) || numero < 2) return planilha;
+  var linhas = planilha.linhas[aba] || [];
+  var ja = linhas.some(function (l) { return l && texto(l.id) === texto(linha.id); });
+  if (!ja) {
+    planilha.linhas[aba] = linhas.concat([Object.assign({ row_number: numero }, linha)]);
+    if (typeof planilha.ultimaLinha[aba] === 'number' && numero > planilha.ultimaLinha[aba]) planilha.ultimaLinha[aba] = numero;
+  }
+  return planilha;
+}
+
 // ----- src/envioPloomes.js -----
 // ===== src/envioPloomes.js =====
 // Regras do workflow "Enviar ao Ploomes": quais linhas do HISTORICO_APP
@@ -5000,6 +5017,8 @@ var decisao = decidirAssociacaoWhatsapp(pedidoFim, saidaAssoc, {
 if (!decisao.ok) throw new Error('Saída inválida do associador: ' + decisao.erro);
 if (!decisao.operacoes.length) return [];
 var planilhaAssoc = planilhaDoLote($('Ler Contexto WhatsApp').first().json || {}, LEITURAS_WHATSAPP_ENTRADA);
+// A mensagem foi gravada depois da leitura: entra com a linha devolvida pela gravação.
+incluirLinhaGravadaWhatsapp(planilhaAssoc, pedidoFim.mensagem, $('Gravar Mensagem Recebida').first().json || {});
 return requisicoesDeEscrita(decisao.operacoes, [], planilhaAssoc, PLANILHA_ID).map(function (req, i) {
   return { json: Object.assign({ interpretar: i === 0 ? decisao.interpretar : null }, req) };
 });

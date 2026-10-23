@@ -177,3 +177,57 @@ test('Preparar Entrada WhatsApp entrega precisaAssociar no topo quando nenhuma r
   assert.equal(saida.json.precisaAssociar, true);
   assert.match(no(workflow(), 'Precisa Associar?').parameters.conditions.conditions[0].leftValue, /\.json\.precisaAssociar/);
 });
+
+// QA de 23/10: a mensagem é gravada DEPOIS da leitura; o Finalizar Associação
+// precisa achar a linha dela pelo updatedRange da gravação.
+test('Finalizar Associação atualiza a linha que a entrada acabou de gravar', () => {
+  const leitura = leituraEntrada();
+  const cab = leitura.valueRanges[2].values[0];
+  cab.push('associacao_confianca', 'associacao_motivo', 'pergunta_candidatos', 'pergunta_mensagem_id', 'pergunta_fechada_em');
+  const [preparada] = rodarAdaptador('preparar-whatsapp-entrada', {
+    'Receber WhatsApp': [{ body: {
+      event: 'messages.upsert', instance: 'producao',
+      data: { key: { remoteJid: 'grupo-ficticio@g.us', fromMe: false, id: 'EV-SEM-OS', participant: 'p@s.whatsapp.net' },
+        pushName: 'Pessoa Teste', messageTimestamp: 1792700000, message: { conversation: 'a peça B sai dia 29' } }
+    } }],
+    $input: [leitura]
+  });
+  assert.equal(preparada.json.precisaAssociar, true);
+  const saida = rodarAdaptador('finalizar-associacao', {
+    'Preparar Entrada WhatsApp': [preparada.json],
+    'Ler Contexto WhatsApp': [leitura],
+    'Gravar Mensagem Recebida': [{ spreadsheetId: 'x', updates: { updatedRange: 'WHATSAPP_MENSAGENS!A3:AC3' } }],
+    $input: [{ associacao: { resultado: 'OS', os: '90001', candidatos: [], confianca: 0.95, motivo: 'fala da peça B' } }]
+  });
+  assert.equal(saida.length, 1);
+  assert.match(saida[0].json.url, /values:batchUpdate/);
+  const texto = JSON.stringify(saida[0].json.body);
+  assert.match(texto, /WHATSAPP_MENSAGENS'?!\w*3/);
+  assert.match(texto, /fala da peça B/);
+  assert.deepEqual(saida[0].json.interpretar, { mensagemId: preparada.json.preparacao.mensagemId, dealId: '700001' });
+});
+
+test('Finalizar Associação na dúvida anexa a pergunta depois da mensagem recém-gravada', () => {
+  const leitura = leituraEntrada();
+  leitura.valueRanges[2].values[0].push('associacao_confianca', 'associacao_motivo', 'pergunta_candidatos', 'pergunta_mensagem_id', 'pergunta_fechada_em');
+  leitura.valueRanges[1].values.push(['700002', '90002', 'of-1', 'OFICINA A', '', '', 50, 'PECA TESTE C', 'REF-03', 'SIM', 'v1']);
+  const [preparada] = rodarAdaptador('preparar-whatsapp-entrada', {
+    'Receber WhatsApp': [{ body: {
+      event: 'messages.upsert', instance: 'producao',
+      data: { key: { remoteJid: 'grupo-ficticio@g.us', fromMe: false, id: 'EV-DUVIDA', participant: 'p@s.whatsapp.net' },
+        pushName: 'Pessoa Teste', messageTimestamp: 1792700000, message: { conversation: 'essa vai atrasar' } }
+    } }],
+    $input: [leitura]
+  });
+  const saida = rodarAdaptador('finalizar-associacao', {
+    'Preparar Entrada WhatsApp': [preparada.json],
+    'Ler Contexto WhatsApp': [leitura],
+    'Gravar Mensagem Recebida': [{ spreadsheetId: 'x', updates: { updatedRange: 'WHATSAPP_MENSAGENS!A3:AC3' } }],
+    $input: [{ associacao: { resultado: 'DUVIDA', os: '', candidatos: ['90001', '90002'], confianca: 0.5, motivo: 'duas peças' } }]
+  });
+  const anexo = saida.find((s) => /:append/.test(s.json.url));
+  assert.ok(anexo, 'sem append da pergunta');
+  assert.match(decodeURIComponent(anexo.json.url), /WHATSAPP_MENSAGENS'?!A4/);
+  assert.match(JSON.stringify(anexo.json.body), /Essa mensagem é sobre \*PECA TESTE B\* ou \*PECA TESTE C\*/);
+  assert.ok(saida.some((s) => /batchUpdate/.test(s.json.url) && /IA_DUVIDA/.test(JSON.stringify(s.json.body))));
+});
