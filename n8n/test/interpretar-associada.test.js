@@ -19,7 +19,7 @@ test('prepara a interpretação da mensagem associada com o mesmo contexto da en
   assert.equal(r.ok, true);
   assert.equal(r.interpretar, true);
   assert.deepEqual(r.preparacao, {
-    ok: true, precisaInterpretar: true, mensagemId: 'WA-R-abc', quando: '2026-10-13T13:20:00.000Z',
+    ok: true, precisaInterpretar: true, mensagemId: 'WA-R-abc', quando: '2026-10-13T13:20:00.000Z', texto: 'As duas ficam prontas dia 22.',
     dealId: '700001', os: '90001', versao: 'v1', operacoes: []
   });
   assert.equal(r.entrada.texto, 'As duas ficam prontas dia 22.');

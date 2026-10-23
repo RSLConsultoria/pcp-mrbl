@@ -355,7 +355,14 @@ function interpretarComoObjeto(valor) {
   try { return JSON.parse(valor); } catch (e) { return null; }
 }
 
-function validarInterpretacaoWhatsapp(valor, quando) {
+// Normaliza para comparar a evidência com a mensagem: sem acento, minúsculas, só letras e números.
+function textoComparavelWhatsapp(v) {
+  return semAcento(v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// textoMensagem (QA de 23/10): a evidência precisa estar na própria mensagem; se o
+// modelo a tirou de outra mensagem da conversa, vira observação sem data.
+function validarInterpretacaoWhatsapp(valor, quando, textoMensagem) {
   var o = interpretarComoObjeto(valor);
   if (!o) return { ok: false, erro: 'Interpretação inválida.' };
   var tipo = semAcento(o.tipo);
@@ -369,6 +376,14 @@ function validarInterpretacaoWhatsapp(valor, quando) {
   if (confianca < 0.7 || (tipo === 'NOVA_DATA_COMBINADA' && dataSemAnoDistante(o.valor, data, quando))) {
     tipo = 'OBSERVACAO';
     data = '';
+  }
+  var comparavel = textoComparavelWhatsapp(textoMensagem);
+  var trecho = textoComparavelWhatsapp(evidencia);
+  if (comparavel && trecho && (' ' + comparavel + ' ').indexOf(' ' + trecho + ' ') < 0) {
+    tipo = 'OBSERVACAO';
+    data = '';
+    resumo = ('Mensagem da oficina: ' + texto(textoMensagem)).slice(0, 500);
+    evidencia = '';
   }
   return { ok: true, tipo: tipo, valor: tipo === 'NOVA_DATA_COMBINADA' ? data : '', resumo: resumo, evidencia: evidencia, confianca: confianca };
 }
@@ -495,7 +510,8 @@ function concluirEntradaWhatsapp(preparada, interpretacao, contexto) {
     return Object.assign({}, preparada, { operacoes: operacoes });
   }
 
-  var validada = validarInterpretacaoWhatsapp(interpretacao, preparada.quando);
+  var validada = validarInterpretacaoWhatsapp(interpretacao, preparada.quando,
+    texto(preparada.texto) || texto((preparada.contextoInterpretacao || {}).texto));
   if (!validada.ok) {
     return { ok: true, precisaInterpretar: true, erroInterpretacao: validada.erro, operacoes: operacoes };
   }
@@ -728,7 +744,7 @@ function prepararInterpretacaoManualWhatsapp(dados, pedido, hojeISO, agora) {
     ok: true,
     interpretar: true,
     preparacao: {
-      ok: true, precisaInterpretar: true, mensagemId: mensagemId, quando: texto(mensagem.quando),
+      ok: true, precisaInterpretar: true, mensagemId: mensagemId, quando: texto(mensagem.quando), texto: texto(mensagem.texto),
       dealId: dealId, os: texto(producao.os), versao: texto(producao.atualizado_em_ploomes), operacoes: []
     },
     entrada: entradaInterpreteWhatsapp(contexto),
