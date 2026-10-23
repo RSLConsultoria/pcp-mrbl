@@ -311,7 +311,7 @@ const associarComModelo = node({
     onError: 'continueErrorOutput',
     parameters: {
       source: 'database',
-      workflowId: { __rl: true, value: 'CONFIGURAR_ASSOCIADOR', mode: 'id' },
+      workflowId: { __rl: true, value: '5vCmNDx4CDXde3om', mode: 'id' },
       mode: 'once',
       options: { waitForSubWorkflow: true }
     },
