@@ -26,7 +26,7 @@ test('validação: OS confiante, dúvida, não é OS e desvios', () => {
   const c = ctx.candidatosAssociacaoWhatsapp(producao, 'of-1', [], '2026-10-22');
   const v = (x) => limpo(ctx.validarAssociacaoWhatsapp(x, c));
   assert.deepEqual(v({ resultado: 'OS', os: '90001', confianca: 0.9, motivo: 'fala da blusa' }),
-    { ok: true, resultado: 'OS', dealId: '700001', os: '90001', candidatos: [], confianca: 0.9, motivo: 'fala da blusa' });
+    { ok: true, resultado: 'OS', dealId: '700001', os: '90001', candidatos: [], confianca: 0.9, motivo: 'fala da blusa', respondePergunta: false });
   assert.equal(v({ resultado: 'DUVIDA', candidatos: ['90001', '90002'], confianca: 0.5, motivo: 'x' }).resultado, 'DUVIDA');
   assert.deepEqual(v({ resultado: 'DUVIDA', candidatos: ['90001', '90002'], confianca: 0.5, motivo: 'x' }).candidatos, ['700001', '700002']);
   assert.equal(v({ resultado: 'NAO_OS', confianca: 0.95, motivo: 'saudação' }).resultado, 'NAO_OS');
@@ -121,8 +121,8 @@ test('decisão NAO_OS e SEM_ASSOCIACAO não perguntam nem interpretam', () => {
 test('modo resposta: escolheu a OS liga original e resposta e fecha a pergunta', () => {
   const pergunta = { id: 'WA-P-1', tipo: 'PERGUNTA_ASSOCIACAO', pergunta_candidatos: '700001;700002', pergunta_mensagem_id: 'WA-R-1', grupo_jid: 'grupo-teste@g.us' };
   const resposta = { ...msgLinha, id: 'WA-R-2', evolution_id: 'EVO-2', texto: 'é a blusa' };
-  const r = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: resposta, candidatos: cands().filter((c) => c.os !== '90003'), pergunta, original: msgLinha },
-    { resultado: 'OS', os: '90001', confianca: 0.95, motivo: 'respondeu blusa' }, ctxDecisao));
+  const r = limpo(ctx.decidirAssociacaoWhatsapp({ mensagem: resposta, candidatos: cands().filter((c) => c.os !== '90003'), pergunta, original: { ...msgLinha, associacao: 'IA_DUVIDA' } },
+    { resultado: 'OS', os: '90001', confianca: 0.95, motivo: 'respondeu blusa', respondePergunta: true }, ctxDecisao));
   assert.equal(r.resultado, 'OS');
   const porId = Object.fromEntries(r.operacoes.map((o) => [o.linha.id, o.linha]));
   assert.equal(porId['WA-R-2'].associacao, 'IA');

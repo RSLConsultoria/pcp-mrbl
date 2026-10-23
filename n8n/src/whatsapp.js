@@ -360,6 +360,21 @@ function textoComparavelWhatsapp(v) {
   return semAcento(v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+// A evidência está na mensagem quando pelo menos 60% das palavras dela (2+ letras)
+// aparecem na mensagem, aceitando prefixo ("sexta" casa "sexta-feira", "dia" casa
+// "dias") — tolera paráfrase leve e reticências (revisão de 23/10). Sem evidência: vale.
+function evidenciaNaMensagemWhatsapp(evidencia, textoMensagem) {
+  var palavras = textoComparavelWhatsapp(evidencia).split(' ').filter(function (p) { return p.length >= 2; });
+  if (!palavras.length) return true;
+  var daMensagem = textoComparavelWhatsapp(textoMensagem).split(' ');
+  var achadas = palavras.filter(function (p) {
+    return daMensagem.some(function (m) {
+      return m === p || (m.length >= 3 && p.length >= 3 && (m.indexOf(p) === 0 || p.indexOf(m) === 0));
+    });
+  });
+  return achadas.length / palavras.length >= 0.6;
+}
+
 // textoMensagem (QA de 23/10): a evidência precisa estar na própria mensagem; se o
 // modelo a tirou de outra mensagem da conversa, vira observação sem data.
 function validarInterpretacaoWhatsapp(valor, quando, textoMensagem) {
@@ -378,8 +393,8 @@ function validarInterpretacaoWhatsapp(valor, quando, textoMensagem) {
     data = '';
   }
   var comparavel = textoComparavelWhatsapp(textoMensagem);
-  var trecho = textoComparavelWhatsapp(evidencia);
-  if (comparavel && trecho && (' ' + comparavel + ' ').indexOf(' ' + trecho + ' ') < 0) {
+  var semEvidencia = !textoComparavelWhatsapp(evidencia) && tipo === 'NOVA_DATA_COMBINADA';
+  if (comparavel && (semEvidencia || !evidenciaNaMensagemWhatsapp(evidencia, textoMensagem))) {
     tipo = 'OBSERVACAO';
     data = '';
     resumo = ('Mensagem da oficina: ' + texto(textoMensagem)).slice(0, 500);
@@ -458,8 +473,11 @@ function prepararEntradaWhatsapp(payload, dados, contexto) {
   // oficina tem OS na Costura. Com pergunta aberta no grupo, vai junto a pergunta.
   var pedidoAssociador = null;
   if (msg.tipoConteudo === 'TEXTO' && !associacao.dealId) {
-    var todosCandidatos = candidatosAssociacaoWhatsapp(dados.producao, msg.oficinaId, dados.mensagens, dataISOEmSaoPaulo(agora));
-    var pergunta = perguntaAbertaWhatsapp(dados.mensagens, msg.grupoJid, agora);
+    var todosCandidatos = candidatosAssociacaoWhatsapp(dados.producao, msg.oficinaId, dados.mensagens, dataISOEmSaoPaulo(agora),
+      contexto.dealsPermitidos);
+    // Trava: pergunta aberta no grupo (mesmo na fila). Resposta: só a pergunta já enviada.
+    var grupoTravado = !!perguntaAbertaWhatsapp(dados.mensagens, msg.grupoJid, agora);
+    var pergunta = perguntaRespondivelWhatsapp(dados.mensagens, msg.grupoJid, msg.quando || agora);
     var original = null;
     var perguntados = [];
     if (pergunta) {
@@ -473,7 +491,7 @@ function prepararEntradaWhatsapp(payload, dados, contexto) {
     if (todosCandidatos.length) {
       var doGrupo = (dados.mensagens || []).filter(function (m) { return m && texto(m.grupo_jid) === msg.grupoJid; });
       pedidoAssociador = {
-        mensagem: linhaMensagem, candidatos: todosCandidatos, pergunta: pergunta, original: original,
+        mensagem: linhaMensagem, candidatos: todosCandidatos, pergunta: pergunta, original: original, grupoTravado: grupoTravado,
         entrada: contextoAssociadorWhatsapp({ texto: msg.texto, quando: msg.quando || agora }, todosCandidatos, doGrupo,
           pergunta ? { texto: pergunta.texto, candidatos: perguntados.map(function (c) { return c.os; }), mensagemOriginal: original.texto } : null)
       };
@@ -539,13 +557,14 @@ var LIMITE_FALTAS_INTERPRETE = 10;
 var INSTRUCOES_INTERPRETE_WHATSAPP = 'Interprete a resposta da oficina sem responder ao grupo. ' +
   'As mensagens enviadas à oficina citam a peça (em negrito), não o número da OS. ' +
   'Use o contexto da OS (peça, quantidade, prazo vigente, status do prazo e faltas abertas) e a conversa recente ' +
-  'para entender a resposta. Devolva somente o objeto estruturado.';
+  'para entender a resposta. Interprete só o campo texto (a mensagem nova); nunca use data ou fato que esteja só em ' +
+  'outra mensagem da conversa. Devolva somente o objeto estruturado.';
 
 var SCHEMA_INTERPRETE_WHATSAPP = {
   tipo: ['NOVA_DATA_COMBINADA', 'PRAZO_CONFIRMADO', 'MOTIVO_ATRASO', 'OBSERVACAO'],
   valor: 'data ISO, data em dd/mm ou expressão relativa quando houver nova data',
   resumo: 'resumo curto em português',
-  evidencia: 'trecho curto que sustenta a interpretação',
+  evidencia: 'cópia literal de um trecho curto do campo texto (a mensagem interpretada, nunca da conversa) que sustenta a interpretação',
   confianca: 'número entre 0 e 1'
 };
 

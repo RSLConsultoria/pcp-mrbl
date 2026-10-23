@@ -11,6 +11,8 @@ var preparadaEntrada = prepararEntradaWhatsapp(payloadEntrada, {
   mensagens: planilhaEntrada.linhas.WHATSAPP_MENSAGENS
 }, {
   instancia: 'producao',
+  // Até o go-live, o associador só liga a OS liberadas (vazio = todas).
+  dealsPermitidos: DEALS_PRODUCAO_EDITAVEIS,
   agora: new Date().toISOString(),
   gerarId: function (evolutionId) {
     return 'WA-R-' + criptoEntrada.createHash('sha256').update(texto(evolutionId)).digest('hex').slice(0, 24);

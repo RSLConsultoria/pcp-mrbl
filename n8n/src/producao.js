@@ -471,6 +471,16 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
   // A interpretar desde já: se o disparo falhar, o agendamento de 15 min pega a mensagem.
   if (interpretar) Object.assign(linha, camposInterpretacaoPendenteWhatsapp(0, ctx.agora));
   var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }];
+  // IA_DUVIDA associada à mão: a pergunta da IA fecha, para a resposta da oficina
+  // não religar a mensagem a outra OS (revisão de 23/10).
+  if (assoc === 'IA_DUVIDA') {
+    (linhas.whatsappMensagens || []).filter(function (m) {
+      return m && semAcento(m.tipo) === 'PERGUNTA_ASSOCIACAO' && texto(m.pergunta_mensagem_id) === texto(mensagem.id) && !texto(m.pergunta_fechada_em);
+    }).forEach(function (p) {
+      operacoes.push({ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id',
+        linha: { id: texto(p.id), deal_id: texto(producao.deal_id), os: texto(producao.os), pergunta_fechada_em: ctx.agora } });
+    });
+  }
   // Na troca, a sugestão pendente da OS antiga deixa de valer (uma sugestão por mensagem).
   if (troca) {
     (linhas.whatsappSugestoes || []).filter(function (s) {

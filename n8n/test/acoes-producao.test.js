@@ -336,3 +336,17 @@ test('associar aceita IA_DUVIDA e recusa NAO_OS', () => {
   assert.equal(ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-D', versao: 'v1' }, dados, T0, () => 'H').status, 200);
   assert.equal(ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-N', versao: 'v1' }, dados, T0, () => 'H').status, 409);
 });
+
+test('associar à mão uma mensagem IA_DUVIDA fecha a pergunta dela (revisão de 23/10)', () => {
+  const { ctx, estado, cab } = contexto();
+  const dados = linhas();
+  dados.whatsappMensagens = [
+    { id: 'MSG-D', direcao: 'RECEBIDA', associacao: 'IA_DUVIDA', deal_id: '', oficina_id: 'of-1', grupo_jid: 'grupo-teste@g.us', texto: 'vai atrasar', tipo_conteudo: 'TEXTO' },
+    { id: 'WA-P-D', direcao: 'ENVIADA', tipo: 'PERGUNTA_ASSOCIACAO', pergunta_mensagem_id: 'MSG-D', pergunta_fechada_em: '', grupo_jid: 'grupo-teste@g.us', status_envio: 'ENVIADA' }
+  ];
+  dados.whatsappSugestoes = [];
+  const r = limpo(ctx.processarAcao(estado, cab, { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MSG-D', versao: 'v1' }, dados, T0, () => 'H'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const fechar = r.operacoes.find((o) => o.linha.id === 'WA-P-D');
+  assert.deepEqual(fechar && fechar.linha, { id: 'WA-P-D', deal_id: '700001', os: '90001', pergunta_fechada_em: '2026-10-13T14:00:00.000Z' });
+});

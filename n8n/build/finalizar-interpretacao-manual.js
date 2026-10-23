@@ -2612,6 +2612,16 @@ function processarAssociacaoWhatsapp(corpo, linhas, ctx) {
   // A interpretar desde já: se o disparo falhar, o agendamento de 15 min pega a mensagem.
   if (interpretar) Object.assign(linha, camposInterpretacaoPendenteWhatsapp(0, ctx.agora));
   var operacoes = [{ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id', linha: linha }];
+  // IA_DUVIDA associada à mão: a pergunta da IA fecha, para a resposta da oficina
+  // não religar a mensagem a outra OS (revisão de 23/10).
+  if (assoc === 'IA_DUVIDA') {
+    (linhas.whatsappMensagens || []).filter(function (m) {
+      return m && semAcento(m.tipo) === 'PERGUNTA_ASSOCIACAO' && texto(m.pergunta_mensagem_id) === texto(mensagem.id) && !texto(m.pergunta_fechada_em);
+    }).forEach(function (p) {
+      operacoes.push({ aba: 'WHATSAPP_MENSAGENS', operacao: 'update', chave: 'id',
+        linha: { id: texto(p.id), deal_id: texto(producao.deal_id), os: texto(producao.os), pergunta_fechada_em: ctx.agora } });
+    });
+  }
   // Na troca, a sugestão pendente da OS antiga deixa de valer (uma sugestão por mensagem).
   if (troca) {
     (linhas.whatsappSugestoes || []).filter(function (s) {
@@ -3393,6 +3403,21 @@ function textoComparavelWhatsapp(v) {
   return semAcento(v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+// A evidência está na mensagem quando pelo menos 60% das palavras dela (2+ letras)
+// aparecem na mensagem, aceitando prefixo ("sexta" casa "sexta-feira", "dia" casa
+// "dias") — tolera paráfrase leve e reticências (revisão de 23/10). Sem evidência: vale.
+function evidenciaNaMensagemWhatsapp(evidencia, textoMensagem) {
+  var palavras = textoComparavelWhatsapp(evidencia).split(' ').filter(function (p) { return p.length >= 2; });
+  if (!palavras.length) return true;
+  var daMensagem = textoComparavelWhatsapp(textoMensagem).split(' ');
+  var achadas = palavras.filter(function (p) {
+    return daMensagem.some(function (m) {
+      return m === p || (m.length >= 3 && p.length >= 3 && (m.indexOf(p) === 0 || p.indexOf(m) === 0));
+    });
+  });
+  return achadas.length / palavras.length >= 0.6;
+}
+
 // textoMensagem (QA de 23/10): a evidência precisa estar na própria mensagem; se o
 // modelo a tirou de outra mensagem da conversa, vira observação sem data.
 function validarInterpretacaoWhatsapp(valor, quando, textoMensagem) {
@@ -3411,8 +3436,8 @@ function validarInterpretacaoWhatsapp(valor, quando, textoMensagem) {
     data = '';
   }
   var comparavel = textoComparavelWhatsapp(textoMensagem);
-  var trecho = textoComparavelWhatsapp(evidencia);
-  if (comparavel && trecho && (' ' + comparavel + ' ').indexOf(' ' + trecho + ' ') < 0) {
+  var semEvidencia = !textoComparavelWhatsapp(evidencia) && tipo === 'NOVA_DATA_COMBINADA';
+  if (comparavel && (semEvidencia || !evidenciaNaMensagemWhatsapp(evidencia, textoMensagem))) {
     tipo = 'OBSERVACAO';
     data = '';
     resumo = ('Mensagem da oficina: ' + texto(textoMensagem)).slice(0, 500);
@@ -3491,8 +3516,11 @@ function prepararEntradaWhatsapp(payload, dados, contexto) {
   // oficina tem OS na Costura. Com pergunta aberta no grupo, vai junto a pergunta.
   var pedidoAssociador = null;
   if (msg.tipoConteudo === 'TEXTO' && !associacao.dealId) {
-    var todosCandidatos = candidatosAssociacaoWhatsapp(dados.producao, msg.oficinaId, dados.mensagens, dataISOEmSaoPaulo(agora));
-    var pergunta = perguntaAbertaWhatsapp(dados.mensagens, msg.grupoJid, agora);
+    var todosCandidatos = candidatosAssociacaoWhatsapp(dados.producao, msg.oficinaId, dados.mensagens, dataISOEmSaoPaulo(agora),
+      contexto.dealsPermitidos);
+    // Trava: pergunta aberta no grupo (mesmo na fila). Resposta: só a pergunta já enviada.
+    var grupoTravado = !!perguntaAbertaWhatsapp(dados.mensagens, msg.grupoJid, agora);
+    var pergunta = perguntaRespondivelWhatsapp(dados.mensagens, msg.grupoJid, msg.quando || agora);
     var original = null;
     var perguntados = [];
     if (pergunta) {
@@ -3506,7 +3534,7 @@ function prepararEntradaWhatsapp(payload, dados, contexto) {
     if (todosCandidatos.length) {
       var doGrupo = (dados.mensagens || []).filter(function (m) { return m && texto(m.grupo_jid) === msg.grupoJid; });
       pedidoAssociador = {
-        mensagem: linhaMensagem, candidatos: todosCandidatos, pergunta: pergunta, original: original,
+        mensagem: linhaMensagem, candidatos: todosCandidatos, pergunta: pergunta, original: original, grupoTravado: grupoTravado,
         entrada: contextoAssociadorWhatsapp({ texto: msg.texto, quando: msg.quando || agora }, todosCandidatos, doGrupo,
           pergunta ? { texto: pergunta.texto, candidatos: perguntados.map(function (c) { return c.os; }), mensagemOriginal: original.texto } : null)
       };
@@ -3572,13 +3600,14 @@ var LIMITE_FALTAS_INTERPRETE = 10;
 var INSTRUCOES_INTERPRETE_WHATSAPP = 'Interprete a resposta da oficina sem responder ao grupo. ' +
   'As mensagens enviadas à oficina citam a peça (em negrito), não o número da OS. ' +
   'Use o contexto da OS (peça, quantidade, prazo vigente, status do prazo e faltas abertas) e a conversa recente ' +
-  'para entender a resposta. Devolva somente o objeto estruturado.';
+  'para entender a resposta. Interprete só o campo texto (a mensagem nova); nunca use data ou fato que esteja só em ' +
+  'outra mensagem da conversa. Devolva somente o objeto estruturado.';
 
 var SCHEMA_INTERPRETE_WHATSAPP = {
   tipo: ['NOVA_DATA_COMBINADA', 'PRAZO_CONFIRMADO', 'MOTIVO_ATRASO', 'OBSERVACAO'],
   valor: 'data ISO, data em dd/mm ou expressão relativa quando houver nova data',
   resumo: 'resumo curto em português',
-  evidencia: 'trecho curto que sustenta a interpretação',
+  evidencia: 'cópia literal de um trecho curto do campo texto (a mensagem interpretada, nunca da conversa) que sustenta a interpretação',
   confianca: 'número entre 0 e 1'
 };
 
@@ -3863,14 +3892,16 @@ var RESULTADOS_ASSOCIADOR = { OS: 1, DUVIDA: 1, NAO_OS: 1 };
 var INSTRUCOES_ASSOCIADOR_WHATSAPP = 'Descubra de qual OS da lista a mensagem da oficina fala. ' +
   'As oficinas conhecem a peça, não o número da OS. Use a conversa recente do grupo. ' +
   'Responda OS quando tiver certeza, DUVIDA com 2 ou 3 candidatos quando não souber entre eles, ' +
-  'NAO_OS quando a mensagem não fala de nenhuma peça (saudação, ok, figurinha). Devolva só o objeto.';
+  'NAO_OS quando a mensagem não fala de nenhuma peça (saudação, ok, figurinha). ' +
+  'Com pergunta, diga em respondePergunta se a mensagem responde a ela. Devolva só o objeto.';
 
 var SCHEMA_ASSOCIADOR_WHATSAPP = {
   resultado: ['OS', 'DUVIDA', 'NAO_OS'],
   os: 'número da OS escolhida (só em OS)',
   candidatos: 'lista de 2 ou 3 números de OS (só em DUVIDA)',
   confianca: 'número entre 0 e 1',
-  motivo: 'frase curta em português'
+  motivo: 'frase curta em português',
+  respondePergunta: 'true quando a mensagem é a resposta da oficina à pergunta enviada (só com pergunta)'
 };
 
 function ultimaMensagemPcpAssociador(mensagens, dealId) {
@@ -3881,8 +3912,11 @@ function ultimaMensagemPcpAssociador(mensagens, dealId) {
   return ultima ? { quando: texto(ultima.quando), texto: cortarTextoInterprete(ultima.texto) } : null;
 }
 
-function candidatosAssociacaoWhatsapp(producoes, oficinaId, mensagens, hojeISO) {
+// permitidos (revisão de 23/10): até o go-live, só os deals liberados (vazio = todos).
+function candidatosAssociacaoWhatsapp(producoes, oficinaId, mensagens, hojeISO, permitidos) {
+  var lista = (permitidos || []).map(texto);
   return (producoes || []).filter(function (p) {
+    if (lista.length && lista.indexOf(texto(p && p.deal_id)) < 0) return false;
     return p && texto(p.deal_id) && texto(p.oficina_id) === texto(oficinaId) && semAcento(p.em_costura) === 'SIM';
   }).map(function (p) {
     var dealId = texto(p.deal_id);
@@ -3945,12 +3979,16 @@ function validarAssociacaoWhatsapp(valor, candidatos) {
     if (lista.length < 2 || lista.length > 3) return null;
     return { ok: true, resultado: 'DUVIDA', dealId: '', os: '', candidatos: lista.map(function (os) { return porOs[os].dealId; }), confianca: confianca, motivo: motivo };
   };
-  if (resultado === 'NAO_OS') return { ok: true, resultado: 'NAO_OS', dealId: '', os: '', candidatos: [], confianca: confianca, motivo: motivo };
+  // NAO_OS some do app: só com confiança alta (revisão de 23/10).
+  if (resultado === 'NAO_OS') {
+    return { ok: true, resultado: confianca >= LIMITE_CONFIANCA_ASSOCIADOR ? 'NAO_OS' : 'SEM_ASSOCIACAO', dealId: '', os: '', candidatos: [], confianca: confianca, motivo: motivo };
+  }
   if (resultado === 'DUVIDA') return duvida() || falha('Candidatos inválidos do associador.');
   var os = texto(valor.os);
   if (!porOs[os]) return falha('OS fora da lista de candidatos.');
   if (confianca >= LIMITE_CONFIANCA_ASSOCIADOR) {
-    return { ok: true, resultado: 'OS', dealId: porOs[os].dealId, os: os, candidatos: [], confianca: confianca, motivo: motivo };
+    return { ok: true, resultado: 'OS', dealId: porOs[os].dealId, os: os, candidatos: [], confianca: confianca, motivo: motivo,
+      respondePergunta: valor.respondePergunta === true };
   }
   return duvida() || { ok: true, resultado: 'SEM_ASSOCIACAO', dealId: '', os: '', candidatos: [], confianca: confianca, motivo: motivo };
 }
@@ -3983,6 +4021,14 @@ function perguntaAbertaWhatsapp(mensagens, grupoJid, agora) {
   }), false)[0] || null;
 }
 
+// Pergunta que pode ser respondida (revisão de 23/10): aberta, já enviada e
+// anterior à mensagem. A trava do grupo continua sendo perguntaAbertaWhatsapp.
+function perguntaRespondivelWhatsapp(mensagens, grupoJid, quandoMensagem) {
+  var aberta = perguntaAbertaWhatsapp(mensagens, grupoJid, quandoMensagem);
+  if (!aberta || semAcento(aberta.status_envio) !== 'ENVIADA') return null;
+  return Date.parse(texto(aberta.quando)) < Date.parse(texto(quandoMensagem)) ? aberta : null;
+}
+
 function opMensagemWhatsapp(linha, operacao) {
   return { aba: 'WHATSAPP_MENSAGENS', operacao: operacao || 'update', chave: 'id', linha: linha };
 }
@@ -4006,18 +4052,22 @@ function decidirAssociacaoWhatsapp(entrada, saidaModelo, contexto) {
   var porDeal = {};
   candidatos.forEach(function (c) { porDeal[c.dealId] = c; });
 
+  // Resposta à pergunta (revisão de 23/10): só quando a mensagem cita a pergunta
+  // ou o modelo diz que ela responde; falar de uma das peças não basta.
   var daPergunta = entrada.pergunta ? texto(entrada.pergunta.pergunta_candidatos).split(';') : [];
-  if (entrada.pergunta && v.resultado === 'OS' && daPergunta.indexOf(v.dealId) >= 0) {
+  var citaPergunta = !!entrada.pergunta && !!texto(entrada.pergunta.evolution_id) &&
+    texto(mensagem.resposta_a_evolution_id) === texto(entrada.pergunta.evolution_id);
+  if (entrada.pergunta && v.resultado === 'OS' && daPergunta.indexOf(v.dealId) >= 0 && (citaPergunta || v.respondePergunta)) {
     var cand = porDeal[v.dealId];
     var original = entrada.original || {};
+    // A original só é ligada se ninguém a associou nesse meio-tempo (o PCP pode associar antes).
+    var originalLivre = semAcento(original.associacao) === 'IA_DUVIDA' && !texto(original.deal_id);
+    var operacoes = [opMensagemWhatsapp(linhaLigadaIA(mensagem, cand, v, agora, false))];
+    if (originalLivre) operacoes.push(opMensagemWhatsapp(linhaLigadaIA(original, cand, v, agora, true)));
+    operacoes.push(opMensagemWhatsapp({ id: texto(entrada.pergunta.id), deal_id: cand.dealId, os: cand.os, pergunta_fechada_em: agora }));
     return {
-      ok: true, resultado: 'OS',
-      operacoes: [
-        opMensagemWhatsapp(linhaLigadaIA(mensagem, cand, v, agora, false)),
-        opMensagemWhatsapp(linhaLigadaIA(original, cand, v, agora, true)),
-        opMensagemWhatsapp({ id: texto(entrada.pergunta.id), deal_id: cand.dealId, os: cand.os, pergunta_fechada_em: agora })
-      ],
-      interpretar: { mensagemId: texto(original.id), dealId: cand.dealId }
+      ok: true, resultado: 'OS', operacoes: operacoes,
+      interpretar: originalLivre ? { mensagemId: texto(original.id), dealId: cand.dealId } : null
     };
   }
 
@@ -4029,7 +4079,7 @@ function decidirAssociacaoWhatsapp(entrada, saidaModelo, contexto) {
   if (v.resultado === 'NAO_OS') {
     return { ok: true, resultado: 'NAO_OS', operacoes: [opMensagemWhatsapp(Object.assign({ associacao: 'NAO_OS' }, base))], interpretar: null };
   }
-  if (v.resultado === 'DUVIDA' && !entrada.pergunta) {
+  if (v.resultado === 'DUVIDA' && !entrada.pergunta && !entrada.grupoTravado) {
     var escolhidos = v.candidatos.map(function (d) { return porDeal[d]; });
     var pergunta = {
       id: texto(contexto.gerarId()), evolution_id: '', quando: agora, grupo_jid: texto(mensagem.grupo_jid), grupo_nome: texto(mensagem.grupo_nome),
@@ -4057,7 +4107,10 @@ function fecharPerguntasVencidasWhatsapp(mensagens, agora) {
     if (!m || semAcento(m.tipo) !== 'PERGUNTA_ASSOCIACAO' || texto(m.pergunta_fechada_em)) return;
     var ts = Date.parse(texto(m.quando));
     if (!isFinite(ts) || !isFinite(agoraMs) || agoraMs - ts < limite) return;
-    operacoes.push(opMensagemWhatsapp({ id: texto(m.id), pergunta_fechada_em: texto(agora) }));
+    var fechar = { id: texto(m.id), pergunta_fechada_em: texto(agora) };
+    // Ainda na fila: não sai mais (a resposta não seria casada).
+    if (semAcento(m.status_envio) === 'PENDENTE') { fechar.status_envio = 'ERRO'; fechar.erro = 'Pergunta vencida antes do envio.'; }
+    operacoes.push(opMensagemWhatsapp(fechar));
     var original = porId[texto(m.pergunta_mensagem_id)];
     if (original && semAcento(original.associacao) === 'IA_DUVIDA') {
       operacoes.push(opMensagemWhatsapp({ id: texto(original.id), associacao: 'SEM_ASSOCIACAO' }));

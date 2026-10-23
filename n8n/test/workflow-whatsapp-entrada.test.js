@@ -71,6 +71,8 @@ const RAIZ = path.join(__dirname, '..');
 function rodarAdaptador(arq, nodes) {
   const ctx = vm.createContext({ require });
   for (const f of ARQUIVOS) vm.runInContext(fs.readFileSync(path.join(RAIZ, 'src', f), 'utf8'), ctx, { filename: f });
+  // Os dados dos testes são fictícios: a lista de deals liberados fica vazia (= todos).
+  ctx.DEALS_PRODUCAO_EDITAVEIS = [];
   ctx.$ = (nome) => {
     if (!(nome in nodes)) throw new Error('node inesperado: ' + nome);
     const itens = nodes[nome].map((json) => ({ json }));
