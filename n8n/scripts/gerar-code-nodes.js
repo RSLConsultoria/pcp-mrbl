@@ -44,7 +44,11 @@ const NODES = {
   'finalizar-associacao': 'Finalizar Associação',
   'montar-pedido-interpretacao-entrada': 'Montar Pedido de Interpretação (Entrada)',
   'montar-envio-whatsapp': 'Montar Envio WhatsApp',
-  'fechar-perguntas-vencidas': 'Fechar Perguntas Vencidas'
+  'fechar-perguntas-vencidas': 'Fechar Perguntas Vencidas',
+  'validar-peca': 'Validar Peça',
+  'preparar-leituras-peca': 'Preparar Leituras da Peça',
+  'preparar-referencia-peca': 'Preparar Referência da Peça',
+  'montar-peca': 'Montar Peça'
 };
 
 const corpo = ARQUIVOS

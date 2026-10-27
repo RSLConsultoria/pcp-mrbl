@@ -48,6 +48,12 @@ POS['Responder Erro'] = [13 * DX, 390];
 POS['Pedir Interpretação?'] = [14 * DX, 820];
 POS['Montar Pedido de Interpretação'] = [15 * DX, 900];
 POS['Disparar Interpretação'] = [16 * DX, 900];
+// Visão da peça (F5a): GET pcp-peca lê o Ploomes na hora (cache de 60 s no static data).
+// Número que não é OS: segunda leitura, pela referência, na faixa de baixo.
+linha(1100, 0, ['Peça', 'Validar Peça', 'Peça Pronta?', 'Buscar Cards da Peça', 'Preparar Leituras da Peça',
+  'Peça Pronta (Cards)?', 'Buscar pela Referência?', 'Buscar Registros da Peça', 'Buscar Trocas de Etapa', 'Buscar Etapas do Funil',
+  'Montar Peça', 'Responder Peça']);
+linha(1300, 7 * DX, ['Buscar Cards por Referência', 'Preparar Referência da Peça']);
 
 const POS_ENVIO = {};
 posAtual = POS_ENVIO;
@@ -314,6 +320,20 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   httpGoogle('lerPlanilha', 'Ler Planilha', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_BOARD)), false, unico),
   code('montarBoard', 'Montar Board', 'montar-board'),
   responder('responderBoard', 'Responder Board'),
+  webhook('pecaWebhook', 'Peça', 'GET', 'pcp-peca' + sufixo),
+  code('validarPeca', 'Validar Peça', 'validar-peca'),
+  'const pecaPronta = ' + condicao('Peça Pronta?', '{{ $json.pronto }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  http('buscarCardsPeca', 'Buscar Cards da Peça', 'GET', "expr('{{ $json.url }}')", false),
+  code('prepararLeiturasPeca', 'Preparar Leituras da Peça', 'preparar-leituras-peca'),
+  'const pecaProntaCards = ' + condicao('Peça Pronta (Cards)?', '{{ $json.pronto }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  'const pecaPorReferencia = ' + condicao('Buscar pela Referência?', '{{ $json.buscarReferencia }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  http('buscarCardsReferencia', 'Buscar Cards por Referência', 'GET', "expr('{{ $json.url }}')", false),
+  code('prepararReferenciaPeca', 'Preparar Referência da Peça', 'preparar-referencia-peca'),
+  http('buscarRegistrosPeca', 'Buscar Registros da Peça', 'GET', "expr('{{ $json.urls.registros }}')", false),
+  http('buscarTrocasEtapa', 'Buscar Trocas de Etapa', 'GET', 'expr(' + JSON.stringify("{{ $('Preparar Leituras da Peça').first().json.urls.trocas }}") + ')', false),
+  http('buscarEtapasFunil', 'Buscar Etapas do Funil', 'GET', 'expr(' + JSON.stringify("{{ $('Preparar Leituras da Peça').first().json.urls.etapas }}") + ')', false),
+  code('montarPeca', 'Montar Peça', 'montar-peca'),
+  responder('responderPeca', 'Responder Peça'),
   webhook('acaoWebhook', 'Acao', 'POST', 'pcp-acao' + sufixo),
   code('preValidarAcao', 'Pre Validar Acao', 'pre-validar-acao'),
   'const preOk = ' + condicao('Pre OK?', '{{ $json.ok }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
@@ -362,6 +382,15 @@ export default workflow('${id}', '${nomeWf}', {
   .to(precisaLer
     .onTrue(lerPlanilha.to(montarBoard).to(responderBoard))
     .onFalse(responderBoard))
+  .add(pecaWebhook)
+  .to(validarPeca)
+  .to(pecaPronta
+    .onTrue(responderPeca)
+    .onFalse(buscarCardsPeca.to(prepararLeiturasPeca).to(pecaProntaCards
+      .onTrue(responderPeca)
+      .onFalse(pecaPorReferencia
+        .onTrue(buscarCardsReferencia.to(prepararReferenciaPeca).to(responderPeca))
+        .onFalse(buscarRegistrosPeca.to(buscarTrocasEtapa).to(buscarEtapasFunil).to(montarPeca).to(responderPeca))))))
   .add(acaoWebhook)
   .to(preValidarAcao)
   .to(preOk
