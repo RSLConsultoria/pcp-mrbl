@@ -108,3 +108,21 @@ test('painéis das caixas (No Ploomes e Saídas): fechar à vista e clicável', 
     await expect(painel).toHaveCount(0);
   }
 });
+
+test('Gantt no celular: coluna fixa estreita (cerca de 45%) sem cortar o número da OS', async ({ page }) => {
+  await entrar(page, '#producao');
+  const fixo = (await page.locator('.gantt__cabecalho').boundingBox())!;
+  expect(fixo.width).toBeLessThanOrEqual(375 * 0.5);
+  expect(fixo.width).toBeGreaterThanOrEqual(375 * 0.4);
+  const os = page.locator('.gantt__os').first();
+  const numero = os.locator('strong');
+  await expect(numero).toHaveText('OS 90000');
+  const n = (await numero.boundingBox())!;
+  const b = (await os.boundingBox())!;
+  expect(n.x + n.width).toBeLessThanOrEqual(b.x + b.width);
+  expect(await numero.evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+  // A coluna de hoje continua alinhada com a régua.
+  const hoje = (await page.locator('.gantt__dia--hoje').boundingBox())!;
+  const col = (await page.getByTestId('gantt-hoje-coluna').boundingBox())!;
+  expect(Math.abs(hoje.x - col.x)).toBeLessThan(1.5);
+});

@@ -496,3 +496,21 @@ test('Gantt abre posicionado em hoje, com alguns dias antes à vista', async ({ 
   await expect(page.locator('.gantt__dia--hoje')).toBeVisible();
   await confere();
 });
+
+test('Gantt: ao rolar, a linha encaixa logo abaixo do cabeçalho fixo, sem faixa cortada', async ({ page }) => {
+  const extras = Array.from({ length: 30 }, (_, i) => ({ ...producao[0], dealId: `73${String(i).padStart(4, '0')}`, os: `92${String(i).padStart(3, '0')}` }));
+  await entrar(page, [], 0, extras);
+  const rolagem = page.locator('.gantt__rolagem');
+  await expect(page.locator('.gantt__topo')).toBeVisible();
+  for (const alvo of [333, 610]) {
+    await rolagem.evaluate((el, y) => { el.scrollTop = y; }, alvo);
+    await page.waitForTimeout(400);
+    const folga = await page.evaluate(() => {
+      const topo = document.querySelector('.gantt__topo')!.getBoundingClientRect().bottom;
+      const linhas = [...document.querySelectorAll('.gantt__linha, .gantt__grupo-nome')].map((e) => e.getBoundingClientRect());
+      const cortada = linhas.find((r) => r.top < topo + 1 && r.bottom > topo + 1);
+      return cortada ? Math.abs(cortada.top - topo) : 0;
+    });
+    expect(folga).toBeLessThan(1.5);
+  }
+});

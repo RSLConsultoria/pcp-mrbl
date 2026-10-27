@@ -23,7 +23,10 @@
 .producao-pendentes__associar label { flex: 1; font-size: 11px; font-weight: 700; }
 .producao-pendentes__associar select { width: 100%; margin-top: 3px; }
 
-.gantt__rolagem { flex: 1; min-height: 220px; overflow: auto; border: 1px solid var(--borda); border-radius: var(--raio); background: #fff; }
+.gantt__rolagem { flex: 1; min-height: 220px; overflow: auto; border: 1px solid var(--borda); border-radius: var(--raio); background: #fff;
+  /* Ao rolar, a linha encaixa logo abaixo do cabeçalho fixo (47 px): sem faixa de linha cortada. */
+  scroll-snap-type: y mandatory; scroll-padding-top: 47px; }
+.gantt__linha, .gantt__grupo-nome { scroll-snap-align: start; }
 .gantt { position: relative; display: grid; grid-template-columns: 260px auto; align-content: start; min-height: 100%; }
 .gantt__fixo { position: sticky; left: 0; z-index: 3; box-sizing: border-box; width: 260px; }
 .gantt__topo { position: sticky; top: 0; z-index: 5; grid-column: 1 / -1; display: grid; grid-template-columns: 260px auto; background: #fff; }
@@ -141,11 +144,15 @@
   .producao-filtros select { width: 100%; }
   .producao-kpis { grid-template-columns: 1fr; }
   .producao-kpis article:nth-child(n+3) { display: none; }
-  .gantt { --gantt-fixo: 210px; grid-template-columns: 210px auto; }
-  .gantt__fixo { width: 210px; }
-  .gantt__topo { grid-template-columns: 210px auto; }
-  .gantt__grupo { grid-template-columns: 210px auto; }
-  .gantt__linha { grid-template-columns: 210px auto; }
+  /* Coluna fixa com cerca de 45% da tela: sobra espaço para as barras; o número da OS
+     não encolhe (só a descrição da peça ganha reticências). */
+  .gantt { --gantt-fixo: 45vw; grid-template-columns: var(--gantt-fixo) auto; }
+  .gantt__fixo { width: var(--gantt-fixo); }
+  .gantt__topo, .gantt__grupo, .gantt__linha { grid-template-columns: var(--gantt-fixo) auto; }
+  .gantt__os { gap: 6px; padding: 7px 8px; }
+  .gantt__cabecalho { padding: 14px 8px; }
+  .gantt__cabecalho span { display: none; }
+  .gantt__sem-prazo { left: calc(var(--gantt-fixo) + 12px); }
 }
 
 @media (prefers-reduced-motion: reduce) { .gantt__barra { scroll-behavior: auto; } }
