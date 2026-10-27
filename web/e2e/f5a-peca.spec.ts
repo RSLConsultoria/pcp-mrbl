@@ -102,6 +102,20 @@ test('guia abre a busca; OS abre o dossiê com Ploomes, trilha e links', async (
   await expect(tempo).toContainText('Entregamos dia 13.');
 });
 
+test('clicar na guia Visão das peças com um dossiê aberto volta à busca vazia', async ({ page }) => {
+  await entrar(page, '#peca/90002');
+  await expect(dossie(page, '90002').getByRole('heading', { name: '90002' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Visão das peças' }).click();
+  await expect(page).toHaveURL(/#peca$/);
+  await expect(dossie(page, '90002')).toHaveCount(0);
+  await expect(page.getByLabel('OS ou referência')).toHaveValue('');
+  await expect(page.getByText('Busque uma OS ou referência para ver tudo dela')).toBeVisible();
+  // A mesma OS abre de novo pela busca.
+  await page.getByLabel('OS ou referência').fill('90002');
+  await page.getByLabel('OS ou referência').press('Enter');
+  await expect(dossie(page, '90002').getByRole('heading', { name: '90002' })).toBeVisible();
+});
+
 test('referência com várias OS mostra a lista; uma OS abre direto; nada encontrado avisa', async ({ page }) => {
   await entrar(page, '#peca');
   await page.getByLabel('OS ou referência').fill('REF-COMUM');

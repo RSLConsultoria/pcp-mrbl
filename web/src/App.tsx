@@ -31,8 +31,12 @@ function useTela(): [Tela, (t: Tela) => void] {
   }, []);
   const irPara = useCallback((t: Tela) => {
     setTela(t);
-    const { pathname, search } = window.location;
-    window.history.replaceState(null, '', pathname + search + hashDaTela(t));
+    const { pathname, search, hash } = window.location;
+    const novo = hashDaTela(t);
+    window.history.replaceState(null, '', pathname + search + novo);
+    // replaceState não dispara hashchange: avisa quem lê o hash (a Visão da peça sai de
+    // #peca/<OS> para a busca vazia ao clicar na própria guia).
+    if (hash !== novo) window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, []);
   return [tela, irPara];
 }
