@@ -197,7 +197,7 @@ describe('insights do dia e resumo', () => {
   it('resumo só com o que tem itens, no plural, e frase de nada pendente', () => {
     const vazio = { prazos: [], caixas: [], oficinas: [], cobrancas: [] };
     expect(resumoInsights(vazio)).toBe('Nada pedindo atenção hoje.');
-    const ins = insightsDoDia({ geradoEm: '', avisos: [], usuarios: [], caixas: [
+    const ins = insightsDoDia({ caixas: [
       caixa({ id: 'a', registradoEm: '2026-10-01' }), caixa({ id: 'b', registradoEm: '2026-10-01' })
     ] }, new Date(2026, 9, 27, 9, 0));
     expect(resumoInsights(ins)).toBe('2 caixas paradas');
