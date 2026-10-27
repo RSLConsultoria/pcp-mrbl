@@ -23,6 +23,8 @@ const quandoProvisorio = (ctx: ContextoOtimista): string => ctx.agora ?? `${ctx.
 // ---------- utilidades ----------
 
 const normalizarTexto = (v: string): string => v.trim().replace(/(\r\n|\n|\r)+/g, ' ');
+// Anotação da Visão da peça: como o servidor (n8n/src/peca.js, validarAnotacaoPeca).
+const normalizarAnotacao = (v: string): string => v.replace(/\r\n?/g, '\n').trim().replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ');
 
 function comCaixa(board: Board, dealId: string, f: (c: Caixa) => Caixa): Board {
   if (!board.caixas.some((c) => c.dealId === dealId)) return board;
@@ -230,7 +232,7 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
         ...board,
         anotacoes: [{
           id: `novo:anotacao:${ctx.n}`, quando: quandoProvisorio(ctx), usuario: 'Você',
-          texto: `Você anotou: "${normalizarTexto(acao.texto)}"`, ploomes: 'PENDENTE' as const, dealId: acao.dealId, os: acao.os
+          texto: `Você anotou: "${normalizarAnotacao(acao.texto)}"`, ploomes: 'PENDENTE' as const, dealId: acao.dealId, os: acao.os
         }, ...(board.anotacoes ?? [])]
       };
     case 'salvar_etapas':

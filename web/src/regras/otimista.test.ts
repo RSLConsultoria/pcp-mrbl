@@ -397,4 +397,9 @@ describe('anotar_peca', () => {
     expect(pendentesVivos([p], gravado, 1)).toEqual([]);
     expect(versaoNoBoard(quadro(), a)).toBeUndefined();
   });
+
+  it('normaliza espaços e quebras como o servidor (n8n/src/peca.js)', () => {
+    const a: Acao = { tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: '  Ligar   para\r\n a\t\toficina  ' };
+    expect(aplicar(quadro(), a).anotacoes?.[0].texto).toBe('Você anotou: "Ligar para a oficina"');
+  });
 });
