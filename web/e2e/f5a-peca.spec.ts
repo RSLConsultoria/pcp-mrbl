@@ -202,3 +202,16 @@ test('celular (375 px): lateral acima das abas e nada estoura a largura', async 
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   }
 });
+
+test('o dossiê rola com a roda do mouse até o último evento', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await entrar(page, '#peca/90002');
+  const ultimo = dossie(page, '90002').getByText('Produção: 15. Preparação 1 → 16. 1ª Peça');
+  await expect(ultimo).toBeAttached();
+  await page.mouse.move(900, 400);
+  await page.mouse.wheel(0, 3000);
+  await expect.poll(async () => {
+    const b = await ultimo.boundingBox();
+    return !!b && b.y >= 0 && b.y + b.height <= 520;
+  }).toBe(true);
+});
