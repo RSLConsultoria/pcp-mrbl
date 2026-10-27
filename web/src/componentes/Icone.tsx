@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-export type NomeIcone = 'produtos' | 'bell' | 'propostas' | 'funil' | 'doc' | 'search' | 'config' | 'remover';
+export type NomeIcone = 'produtos' | 'bell' | 'propostas' | 'funil' | 'doc' | 'search' | 'config' | 'remover' | 'ai';
 
 // Traços copiados do conjunto de ícones do Soccius DS.
 const DESENHOS: Record<NomeIcone, ReactElement> = {
@@ -11,7 +11,8 @@ const DESENHOS: Record<NomeIcone, ReactElement> = {
   doc: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4-4" /></>,
   config: <><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></>,
-  remover: <path d="M6 6l12 12M18 6 6 18" />
+  remover: <path d="M6 6l12 12M18 6 6 18" />,
+  ai: <><path d="M10 3l1.9 5.1L17 10l-5.1 1.9L10 17l-1.9-5.1L3 10l5.1-1.9z" /><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" /></>
 };
 
 export function Icone({ nome, tamanho = 17 }: { nome: NomeIcone; tamanho?: number }) {

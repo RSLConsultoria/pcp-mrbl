@@ -13,9 +13,12 @@ const GUIAS: { nome: string; icone: NomeIcone; tela?: Tela }[] = [
   { nome: 'Visão das peças', icone: 'doc', tela: 'peca' }
 ];
 
-interface Props { nome: string; geradoEm?: string; salvando?: boolean; tela: Tela; onTela: (t: Tela) => void; onSair: () => void }
+interface Props {
+  nome: string; geradoEm?: string; salvando?: boolean; tela: Tela; onTela: (t: Tela) => void; onSair: () => void;
+  assistenteAberto?: boolean; onAssistente?: () => void;
+}
 
-export function Navbar({ nome, geradoEm, salvando = false, tela, onTela, onSair }: Props) {
+export function Navbar({ nome, geradoEm, salvando = false, tela, onTela, onSair, assistenteAberto = false, onAssistente }: Props) {
   const [menu, setMenu] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -60,6 +63,11 @@ export function Navbar({ nome, geradoEm, salvando = false, tela, onTela, onSair 
           <span className="sync__ponto" />
           Ploomes · sincronizado {geradoEm ? horaMinuto(geradoEm) : '--:--'}
         </span>
+        {/* Assistente (F5d): abre e fecha o painel da direita. */}
+        {onAssistente && <button type="button" className="navbar__assistente" aria-label="Assistente" aria-expanded={assistenteAberto} aria-controls="assistente" onClick={onAssistente}>
+          <Icone nome="ai" tamanho={16} />
+          <span>Assistente</span>
+        </button>}
         <div className="avatar" ref={avatarRef}>
           <button type="button" className="avatar__botao" title={nome} aria-label={`Conta de ${nome}`} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
             {iniciais(nome)}

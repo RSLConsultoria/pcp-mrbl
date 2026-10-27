@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Caixa, EmailPcp, Sessao } from './api/tipos';
 import { lerSessao, limparSessao, salvarSessao } from './auth/sessao';
+import { Assistente } from './componentes/Assistente';
 import { AvisoProvider, useAviso } from './componentes/Aviso';
 import { FaixaEmailsPcp } from './componentes/FaixaEmailsPcp';
 import { FaixaInsights } from './componentes/FaixaInsights';
@@ -59,6 +60,16 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   // Clique numa sugestão da faixa dos e-mails do PCP: o No Ploomes abre a caixa.
   const [caixaPedida, setCaixaPedida] = useState<string | null>(null);
   const caixaAtendida = useCallback(() => setCaixaPedida(null), []);
+  // Assistente (F5d): painel à direita que empurra o conteúdo (no celular cobre a tela).
+  const [assistente, setAssistente] = useState(false);
+  const fecharNoCelular = useCallback(() => {
+    if (window.matchMedia?.('(max-width: 720px)').matches) setAssistente(false);
+  }, []);
+  const abrirDoAssistente = useCallback((t: Tela, os: string) => {
+    if (t === 'peca' && os) window.location.hash = hashDaPeca(os);
+    else irPara(t);
+    fecharNoCelular();
+  }, [irPara, fecharNoCelular]);
   const hoje = new Date();
   const q = buscas[tela];
   const selecionados = board ? itensSelecionados(board, selecao).length : 0;
@@ -89,8 +100,10 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   }, [board, irPara]);
 
   return (
+    <div className={assistente ? 'moldura moldura--assistente' : 'moldura'}>
     <div className="app">
-      <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair} />
+      <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair}
+        assistenteAberto={assistente} onAssistente={() => setAssistente((a) => !a)} />
       {board && <FaixaInsights board={board} agora={hoje} onOficina={abrirOficina} />}
       {board && <FaixaEmailsPcp board={board} onAbrir={abrirEmail} />}
       {/* A Visão da peça tem a própria busca (OS ou referência no Ploomes). */}
@@ -113,6 +126,9 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
               pedidoOficina={pedidoOficina} onPedidoOficinaAtendido={() => setPedidoOficina(null)} />
           : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} caixaPedida={caixaPedida} onCaixaPedidaAtendida={caixaAtendida} />}
       </main>
+    </div>
+    {board && <Assistente board={board} token={sessao.token} aberto={assistente} executar={executar} aoExpirar={aoExpirar}
+      onFechar={() => setAssistente(false)} onAbrirTela={abrirDoAssistente} onLinkOs={fecharNoCelular} />}
     </div>
   );
 }
