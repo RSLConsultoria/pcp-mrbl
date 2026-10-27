@@ -3,7 +3,7 @@
 Data: 27/10/2026. Terceira parte da F5. Aprovado pelo dono em 27/10. Base: `design_handoff_pcp_mrbl/referencias/MRBL-app-faltas-oficinas.md` §4.5 (fora do Git).
 
 ## 1. Contexto (visto na caixa real em 27/10, só leitura)
-- O Ploomes (`noreply@ploomes.com`) dispara e-mails com a OS no assunto, em 3 modelos: **"Caixa separada - OS:X | Ref: R | Desc: D"**, **"Itens faltando pós corte - OS:X | …"** e **"Itens recebidos SP -OS:X | …"**, para lucca@ (apelido da conta contato@rslconsultoria.com, Google Workspace) e a equipe.
+- O Ploomes (`noreply@ploomes.com`) dispara e-mails com a OS no assunto, em 3 modelos: **"Caixa separada - OS:X | Ref: R | Desc: D"**, **"Itens faltando pós corte - OS:X | …"** e **"Itens recebidos SP -OS:X | …"**, para a conta Google Workspace do PCP e a equipe.
 - A equipe (domínio da confecção) responde na mesma conversa ("RE: …"). Exemplos de conteúdo: pedido de conferência de quantidade, "item verificado, quantidade N", "chamado aberto #NNNNNNN", e às vezes previsão de chegada.
 - O texto da resposta traz o histórico citado e a assinatura.
 
