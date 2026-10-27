@@ -60,3 +60,108 @@ test('limpeza: espaços, linhas em branco e limite de 1500 caracteres', () => {
   assert.deepEqual(limpo(ctx.COLUNAS_EMAILS_PCP), ['id', 'thread_id', 'quando', 'de_nome', 'assunto', 'os', 'modelo', 'texto', 'tipo', 'valor',
     'itens', 'resumo', 'evidencia', 'confianca', 'status', 'tentativas', 'decidido_em', 'decidido_por']);
 });
+
+// ----- Intérprete -----
+const ITENS = [
+  { id: 'F-1', dealId: '700001', nome: 'ZIPER METAL 18CM', cor: 'PRETO', un: 'UN', resta: 40 },
+  { id: 'F-2', dealId: '700001', nome: 'BOTAO MADREPEROLA 15MM', cor: '', un: 'UN', resta: 120 },
+  { id: 'F-3', dealId: '700011', nome: 'LINHA 120', cor: 'AMORA', un: 'cones', resta: 4 }
+];
+const QUANDO = '2026-10-27T13:00:00.000Z';
+const v = (o, textoEmail) => limpo(ctx.validarInterpretacaoEmailPcp(o, { texto: textoEmail, quando: QUANDO, itensAbertos: ITENS }));
+const base = (o) => Object.assign({ tipo: 'OBSERVACAO', valor: '', itens: [], resumo: 'r', evidencia: '', confianca: 0.9 }, o);
+
+test('itens em aberto da OS: só os abertos das caixas daquela OS', () => {
+  const caixas = [
+    { dealId: '700001', os: '90001', itens: [
+      { id: 'F-1', nome: 'ZIPER', cor: 'PRETO', un: 'UN', status: 'ABERTO', resta: 40 },
+      { id: 'F-9', nome: 'ETIQUETA', cor: '', un: 'UN', status: 'RESOLVIDO', resta: 0 },
+      { id: 'F-8', nome: 'TAG', cor: '', un: 'UN', status: 'PARCIAL', resta: 0 }] },
+    { dealId: '700011', os: '90001', itens: [{ id: 'F-3', nome: 'LINHA', cor: '', un: 'cones', status: 'PARCIAL', resta: null }] },
+    { dealId: '700002', os: '90002', itens: [{ id: 'F-5', nome: 'OUTRA', cor: '', un: 'UN', status: 'ABERTO', resta: 2 }] }
+  ];
+  assert.deepEqual(limpo(ctx.itensAbertosDaOsEmailPcp(caixas, '90001')).map((i) => [i.id, i.dealId]), [['F-1', '700001'], ['F-3', '700011']]);
+  assert.deepEqual(limpo(ctx.itensAbertosDaOsEmailPcp(caixas, '')), []);
+});
+
+test('entrada do intérprete: texto limpo, assunto, OS e itens em aberto; nunca o remetente', () => {
+  const linha = { id: 'G1', quando: QUANDO, de_nome: 'Pessoa Ficticia', assunto: 'RE: Caixa separada - OS:90001', os: '90001', modelo: 'CAIXA_SEPARADA', texto: 'Chega dia 30/10.' };
+  const e = limpo(ctx.entradaInterpreteEmailPcp(linha, ITENS));
+  assert.equal(e.emailId, 'G1');
+  assert.equal(e.texto, 'Chega dia 30/10.');
+  assert.equal(e.assunto, 'RE: Caixa separada - OS:90001');
+  assert.equal(e.os, '90001');
+  assert.equal(e.modelo, 'CAIXA_SEPARADA');
+  assert.equal(e.quando, QUANDO);
+  assert.deepEqual(e.itensAbertos[0], { id: 'F-1', nome: 'ZIPER METAL 18CM PRETO', falta: '40 UN' });
+  assert.deepEqual(e.schema.tipo, ['PREVISAO', 'QUANTIDADE', 'CHAMADO', 'OBSERVACAO']);
+  assert.match(e.instrucoes, /evid/i);
+  assert.ok(!JSON.stringify(e).includes('Pessoa Ficticia'));
+});
+
+test('pedido ao Groq: modelo, JSON e o contexto como mensagem do usuário', () => {
+  const corpo = limpo(ctx.pedidoGroqEmailPcp({ emailId: 'G1', texto: 'x'.repeat(20000), instrucoes: 'i', schema: {} }));
+  assert.equal(corpo.model, 'openai/gpt-oss-120b');
+  assert.equal(corpo.temperature, 0);
+  assert.deepEqual(corpo.response_format, { type: 'json_object' });
+  assert.equal(corpo.messages[0].role, 'system');
+  assert.match(corpo.messages[0].content, /PREVISAO/);
+  assert.equal(corpo.messages[1].role, 'user');
+  assert.ok(corpo.messages[1].content.length <= 12000);
+  const ok = limpo(ctx.respostaGroqEmailPcp({ choices: [{ message: { content: '{"tipo":"CHAMADO","valor":"1234567"}' } }] }, 'G1'));
+  assert.deepEqual(ok, { emailId: 'G1', interpretacao: { tipo: 'CHAMADO', valor: '1234567' } });
+  assert.throws(() => ctx.respostaGroqEmailPcp({ choices: [{ message: { content: 'não é json' } }] }, 'G1'), /JSON/);
+  assert.throws(() => ctx.respostaGroqEmailPcp({}, 'G1'), /JSON/);
+});
+
+test('validação: PREVISAO com data e itens que batem pelo nome', () => {
+  const t = 'O zíper metal 18cm chega dia 30/10.';
+  assert.deepEqual(v(base({ tipo: 'PREVISAO', valor: '30/10', itens: ['ZIPER METAL 18CM'], evidencia: 'zíper metal 18cm chega dia 30/10' }), t),
+    { ok: true, tipo: 'PREVISAO', valor: '2026-10-30', itens: ['F-1'], resumo: 'r', evidencia: 'zíper metal 18cm chega dia 30/10', confianca: 0.9 });
+  // Sem itens citados: previsão da caixa.
+  assert.equal(v(base({ tipo: 'PREVISAO', valor: '2026-10-30', evidencia: 'chega dia 30/10' }), t).tipo, 'PREVISAO');
+  // Item pelo id também vale.
+  assert.deepEqual(v(base({ tipo: 'PREVISAO', valor: '30/10', itens: ['F-2'], evidencia: 'chega dia 30/10' }), t).itens, ['F-2']);
+});
+
+test('validação: PREVISAO que cita item fora da OS, data inválida ou distante vira OBSERVACAO', () => {
+  const t = 'O tecido chega dia 30/10.';
+  assert.equal(v(base({ tipo: 'PREVISAO', valor: '30/10', itens: ['TECIDO AZUL'], evidencia: 'chega dia 30/10' }), t).tipo, 'OBSERVACAO');
+  assert.equal(v(base({ tipo: 'PREVISAO', valor: 'semana que vem', evidencia: 'chega dia 30/10' }), t).tipo, 'OBSERVACAO');
+  assert.equal(v(base({ tipo: 'PREVISAO', valor: '30/05', evidencia: 'chega dia 30/10' }), t).tipo, 'OBSERVACAO');
+  const obs = v(base({ tipo: 'PREVISAO', valor: '30/10', itens: ['TECIDO AZUL'], evidencia: 'chega dia 30/10' }), t);
+  assert.equal(obs.valor, '');
+  assert.deepEqual(obs.itens, []);
+});
+
+test('validação: evidência fora do texto ou confiança baixa vira OBSERVACAO', () => {
+  const t = 'Item verificado, quantidade 40.';
+  const semEvid = v(base({ tipo: 'QUANTIDADE', valor: '40', itens: ['ZIPER METAL 18CM'], evidencia: 'chega amanhã de manhã', resumo: 'x' }), t);
+  assert.equal(semEvid.tipo, 'OBSERVACAO');
+  assert.equal(semEvid.evidencia, '');
+  assert.equal(semEvid.resumo, 'Resposta por e-mail: Item verificado, quantidade 40.');
+  assert.equal(v(base({ tipo: 'QUANTIDADE', valor: '40', itens: ['ZIPER METAL 18CM'], evidencia: '' }), t).tipo, 'OBSERVACAO');
+  const baixa = v(base({ tipo: 'QUANTIDADE', valor: '40', itens: ['ZIPER METAL 18CM'], evidencia: 'quantidade 40', confianca: 0.69 }), t);
+  assert.equal(baixa.tipo, 'OBSERVACAO');
+  assert.equal(baixa.confianca, 0.69);
+  assert.equal(v(base({ tipo: 'QUANTIDADE', valor: '40', itens: ['ZIPER METAL 18CM'], evidencia: 'quantidade 40', confianca: 0.7 }), t).tipo, 'QUANTIDADE');
+});
+
+test('validação: QUANTIDADE precisa de um item e de um número; CHAMADO precisa do número no texto', () => {
+  const t = 'Item verificado, quantidade 40. Chamado aberto #1234567.';
+  assert.deepEqual(v(base({ tipo: 'QUANTIDADE', valor: '40', itens: ['ZIPER METAL 18CM'], evidencia: 'quantidade 40' }), t),
+    { ok: true, tipo: 'QUANTIDADE', valor: '40', itens: ['F-1'], resumo: 'r', evidencia: 'quantidade 40', confianca: 0.9 });
+  assert.equal(v(base({ tipo: 'QUANTIDADE', valor: '40', itens: [], evidencia: 'quantidade 40' }), t).tipo, 'OBSERVACAO');
+  assert.equal(v(base({ tipo: 'QUANTIDADE', valor: 'muitos', itens: ['F-1'], evidencia: 'quantidade 40' }), t).tipo, 'OBSERVACAO');
+  assert.deepEqual(v(base({ tipo: 'CHAMADO', valor: '#1234567', evidencia: 'Chamado aberto #1234567' }), t).valor, '1234567');
+  assert.equal(v(base({ tipo: 'CHAMADO', valor: '7654321', evidencia: 'Chamado aberto' }), t).tipo, 'OBSERVACAO');
+});
+
+test('validação: saída inválida do modelo é erro (a linha fica ERRO para nova tentativa)', () => {
+  assert.equal(v('não é json', 't').ok, false);
+  assert.equal(v(base({ tipo: 'OUTRA' }), 't').ok, false);
+  assert.equal(v(base({ confianca: 2 }), 't').ok, false);
+  assert.equal(v(base({ confianca: 'alta' }), 't').ok, false);
+  // OBSERVACAO válida (de string JSON).
+  assert.equal(v(JSON.stringify(base({ resumo: 'Pedido de conferência', evidencia: 'confere' })), 'Pode conferir a quantidade?').tipo, 'OBSERVACAO');
+});
