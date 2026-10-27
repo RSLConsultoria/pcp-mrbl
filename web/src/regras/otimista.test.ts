@@ -95,6 +95,33 @@ describe('aplicarOtimista: producao e sugestoes', () => {
     expect(b.producao?.[0].mensagens[0]).toMatchObject({ id: 'MSG-2', associacao: 'MANUAL' });
   });
 
+  it('mensagem enfileirada confirmada sai das pendências quando o board traz o mensagemId da resposta', () => {
+    const p = prod();
+    p.mensagens = [{ id: 'WA-E-c-0003', quando: '2026-10-22T17:30:00.000Z', participanteNome: 'PCP', direcao: 'ENVIADA', texto: 'Teste', associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO' }];
+    const base = { estado: 'confirmada' as const, confirmadaEm: 1, confirmadaAs: 1_000, recargasDepois: 0 };
+    const enviar: Pendente = { ...base, id: 1, acao: { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Teste', chave: 'c-0003' }, resposta: { mensagemId: 'WA-E-c-0003' } };
+    const reenviar: Pendente = { ...base, id: 2, acao: { tipo: 'reenviar_whatsapp', dealId: '700001', mensagemId: 'MSG-ERRO', versao: 'v1', confirmou: true }, resposta: { mensagemId: 'WA-E-c-0003' } };
+    expect(pendentesVivos([enviar], quadro({ producao: [p] }), 0, 2_000)).toEqual([]);
+    expect(pendentesVivos([reenviar], quadro({ producao: [p] }), 0, 2_000)).toEqual([]);
+    // sem o mensagemId a ação fica pendente (e a mensagem apareceria em dobro)
+    expect(pendentesVivos([{ ...enviar, resposta: {} }], quadro({ producao: [p] }), 0, 2_000)).toHaveLength(1);
+  });
+
+  it('mensagem associada ou trocada de OS entra na conversa na ordem por data (mais nova primeiro)', () => {
+    const m = (id: string, quando: string, associacao: 'IA' | 'MANUAL' | 'SEM_ASSOCIACAO' = 'MANUAL') => ({
+      id, quando, participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA' as const, texto: id, associacao, statusEnvio: '' as const, tipoConteudo: 'TEXTO' as const
+    });
+    const conversa = [m('NOVA', '2026-10-22T12:00:00.000Z'), m('VELHA', '2026-10-20T12:00:00.000Z')];
+    const solta = { ...m('MEIO', '2026-10-21T12:00:00.000Z', 'SEM_ASSOCIACAO'), oficinaId: 'of-1', oficina: 'OFICINA A', grupoNome: 'GRUPO A' };
+    const r1 = aplicar(quadro({ producao: [{ ...prod(), mensagens: conversa }], mensagensWhatsappSemAssociacao: [solta] }),
+      { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'MEIO', versao: 'v1' });
+    expect(r1.producao?.[0].mensagens.map((x) => x.id)).toEqual(['NOVA', 'MEIO', 'VELHA']);
+    const origem = { ...prod(), dealId: '700002', os: '90002', sugestoes: [], mensagens: [m('ANTIGA', '2026-10-19T12:00:00.000Z', 'IA')] };
+    const r2 = aplicar(quadro({ producao: [{ ...prod(), mensagens: conversa }, origem] }),
+      { tipo: 'associar_whatsapp', dealId: '700001', mensagemId: 'ANTIGA', versao: 'v1' });
+    expect(r2.producao?.[0].mensagens.map((x) => x.id)).toEqual(['NOVA', 'VELHA', 'ANTIGA']);
+  });
+
   it('mostra o reenvio como nova tentativa pendente e mantém a tentativa com erro', () => {
     const p = prod();
     p.mensagens = [{ id: 'MSG-ERRO', quando: '', participanteNome: 'PCP', direcao: 'ENVIADA', texto: 'Teste para *CAMISA TESTE*', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' }];

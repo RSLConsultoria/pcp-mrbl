@@ -39,6 +39,13 @@ function comItem(board: Board, dealId: string, itemId: string, f: (i: Item) => I
   return comCaixa(board, dealId, (c) => ({ ...c, itens: c.itens.map((i) => (i.id === itemId ? f(i) : i)) }));
 }
 
+// Insere a mensagem na conversa pela data, mais nova primeiro, como o servidor ordena
+// (n8n/src/producao.js, mensagensDaProducao). Empate: a inserida fica antes.
+function comMensagemNaOrdem<M extends { quando: string }>(mensagens: M[], nova: M): M[] {
+  const k = mensagens.findIndex((m) => m.quando <= nova.quando);
+  return k < 0 ? [...mensagens, nova] : [...mensagens.slice(0, k), nova, ...mensagens.slice(k)];
+}
+
 const pedidosDe = (board: Board): Pedido[] => board.pedidos ?? [];
 const pedidoDe = (board: Board, id: string): Pedido | undefined => pedidosDe(board).find((p) => p.id === id);
 
@@ -168,7 +175,7 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       if (mensagem) {
         const associado = { ...mensagem, associacao: 'MANUAL' as const };
         const semAssociacao = board.mensagensWhatsappSemAssociacao?.filter((m) => m.id !== acao.mensagemId);
-        const atualizado = comProducao(board, acao.dealId, (p) => ({ ...p, mensagens: [associado, ...p.mensagens] }));
+        const atualizado = comProducao(board, acao.dealId, (p) => ({ ...p, mensagens: comMensagemNaOrdem(p.mensagens, associado) }));
         return { ...atualizado, mensagensWhatsappSemAssociacao: semAssociacao };
       }
       // Trocar OS (22/10): mensagem ligada pela IA vai para outra OS; a sugestão
@@ -181,7 +188,7 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
         mensagens: p.mensagens.filter((m) => m.id !== acao.mensagemId),
         sugestoes: p.sugestoes.map((s) => (s.mensagemId === acao.mensagemId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' as const } : s))
       }));
-      return comProducao(semNaOrigem, acao.dealId, (p) => ({ ...p, mensagens: [movida, ...p.mensagens] }));
+      return comProducao(semNaOrigem, acao.dealId, (p) => ({ ...p, mensagens: comMensagemNaOrdem(p.mensagens, movida) }));
     }
     case 'enviar_whatsapp':
       return comProducao(board, acao.dealId, (p) => ({

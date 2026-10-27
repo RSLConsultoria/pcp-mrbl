@@ -272,3 +272,35 @@ test('mock: Carga com as previstas e capacidade gravada pelo ADM continua depois
   expect(await acaoNoMock(page, { tipo: 'alterar_capacidade_oficina', oficinaId: 'OF-02', capacidade: -3 }))
     .toEqual({ status: 400, corpo: { erro: 'Informe a capacidade em peças por semana: número inteiro, 0 ou mais.' } });
 });
+
+test('mock: conversa da mais nova para a mais antiga e sugestão de exemplo com a evidência da mesma data', async ({ page, api }) => {
+  void api;
+  await entrar(page, '#producao');
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  // Como o servidor (n8n/src/producao.js, mensagensDaProducao): mais nova primeiro.
+  await expect(painel.locator('.producao-conversa > li > p')).toHaveText([
+    'A camisa sai amanhã cedo.', /^Conseguimos entregar/, 'Olá. A entrega de *PECA TESTE B* segue para esta semana?', 'Olá. Pode confirmar a data de entrega de *PECA TESTE B*?'
+  ]);
+  const sugestao = painel.locator('.producao-sugestoes li').first();
+  const data = (await sugestao.locator('span').first().textContent())!.replace('Nova data: ', '');
+  expect(data).toMatch(/^\d{2}\/\d{2}$/);
+  await expect(sugestao.locator('small').first()).toContainText(data);
+  await expect(painel.locator('.producao-conversa > li > p').nth(1)).toContainText(data);
+});
+
+test('mock: trocar a OS de uma mensagem da IA interpreta a mensagem na OS nova', async ({ page, api }) => {
+  void api;
+  await entrar(page, '#producao');
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  const daIa = painel.locator('.producao-conversa > li').filter({ hasText: 'A camisa sai amanhã cedo.' });
+  await daIa.getByLabel('Trocar para a OS').selectOption('700011');
+  await daIa.getByRole('button', { name: 'Trocar OS' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Mensagem movida para a OS escolhida.' })).toBeVisible();
+  await painel.getByRole('button', { name: 'Fechar painel' }).click();
+  await page.getByRole('button', { name: /OS 90011/ }).first().click();
+  const destino = page.getByRole('complementary', { name: 'Detalhes da OS 90011' });
+  await expect(destino).toContainText('A camisa sai amanhã cedo.');
+  await expect(destino.getByText(/Nova data:/)).toHaveCount(1, { timeout: 10_000 });
+});

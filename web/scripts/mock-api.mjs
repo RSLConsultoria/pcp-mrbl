@@ -127,10 +127,10 @@ const estado = {
       mensagens: [
         { id: 'MSG-ERRO-1', quando: new Date(Date.now() - 4_200_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. Pode confirmar a data de entrega de *PECA TESTE B*?', associacao: 'MANUAL', statusEnvio: 'ERRO', tipoConteudo: 'TEXTO' },
         { id: 'MSG-2', quando: new Date(Date.now() - 3_600_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE B* segue para esta semana?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' },
-        { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Conseguimos entregar na sexta, dia 16.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-1', quando: new Date(Date.now() - 1_800_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: `Conseguimos entregar dia ${diaIso(3).slice(8, 10)}/${diaIso(3).slice(5, 7)}.`, associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' },
         { id: 'MSG-IA-1', quando: new Date(Date.now() - 1_000_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'A camisa sai amanhã cedo.', associacao: 'IA', associacaoMotivo: 'A oficina fala da PECA TESTE B.', statusEnvio: '', tipoConteudo: 'TEXTO' }
       ],
-      sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou entrega para sexta-feira.', evidencia: 'entregar na sexta, dia 16', confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
+      sugestoes: [{ id: 'SUG-1', mensagemId: 'MSG-1', tipo: 'NOVA_DATA_COMBINADA', valor: diaIso(3), resumo: 'A oficina informou nova data de entrega.', evidencia: `entregar dia ${diaIso(3).slice(8, 10)}/${diaIso(3).slice(5, 7)}`, confianca: .94, status: 'PENDENTE', criadoEm: new Date(Date.now() - 1_700_000).toISOString(), versao: 'v2' }],
       historico: [{ quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'PCP Teste', texto: 'Data combinada ajustada após contato com a oficina.', ploomes: 'ENVIADO' }]
     },
     { dealId: '700005', os: '90005', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(2), dataCombinada: '', leadTime: diaIso(12), pecas: 95, valorCorte: 8550, cliente: 'CLIENTE BETA', peca: 'PECA TESTE E', referencia: 'REF-05', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
@@ -265,6 +265,8 @@ function montarBoard() {
     mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
     producao: estado.producao.map((p) => ({
       ...p,
+      // Como o servidor (n8n/src/producao.js, mensagensDaProducao): mais nova primeiro.
+      mensagens: [...p.mensagens].sort((a, b) => (a.quando < b.quando ? 1 : a.quando > b.quando ? -1 : 0)),
       // Como no servidor: o card da Produção é outro negócio; as caixas se ligam pela OS.
       faltasCostura: estado.caixas.filter((c) => c.os === p.os && c.tipo === 'COSTURA')
         .flatMap((c) => c.itens.filter((i) => aberto(i)).map((i) => ({
@@ -776,6 +778,9 @@ function associarWhatsapp(c, usuario) {
     origem.mensagens = origem.mensagens.filter((m) => m.id !== c.mensagemId);
     origem.sugestoes = origem.sugestoes.map((s) => (s.mensagemId === c.mensagemId && s.status === 'PENDENTE' ? { ...s, status: 'IGNORADA' } : s));
     p.mensagens.unshift({ ...movida, associacao: 'MANUAL' });
+    // Como o servidor (mensagemTemSugestaoWhatsapp): a mensagem que ainda não tem sugestão
+    // nenhuma é interpretada na OS nova.
+    if (!estado.producao.some((x) => x.sugestoes.some((sg) => sg.mensagemId === movida.id))) simularInterpretacao(p, movida);
     const ht = historicoProducao(p, usuario, `${usuario} trocou a OS de uma mensagem do WhatsApp: ${origem.os} → ${p.os}.`);
     return { ok: true, versao: p.versao, historico: ht, historicos: [ht] };
   }
