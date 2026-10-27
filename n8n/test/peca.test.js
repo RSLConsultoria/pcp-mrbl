@@ -50,6 +50,14 @@ test('URL dos cards: OS só por StringValue e sem "or" no filtro; referência à
   assert.equal(ctx.urlReferenciaPeca(ctx.normalizarBuscaPeca('REF 01/A')), ctx.urlCardsPeca(ctx.normalizarBuscaPeca('REF 01/A')));
 });
 
+test('literal OData: acento, barra e aspas codificados na URL', () => {
+  assert.equal(ctx.literalODataPeca("CAMISÃ/A'B"), "'CAMIS%C3%83%2FA''B'");
+  const crua = ctx.urlCardsPeca(ctx.normalizarBuscaPeca('REF Ç/01'));
+  assert.ok(crua.includes("StringValue%20eq%20'REF%20%C3%87%2F01'"), crua);
+  assert.ok(!/[ ÇÃ]/.test(crua), crua);
+  assert.ok(decodeURIComponent(crua).includes("o/StringValue eq 'REF Ç/01')"), crua);
+});
+
 test('card normalizado; OS em IntegerValue também vale na leitura', () => {
   assert.deepEqual(limpo(ctx.cardPecaDoDeal(deal(607600001, '123456', 'REF-01'))), {
     dealId: '607600001', funilId: 60015827, funil: 'Produção', etapaId: 60105, etapa: '17. Costura', etapaOrdem: null,

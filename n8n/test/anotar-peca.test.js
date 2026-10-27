@@ -115,6 +115,27 @@ test('anotar_peca: a OS aceita os mesmos caracteres da busca (inclusive espaço)
   }
 });
 
+test('board: anotações limitadas às 30 mais recentes por OS (teto geral de 2000)', () => {
+  const { ctx } = contexto();
+  const hist = [];
+  for (let i = 0; i < 40; i++) hist.push({ id: 'A' + i, deal_id: '1', os: '90001', acao: 'ANOTACAO', quando: new Date(T0 - i * 60e3).toISOString(), usuario: 'Ana', texto: 'a' + i });
+  for (let i = 0; i < 5; i++) hist.push({ id: 'B' + i, deal_id: '2', os: '90002', acao: 'ANOTACAO', quando: new Date(T0 - 3600e3 * 24 - i).toISOString(), usuario: 'Bia', texto: 'b' + i });
+  const a = limpo(ctx.anotacoesDoBoard(hist));
+  const daOs = (os) => a.filter((x) => x.os === os);
+  assert.equal(daOs('90001').length, 30);
+  assert.equal(daOs('90001')[0].id, 'A0');
+  assert.equal(daOs('90001')[29].id, 'A29');
+  // A OS com anotações antigas não some por causa da OS com muitas anotações novas.
+  assert.equal(daOs('90002').length, 5);
+  const muitas = [];
+  for (let os = 0; os < 100; os++) for (let i = 0; i < 30; i++) {
+    muitas.push({ id: os + '-' + i, deal_id: '1', os: String(80000 + os), acao: 'ANOTACAO', quando: new Date(T0 - (os * 30 + i) * 1000).toISOString(), usuario: 'A', texto: 't' });
+  }
+  const tudo = limpo(ctx.anotacoesDoBoard(muitas));
+  assert.equal(tudo.length, 2000);
+  assert.equal(tudo[0].id, '0-0');
+});
+
 test('board: histórico com id e acao quando existem; anotações numa lista própria', () => {
   const { ctx } = contexto();
   const hist = [

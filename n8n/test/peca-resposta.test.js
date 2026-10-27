@@ -53,6 +53,19 @@ test('eventos: sem os registros do app, trocas na hora da troca (UpdateDate) com
   assert.deepEqual(sem, [{ quando: '2026-10-01T00:00:00Z', fonte: 'ETAPA', texto: 'Etapa 1 → Etapa 2', autor: '', dealId: '5' }]);
 });
 
+test('eventos: registro do app com espaço ou HTML antes do prefixo também sai; texto cortado em 500', () => {
+  const regs = [
+    { DealId: 1, Date: '2026-10-21T10:00:00-03:00', Content: '  \n [PCP · OS 123456] Atualizações do app PCP' },
+    { DealId: 1, Date: '2026-10-21T11:00:00-03:00', Content: '<p>[PCP · OS 123456] Atualizações do app PCP</p>' },
+    { DealId: 1, Date: '2026-10-21T12:00:00-03:00', Content: '<div> <p>&nbsp;[PCP &middot; OS 123456] Atualizações</p></div>' },
+    { DealId: 1, Date: '2026-10-21T13:00:00-03:00', Content: 'Texto que cita [PCP · OS 123456] no meio' },
+    { DealId: 1, Date: '2026-10-21T09:00:00-03:00', Content: 'x'.repeat(800) }
+  ];
+  const ev = limpo(ctx.eventosPloomesPeca(regs, [], [], []));
+  assert.deepEqual(ev.map((e) => e.texto.slice(0, 20)), ['Texto que cita [PCP ', 'x'.repeat(20)]);
+  assert.equal(ev[1].texto.length, 500);
+});
+
 test('eventos: no máximo 200, os mais recentes', () => {
   const muitos = [];
   for (let i = 0; i < 250; i++) muitos.push({ DealId: 1, Date: new Date(T0 - i * 60000).toISOString(), Content: 'r' + i });
@@ -141,10 +154,12 @@ test('número sem card com essa OS: pede a segunda leitura pela referência; ela
   assert.deepEqual(limpo(ctx.prepararReferenciaPeca(busca, null, T0, estado)), { pronto: true, status: 502, body: { erro: 'Não foi possível ler o Ploomes agora.' } });
 });
 
-test('cache guarda no máximo 50 buscas e descarta as vencidas', () => {
+test('cache guarda no máximo 20 buscas e descarta as vencidas', () => {
   const estado = {};
   for (let i = 0; i < 60; i++) ctx.guardarPecaNoCache(estado, 'K' + i, { i }, T0 + i);
-  assert.equal(Object.keys(estado.pecas).length, 50);
+  assert.equal(Object.keys(estado.pecas).length, 20);
+  assert.equal(ctx.pecaDoCache(estado, 'K39', T0 + 100), null);
+  assert.deepEqual(limpo(ctx.pecaDoCache(estado, 'K40', T0 + 100)), { i: 40 });
   assert.equal(ctx.pecaDoCache(estado, 'K0', T0 + 100), null);
   assert.deepEqual(limpo(ctx.pecaDoCache(estado, 'K59', T0 + 100)), { i: 59 });
   ctx.guardarPecaNoCache(estado, 'NOVA', { x: 1 }, T0 + 70000);

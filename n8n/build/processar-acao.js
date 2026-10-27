@@ -4763,11 +4763,11 @@ function requisicoesDeEscrita(operacoes, historicos, planilha, docId) {
 var PECA_PLOOMES = 'https://public-api2.ploomes.com/';
 var PECA_URL_CARD = 'https://app10.ploomes.com/deal/';
 var PECA_CACHE_MS = 60 * 1000;
-var PECA_MAX_CACHE = 50;
+var PECA_MAX_CACHE = 20;
 var PECA_MAX_CARDS = 5;
 var PECA_MAX_EVENTOS = 200;
 var PECA_MAX_CARDS_BUSCA = 50;
-var PECA_PREFIXO_APP = '[PCP · OS';
+var PECA_MAX_TEXTO_EVENTO = 500;
 var PECA_ERRO_PLOOMES = 'Não foi possível ler o Ploomes agora.';
 var PECA_ERRO_NADA = 'Nenhuma OS encontrada no Ploomes.';
 var PECA_ERRO_BUSCA = 'Informe a OS ou a referência.';
@@ -4936,6 +4936,13 @@ function ordemFontePeca(fonte) {
 // (CreateDate é a entrada na origem). A linha da etapa atual (NewStageId nulo) não é
 // troca: fica de fora (a trilha mostra a atual). Undone = troca desfeita.
 // Mais novo primeiro; empate: Etapa, Ploomes.
+// Registro compilado do próprio app: a mesma regra PREFIXO_PCP do envio (envioPloomes.js),
+// tolerando espaços, &nbsp; e tags HTML antes do prefixo (o Ploomes pode guardar em HTML).
+function registroDoAppPeca(conteudo) {
+  var limpo = texto(conteudo).replace(/&middot;|&#183;/gi, '·').replace(/^(?:\s|&nbsp;|<[^>]*>)+/i, '');
+  return PREFIXO_PCP.test(limpo);
+}
+
 function eventosPloomesPeca(registros, trocas, etapas, cards) {
   var porId = etapasPorIdPeca(etapas);
   var funilDoDeal = {};
@@ -4944,9 +4951,9 @@ function eventosPloomesPeca(registros, trocas, etapas, cards) {
   var eventos = [];
   (registros || []).forEach(function (r) {
     var conteudo = texto(r && r.Content);
-    if (!conteudo || conteudo.indexOf(PECA_PREFIXO_APP) === 0) return;
+    if (!conteudo || registroDoAppPeca(conteudo)) return;
     eventos.push({
-      quando: texto(r.Date) || texto(r.CreateDate), fonte: 'PLOOMES', texto: conteudo.slice(0, 2000),
+      quando: texto(r.Date) || texto(r.CreateDate), fonte: 'PLOOMES', texto: conteudo.slice(0, PECA_MAX_TEXTO_EVENTO),
       autor: texto(r.Creator && r.Creator.Name), dealId: texto(r.DealId)
     });
   });
@@ -4983,7 +4990,7 @@ function pecaDoCache(estado, chave, agora) {
   return c && agora - c.guardadoEm < PECA_CACHE_MS ? c.corpo : null;
 }
 
-// Só respostas 200 entram (erro do Ploomes e 404 não). No máximo 50 buscas.
+// Só respostas 200 entram (erro do Ploomes e 404 não). No máximo 20 buscas.
 function guardarPecaNoCache(estado, chave, corpo, agora) {
   if (!estado.pecas) estado.pecas = Object.create(null);
   Object.keys(estado.pecas).forEach(function (k) {
@@ -5058,7 +5065,8 @@ function finalizarPeca(leituras, respostas, agora, estado) {
 // ---------- anotação (única escrita da Visão da peça) ----------
 var TIPO_ANOTAR_PECA = 'anotar_peca';
 var ACAO_ANOTACAO = 'ANOTACAO';
-var PECA_MAX_ANOTACOES_BOARD = 300;
+var PECA_MAX_ANOTACOES_POR_OS = 30;
+var PECA_MAX_ANOTACOES_BOARD = 2000;
 var ERRO_CARD_OUTRA_OS = 'Este card não é desta OS.';
 
 // Texto obrigatório, até 500 caracteres, sem linha em branco; quebras simples viram espaço.
@@ -5106,14 +5114,20 @@ function processarAnotacaoPeca(acao, ctx) {
 }
 
 // Anotações de qualquer card (o deal da anotação pode não ser caixa nem produção):
-// o front cruza pela OS. Mais novas primeiro, até 300.
+// o front cruza pela OS. Mais novas primeiro: até 30 por OS (uma OS com muitas anotações
+// não esconde as das outras) e no máximo 2000 no total.
 function anotacoesDoBoard(historico) {
+  var porOs = Object.create(null);
   return (historico || []).filter(function (h) {
     return h && semAcento(h.acao) === ACAO_ANOTACAO && texto(h.os) !== '';
   }).sort(function (a, b) {
     var x = texto(a.quando);
     var y = texto(b.quando);
     return x < y ? 1 : x > y ? -1 : 0;
+  }).filter(function (h) {
+    var os = texto(h.os);
+    porOs[os] = (porOs[os] || 0) + 1;
+    return porOs[os] <= PECA_MAX_ANOTACOES_POR_OS;
   }).slice(0, PECA_MAX_ANOTACOES_BOARD).map(function (h) {
     return {
       id: texto(h.id), quando: texto(h.quando), usuario: texto(h.usuario), texto: texto(h.texto),
