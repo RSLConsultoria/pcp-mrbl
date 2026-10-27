@@ -106,6 +106,9 @@ export function mensagemSucesso(
 
 export const MSG_CONFLITO = 'Alguém alterou esta caixa agora há pouco. Recarreguei os dados.';
 export const MSG_CONFLITO_PEDIDO = 'Alguém alterou este pedido agora há pouco. Recarreguei os dados.';
+export const MSG_CONFLITO_OS = 'Alguém alterou esta OS agora há pouco. Recarreguei os dados.';
+// 409 de versão vencida da OS no Controle de produção (n8n/src/producao.js).
+const MSG_VERSAO_OS_SERVIDOR = 'Esta OS mudou.';
 // Começo do texto que o servidor manda no 409 de versão vencida (n8n/src/pedidos.js
 // ERRO_VERSAO e ERRO_VERSAO_PEDIDO): "Alguém alterou esta caixa/este pedido agora há pouco."
 export const MSG_VERSAO_SERVIDOR = 'Alguém alterou ';
@@ -120,7 +123,7 @@ export type DesfechoErro =
   | { tipo: 'aviso'; texto: string };
 
 // O que a tela faz quando o servidor recusa uma ação. Todo 409 recarrega o board; só o de
-// versão vencida vira o texto padrão (que fala do pedido ou da caixa, conforme o alvo da
+// versão vencida vira o texto padrão (que fala do pedido, da OS ou da caixa, conforme o alvo da
 // ação), os outros (item já em pedido, pedido finalizado, etapa com pedido aberto) mostram a
 // mensagem do servidor. A falha de gravação (500) mostra o aviso do servidor e também
 // recarrega: parte da ação pode ter sido gravada.
@@ -130,8 +133,9 @@ export function desfechoDoErro(e: unknown, acao?: Acao): DesfechoErro {
     if (e.status === 500 && e.message.trim() === MSG_FALHA_GRAVACAO) return { tipo: 'conflito', texto: MSG_FALHA_GRAVACAO };
     if (e.status === 409) {
       const msg = e.message.trim();
-      const versao = msg === '' || msg === 'Erro 409' || msg.startsWith(MSG_VERSAO_SERVIDOR);
-      const padrao = acao && 'pedidoId' in acao ? MSG_CONFLITO_PEDIDO : MSG_CONFLITO;
+      const versao = msg === '' || msg === 'Erro 409' || msg.startsWith(MSG_VERSAO_SERVIDOR) || msg.startsWith(MSG_VERSAO_OS_SERVIDOR);
+      const padrao = acao && 'pedidoId' in acao ? MSG_CONFLITO_PEDIDO
+        : acao && chaveDaAcao(acao).startsWith('producao:') ? MSG_CONFLITO_OS : MSG_CONFLITO;
       return { tipo: 'conflito', texto: versao ? padrao : msg };
     }
     if ((e.status === 400 || e.status === 403 || e.status === 404) && e.message) return { tipo: 'aviso', texto: e.message };

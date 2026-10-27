@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client';
+import type { Acao } from '../api/tipos';
 import {
-  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_CONFLITO_PEDIDO, MSG_FALHA, MSG_FALHA_GRAVACAO,
+  chaveDaAcao, dataPronta, desfechoDoErro, gravarRecente, mensagemSucesso, MSG_CONFLITO, MSG_CONFLITO_OS, MSG_CONFLITO_PEDIDO, MSG_FALHA, MSG_FALHA_GRAVACAO,
   ordenarHistorico, passoDaData, SELO_PLOOMES, validarBaixa, versaoAtual
 } from './acoes';
 import { item } from './teste-util';
@@ -118,6 +119,22 @@ describe('desfechoDoErro', () => {
   it('409 que não é de versão mostra a mensagem do servidor (e ainda recarrega, como conflito)', () => {
     for (const msg of ['Item já está no PED-0003.', 'Item não encontrado.', 'Pedido finalizado não pode ser alterado.', 'A etapa Solicitado tem pedidos abertos.']) {
       expect(desfechoDoErro(new ApiError(409, msg))).toEqual({ tipo: 'conflito', texto: msg });
+    }
+  });
+  it('409 de versão numa ação do Controle de produção fala da OS, não da caixa', () => {
+    expect(MSG_CONFLITO_OS).toBe('Alguém alterou esta OS agora há pouco. Recarreguei os dados.');
+    const acoes: Acao[] = [
+      { tipo: 'alterar_producao', dealId: '700001', versao: 'v1', oficinaId: 'of-1', dataCombinada: '2026-10-20', motivo: 'x' },
+      { tipo: 'aceitar_sugestao_whatsapp', dealId: '700001', sugestaoId: 'S1', versao: 'v1', motivo: 'x' },
+      { tipo: 'enviar_whatsapp', dealId: '700001', versao: 'v1', modelo: 'COBRANCA_PRAZO', texto: 'Oi', chave: 'c-0001-teste' }
+    ];
+    for (const a of acoes) {
+      // simulador ("Alguém alterou esta OS…"), servidor ("Esta OS mudou…") e 409 sem corpo
+      for (const msg of ['Alguém alterou esta OS agora há pouco.', 'Esta OS mudou. Atualize a página e tente de novo.', 'Erro 409']) {
+        expect(desfechoDoErro(new ApiError(409, msg), a)).toEqual({ tipo: 'conflito', texto: MSG_CONFLITO_OS });
+      }
+      // os outros 409 da produção seguem com a mensagem do servidor
+      expect(desfechoDoErro(new ApiError(409, 'Esta OS ainda não chegou na Costura.'), a)).toEqual({ tipo: 'conflito', texto: 'Esta OS ainda não chegou na Costura.' });
     }
   });
   it('o aviso de versão vencida fala do alvo da ação: pedido ou caixa', () => {
