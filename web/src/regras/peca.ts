@@ -121,12 +121,13 @@ export function dealDaAnotacao(cards: CardPeca[], board: Board, os: string): str
     producaoDaOs(board, os)?.dealId ?? caixasDaOs(board, os)[0]?.dealId ?? '';
 }
 
-// Até o go-live: deals das duas allowlists (lista vazia = todos), como o servidor.
+// Até o go-live: deals das duas allowlists, como o servidor. Todos só com as DUAS listas
+// vazias; com uma vazia e a outra preenchida, vale a preenchida.
 export function podeAnotar(board: Board, dealId: string): boolean {
   if (!dealId) return false;
   const caixas = board.dealsEditaveis ?? [];
   const producao = board.dealsProducaoEditaveis ?? [];
-  return !caixas.length || !producao.length || caixas.includes(dealId) || producao.includes(dealId);
+  return (!caixas.length && !producao.length) || caixas.includes(dealId) || producao.includes(dealId);
 }
 
 export function erroAnotacao(texto: string): string {

@@ -139,14 +139,18 @@ describe('cardPrincipal, dealDaAnotacao e podeAnotar', () => {
     expect(dealDaAnotacao([], quadro(), '90001')).toBe('');
   });
 
-  it('anotar só nos deals liberados (lista vazia = todos)', () => {
+  it('anotar só nos deals liberados (as duas listas vazias = todos; uma vazia: vale a outra)', () => {
     expect(podeAnotar(quadro(), '1')).toBe(true);
     expect(podeAnotar(quadro(), '')).toBe(false);
     const restrito = quadro({ dealsEditaveis: ['607479158'], dealsProducaoEditaveis: ['607612577'] });
     expect(podeAnotar(restrito, '607612577')).toBe(true);
     expect(podeAnotar(restrito, '607479158')).toBe(true);
     expect(podeAnotar(restrito, '600000001')).toBe(false);
-    expect(podeAnotar(quadro({ dealsEditaveis: [], dealsProducaoEditaveis: ['607612577'] }), '600000001')).toBe(true);
+    expect(podeAnotar(quadro({ dealsEditaveis: [], dealsProducaoEditaveis: ['607612577'] }), '600000001')).toBe(false);
+    expect(podeAnotar(quadro({ dealsEditaveis: [], dealsProducaoEditaveis: ['607612577'] }), '607612577')).toBe(true);
+    expect(podeAnotar(quadro({ dealsEditaveis: ['607479158'], dealsProducaoEditaveis: [] }), '600000001')).toBe(false);
+    expect(podeAnotar(quadro({ dealsEditaveis: ['607479158'], dealsProducaoEditaveis: [] }), '607479158')).toBe(true);
+    expect(podeAnotar(quadro({ dealsEditaveis: [], dealsProducaoEditaveis: [] }), '600000001')).toBe(true);
   });
 });
 
