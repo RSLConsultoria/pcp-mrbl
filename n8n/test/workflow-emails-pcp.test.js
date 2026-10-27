@@ -8,6 +8,7 @@ const vm = require('node:vm');
 const { converter } = require('../scripts/sdk-para-json');
 const { ARQUIVOS, carregar, limpo } = require('./carregar');
 const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('../scripts/ids-subworkflows');
+const { ID_CREDENCIAL_GROQ } = require('../scripts/credenciais');
 
 const RAIZ = path.join(__dirname, '..');
 const ler = () => converter(path.join(RAIZ, 'workflows', 'pcp-emails.sdk.js'));
@@ -105,7 +106,7 @@ test('Intérprete E-mail do PCP (Groq): recebe o contexto, chama o Groq e devolv
   const groq = no(w, 'Chamar Groq');
   assert.equal(groq.parameters.url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal(groq.parameters.nodeCredentialType, 'groqApi');
-  assert.equal(groq.credentials.groqApi.id, 'CONFIGURAR_CREDENCIAL_GROQ');
+  assert.equal(groq.credentials.groqApi.id, ID_CREDENCIAL_GROQ);
   const [pedido] = rodarAdaptador('montar-pedido-groq-email-pcp', { emailId: 'G1', texto: 'Chega dia 30/10.', itensAbertos: [] });
   assert.equal(pedido.json.emailId, 'G1');
   assert.equal(pedido.json.corpo.model, 'openai/gpt-oss-120b');

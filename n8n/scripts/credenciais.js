@@ -4,7 +4,7 @@
 // repositório e voltaria o marcador.
 // - GROQ: a credencial "WhatsPCPGroq" (groqApi), usada pelo intérprete dos e-mails (F5c)
 //   e pelo Assistente na API (F5d).
-const ID_CREDENCIAL_GROQ = 'CONFIGURAR_CREDENCIAL_GROQ';
+const ID_CREDENCIAL_GROQ = 'njh1FO6l7bYhWhIL';
 
 function idCredencialValido(id) {
   if (typeof id !== 'string') return false;

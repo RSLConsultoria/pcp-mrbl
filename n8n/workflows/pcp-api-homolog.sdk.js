@@ -466,7 +466,7 @@ const chamarGroq = node({
         timeout: 40000
       }
     },
-    credentials: { groqApi: { id: 'CONFIGURAR_CREDENCIAL_GROQ', name: 'WhatsPCPGroq' } },
+    credentials: { groqApi: { id: 'njh1FO6l7bYhWhIL', name: 'WhatsPCPGroq' } },
     position: [660,1500]
   },
   output: [{ statusCode: 200, body: { choices: [] } }]

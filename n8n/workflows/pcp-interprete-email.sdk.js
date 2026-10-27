@@ -42,7 +42,7 @@ const chamarGroq = node({
       jsonBody: expr('{{ JSON.stringify($json.corpo) }}'),
       options: { timeout: 45000 }
     },
-    credentials: { groqApi: { id: 'CONFIGURAR_CREDENCIAL_GROQ', name: 'WhatsPCPGroq' } },
+    credentials: { groqApi: { id: 'njh1FO6l7bYhWhIL', name: 'WhatsPCPGroq' } },
     position: [440,0]
   },
   output: [{ choices: [] }]
