@@ -1015,7 +1015,168 @@ export default workflow('pcp-mrbl-medias-previsao', 'PCP MRBL - Médias de Previ
                 .to(nextBatch(loopEscritasMedias)))))))));
 `;
 
+// F5c · E-mails do PCP (27/10). "Ler E-mails do PCP": a cada 10 min lê o Gmail do PCP
+// (credencial OAuth2 SÓ LEITURA; o nó só faz getAll: nunca envia, apaga ou marca e-mail),
+// reserva cada e-mail novo na aba EMAILS_PCP (ERRO com 1 tentativa), chama o intérprete
+// (subworkflow Groq) e grava as interpretações válidas como PENDENTE. O domínio da
+// confecção fica no node Config (marcador CONFIGURAR_DOMINIO no repositório público).
+const MARCADOR_DOMINIO = 'CONFIGURAR_DOMINIO';
+const CRED_GMAIL = "credentials: { gmailOAuth2: { id: 'CONFIGURAR_CREDENCIAL_GMAIL', name: 'Gmail PCP (só leitura)' } },";
+const CRED_GROQ = "credentials: { groqApi: { id: 'CONFIGURAR_CREDENCIAL_GROQ', name: 'WhatsPCPGroq' } },";
+const POS_EMAILS = {};
+[['A cada 10 minutos', 0, 0], ['Config', 1, 0], ['Montar Busca', 2, 0], ['Buscar E-mails', 3, 0], ['Ler Planilha E-mails', 4, 0],
+  ['Selecionar E-mails', 5, 0], ['Gravar Reservas', 6, 0], ['Montar Pedidos de Interpretação', 7, 0], ['Interpretar E-mail', 8, 0],
+  ['Reler E-mails', 9, 0], ['Finalizar E-mails', 10, 0], ['Gravar Interpretações', 11, 0],
+  ['Montar Erro E-mails', 8, 260], ['Registrar Erro E-mails', 9, 260]]
+  .forEach(([n, c, y]) => { POS_EMAILS[n] = [c * DX, y]; });
+posAtual = POS_EMAILS;
+RETRY = RETRY_API;
+const lerEmailsPcp = IMPORT + [
+  `const agendaEmails = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.3,
+  config: {
+    name: 'A cada 10 minutos',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 10 }] } },
+    position: ${posicao('A cada 10 minutos')}
+  },
+  output: [{}]
+});`,
+  // Domínio da confecção: troque o marcador no n8n (e de novo depois de cada deploy).
+  `const configEmails = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Config',
+    parameters: {
+      mode: 'manual',
+      assignments: { assignments: [{ id: 'dominio', name: 'dominio', value: '${MARCADOR_DOMINIO}', type: 'string' }] },
+      options: {}
+    },
+    position: ${posicao('Config')}
+  },
+  output: [{ dominio: '${MARCADOR_DOMINIO}' }]
+});`,
+  code('montarBuscaEmails', 'Montar Busca', 'montar-busca-emails-pcp'),
+  // Gmail SÓ LEITURA: getAll com a busca; simple: false traz o texto inteiro do e-mail.
+  `const buscarEmails = node({
+  type: 'n8n-nodes-base.gmail',
+  version: 2.1,
+  config: {
+    name: 'Buscar E-mails',
+    ${ERRO_SAIDA}${unico}alwaysOutputData: true,
+    parameters: {
+      resource: 'message',
+      operation: 'getAll',
+      returnAll: false,
+      limit: 50,
+      simple: false,
+      filters: { q: expr('{{ $json.q }}') },
+      options: { downloadAttachments: false }
+    },
+    ${CRED_GMAIL}
+    position: ${posicao('Buscar E-mails')}
+  },
+  output: [{ id: 'G-ficticio', threadId: 'T-ficticio', subject: 'RE: Caixa separada - OS:90001', text: 'Chega dia 30/10.' }]
+});`,
+  httpGoogle('lerPlanilhaEmails', 'Ler Planilha E-mails', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_EMAILS_PCP)), false, ERRO_SAIDA + unico),
+  code('selecionarEmails', 'Selecionar E-mails', 'selecionar-emails-pcp'),
+  // Reserva: append das novas (repetir duplicaria a linha) e update das tentativas. Sem retry;
+  // se falhar, nada vai ao intérprete e a próxima rodada tenta de novo.
+  httpGoogle('gravarReservas', 'Gravar Reservas', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
+  code('montarPedidosEmails', 'Montar Pedidos de Interpretação', 'montar-pedidos-emails-pcp'),
+  // Um e-mail por vez; a falha de um não para os outros (fica ERRO para a próxima rodada).
+  executarWorkflow('interpretarEmail', 'Interpretar E-mail', IDS_SUBWORKFLOWS.INTERPRETE_EMAIL, true, 'continueRegularOutput', 'each'),
+  httpGoogle('relerEmails', 'Reler E-mails', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_EMAILS_PCP_RELER)), false, ERRO_SAIDA + unico),
+  codeComErro('finalizarEmails', 'Finalizar E-mails', 'finalizar-emails-pcp', "{ method: 'POST' }"),
+  // batchUpdate idempotente: pode repetir.
+  httpGoogle('gravarInterpretacoes', 'Gravar Interpretações', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
+  code('montarErroEmails', 'Montar Erro E-mails', 'montar-erro-emails-pcp'),
+  httpGoogle('registrarErroEmails', 'Registrar Erro E-mails', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", '')
+].join('\n\n') + `
+
+export default workflow('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PCP', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 600,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none'
+})
+  .add(agendaEmails)
+  .to(configEmails)
+  .to(montarBuscaEmails)
+  .to(buscarEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(buscarEmails).to(lerPlanilhaEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(lerPlanilhaEmails).to(selecionarEmails)
+  .to(gravarReservas.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(gravarReservas).to(montarPedidosEmails)
+  .to(interpretarEmail)
+  .to(relerEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(relerEmails).to(finalizarEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(finalizarEmails).to(gravarInterpretacoes.onError(montarErroEmails.to(registrarErroEmails)));
+`;
+
+// Subworkflow do intérprete dos e-mails (molde do intérprete do WhatsApp): recebe o
+// contexto, chama o Groq e devolve { emailId, interpretacao }. Só devolve JSON; nunca envia.
+const POS_INTERPRETE_EMAIL = {};
+[['Receber Contexto', 0, 0], ['Montar Pedido Groq', 1, 0], ['Chamar Groq', 2, 0], ['Devolver Interpretação', 3, 0]]
+  .forEach(([n, c, y]) => { POS_INTERPRETE_EMAIL[n] = [c * DX, y]; });
+posAtual = POS_INTERPRETE_EMAIL;
+const interpreteEmail = IMPORT + [
+  `const receberContextoEmail = trigger({
+  type: 'n8n-nodes-base.executeWorkflowTrigger',
+  version: 1.1,
+  config: {
+    name: 'Receber Contexto',
+    parameters: { inputSource: 'passthrough' },
+    position: ${posicao('Receber Contexto')}
+  },
+  output: [{ emailId: 'G-ficticio', texto: 'Chega dia 30/10.' }]
+});`,
+  code('montarPedidoGroq', 'Montar Pedido Groq', 'montar-pedido-groq-email-pcp'),
+  `const chamarGroq = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.2,
+  config: {
+    name: 'Chamar Groq',
+    retryOnFail: true,
+    maxTries: 2,
+    waitBetweenTries: 5000,
+    parameters: {
+      method: 'POST',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'groqApi',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify($json.corpo) }}'),
+      options: { timeout: 60000 }
+    },
+    ${CRED_GROQ}
+    position: ${posicao('Chamar Groq')}
+  },
+  output: [{ choices: [] }]
+});`,
+  code('devolverInterpretacaoEmail', 'Devolver Interpretação', 'devolver-interpretacao-email-pcp')
+].join('\n\n') + `
+
+export default workflow('pcp-mrbl-interprete-email-pcp', 'PCP MRBL - Intérprete E-mail do PCP (Groq)', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 120,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none'
+})
+  .add(receberContextoEmail)
+  .to(montarPedidoGroq)
+  .to(chamarGroq)
+  .to(devolverInterpretacaoEmail);
+`;
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-emails.sdk.js'), lerEmailsPcp);
+console.log('workflows/pcp-emails.sdk.js');
+fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-interprete-email.sdk.js'), interpreteEmail);
+console.log('workflows/pcp-interprete-email.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-retentar-interpretacao.sdk.js'), retentarInterpretacao);
 console.log('workflows/pcp-retentar-interpretacao.sdk.js');
 fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-interpretar-whatsapp.sdk.js'), interpretarWhatsapp);

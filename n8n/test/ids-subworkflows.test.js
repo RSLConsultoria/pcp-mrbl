@@ -12,6 +12,6 @@ test('validador aceita marcador CONFIGURAR_* ou id real e recusa vazio', () => {
 });
 
 test('os ids configurados são válidos', () => {
-  assert.deepEqual(Object.keys(IDS_SUBWORKFLOWS).sort(), ['ASSOCIADOR', 'INTERPRETAR_WHATSAPP', 'INTERPRETE']);
+  assert.deepEqual(Object.keys(IDS_SUBWORKFLOWS).sort(), ['ASSOCIADOR', 'INTERPRETAR_WHATSAPP', 'INTERPRETE', 'INTERPRETE_EMAIL']);
   for (const id of Object.values(IDS_SUBWORKFLOWS)) assert.equal(idSubworkflowValido(id), true, id);
 });

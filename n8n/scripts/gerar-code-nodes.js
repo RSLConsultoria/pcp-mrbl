@@ -48,7 +48,14 @@ const NODES = {
   'validar-peca': 'Validar Peça',
   'preparar-leituras-peca': 'Preparar Leituras da Peça',
   'preparar-referencia-peca': 'Preparar Referência da Peça',
-  'montar-peca': 'Montar Peça'
+  'montar-peca': 'Montar Peça',
+  'montar-busca-emails-pcp': 'Montar Busca',
+  'selecionar-emails-pcp': 'Selecionar E-mails',
+  'montar-pedidos-emails-pcp': 'Montar Pedidos de Interpretação',
+  'finalizar-emails-pcp': 'Finalizar E-mails',
+  'montar-erro-emails-pcp': 'Montar Erro E-mails',
+  'montar-pedido-groq-email-pcp': 'Montar Pedido Groq',
+  'devolver-interpretacao-email-pcp': 'Devolver Interpretação'
 };
 
 const corpo = ARQUIVOS

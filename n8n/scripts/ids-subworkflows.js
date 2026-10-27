@@ -6,10 +6,13 @@
 // - INTERPRETAR_WHATSAPP: "PCP MRBL - Interpretar WhatsApp" (chamado pela API e
 //   pelo "PCP MRBL - Retentar Interpretação").
 // - ASSOCIADOR: subworkflow do associador por IA (22/10; mesma credencial Groq).
+// - INTERPRETE_EMAIL: "PCP MRBL - Intérprete E-mail do PCP (Groq)" (F5c), chamado pelo
+//   "PCP MRBL - Ler E-mails do PCP". Gerado em workflows/json/pcp-interprete-email.json.
 const IDS_SUBWORKFLOWS = {
   INTERPRETE: 'pTRkYh6xs7HGM7CM',
   INTERPRETAR_WHATSAPP: 'DijEYc4iDDU3oRJU',
-  ASSOCIADOR: '5vCmNDx4CDXde3om'
+  ASSOCIADOR: '5vCmNDx4CDXde3om',
+  INTERPRETE_EMAIL: 'CONFIGURAR_INTERPRETE_EMAIL'
 };
 
 function idSubworkflowValido(id) {
