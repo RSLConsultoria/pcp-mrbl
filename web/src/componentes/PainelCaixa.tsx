@@ -8,6 +8,7 @@ import { corDoTipo, nomeDoTipo } from '../regras/texto';
 import { CamposCaixa } from './painel/CamposCaixa';
 import { Historico } from './painel/Historico';
 import { ItemEditavel } from './painel/ItemEditavel';
+import { LinkPeca } from './LinkPeca';
 
 const URL_PLOOMES = 'https://app10.ploomes.com/deal/';
 
@@ -42,7 +43,10 @@ export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFecha
         <div className="painel__os">{caixa.os}</div>
         <div className="painel__peca">{caixa.peca}</div>
         <div className="painel__meta">{[caixa.cliente, caixa.referencia].filter(Boolean).join(' · ')}</div>
-        <a className="painel__link" href={URL_PLOOMES + caixa.dealId} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+        <div className="painel__links">
+          <a className="painel__link" href={URL_PLOOMES + caixa.dealId} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+          <LinkPeca os={caixa.os} />
+        </div>
       </div>
       <div className="painel__corpo">
         {!editavel && <p className="item__nota" role="note">{MSG_SOMENTE_LEITURA}</p>}

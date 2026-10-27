@@ -1,5 +1,6 @@
 import type { Caixa } from '../../api/tipos';
 import { corDoTipo, nomeDoTipo } from '../../regras/texto';
+import { LinkPeca } from '../LinkPeca';
 
 const URL_PLOOMES = 'https://app10.ploomes.com/deal/';
 
@@ -14,7 +15,10 @@ export function CabecalhoCaixa({ caixa, onFechar }: { caixa: Caixa; onFechar: ()
       <div className="painel__os">{caixa.os}</div>
       <div className="painel__peca">{caixa.peca}</div>
       <div className="painel__meta">{[caixa.cliente, caixa.referencia].filter(Boolean).join(' · ')}</div>
-      <a className="painel__link" href={URL_PLOOMES + caixa.dealId} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+      <div className="painel__links">
+        <a className="painel__link" href={URL_PLOOMES + caixa.dealId} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+        <LinkPeca os={caixa.os} />
+      </div>
     </div>
   );
 }

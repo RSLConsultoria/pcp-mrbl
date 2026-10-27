@@ -77,3 +77,9 @@
   .peca__caixas { grid-template-columns: minmax(0, 1fr); }
   .peca__candidatos a { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+/* Link "Ver visão da peça" ao lado do "Abrir card no Ploomes" nos painéis. */
+.painel__links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
+.painel__links .painel__link { margin-top: 0; }
+.producao-links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 16px; }
+.producao-links .producao-link { margin-top: 0; }

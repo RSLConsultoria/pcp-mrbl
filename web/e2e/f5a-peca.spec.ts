@@ -165,3 +165,27 @@ test('OS sem nada no app mostra só o Ploomes com o aviso', async ({ page }) => 
   await expect(d).toContainText('Esta OS ainda não tem caixas, pedidos ou mensagens no app.');
   await expect(d.getByRole('link', { name: 'Abrir card no Ploomes' })).toBeVisible();
 });
+
+test('link nos painéis: caixa (No Ploomes) e OS (Controle de produção) abrem a Visão da peça', async ({ page }) => {
+  await entrar(page, '');
+  await page.getByRole('button', { name: 'OS 90002' }).click();
+  await page.getByRole('complementary', { name: 'Caixa da OS 90002' }).getByRole('link', { name: 'Ver visão da peça' }).click();
+  await expect(page).toHaveURL(/#peca\/90002$/);
+  await expect(page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Visão das peças' })).toHaveAttribute('aria-current', 'page');
+  await expect(dossie(page, '90002')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Módulos' }).getByRole('button', { name: 'Controle de produção' }).click();
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  await page.getByRole('complementary', { name: 'Detalhes da OS 90002' }).getByRole('link', { name: 'Ver visão da peça' }).click();
+  await expect(page).toHaveURL(/#peca\/90002$/);
+  await expect(dossie(page, '90002')).toBeVisible();
+});
+
+test('link no painel do pedido: um por OS quando o pedido junta várias', async ({ page }) => {
+  await entrar(page, '#pedidos');
+  await page.getByRole('region', { name: 'A pedir' }).getByRole('button', { name: 'Pedido PED-0042' }).click();
+  const painel = page.getByRole('complementary', { name: 'Pedido PED-0042' });
+  await expect(painel.getByRole('link', { name: 'Ver visão da peça · OS 90001' })).toHaveAttribute('href', '#peca/90001');
+  await painel.getByRole('link', { name: 'Ver visão da peça · OS 90002' }).click();
+  await expect(page).toHaveURL(/#peca\/90002$/);
+  await expect(dossie(page, '90002')).toBeVisible();
+});

@@ -3,6 +3,7 @@ import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } f
 import type { Executar } from '../hooks/useAcao';
 import { useRascunhoDoBoard } from '../hooks/useValorDoBoard';
 import { ConversaWhatsapp } from '../componentes/ConversaWhatsapp';
+import { LinkPeca } from '../componentes/LinkPeca';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { CargaProducao } from './ProducaoCarga';
@@ -148,7 +149,10 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           </div>
           {!item.inicioCosturaPrevisto && <p className="producao-vazio">OS sem peças informadas: sem previsão a partir do Corte.</p>}
         </section>}
-        <a className="producao-link" href={`https://app10.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+        <div className="producao-links">
+          <a className="producao-link" href={`https://app10.ploomes.com/deal/${item.dealId}`} target="_blank" rel="noreferrer">Abrir card no Ploomes</a>
+          <LinkPeca os={item.os} className="producao-link" />
+        </div>
         <section className="producao-secao producao-edicao">
           <h3>Alterar combinado</h3>
           <div className="producao-edicao__campos">

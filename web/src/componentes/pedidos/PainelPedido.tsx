@@ -4,6 +4,7 @@ import type { Executar } from '../../hooks/useAcao';
 import { useTeclaEsc } from '../../hooks/useTeclaEsc';
 import { lerQuantidade, mensagemSucesso } from '../../regras/acoes';
 import { ddmm } from '../../regras/datas';
+import { LinkPeca } from '../LinkPeca';
 import { MSG_SOMENTE_LEITURA } from '../../regras/edicao';
 import {
   MSG_ITEM_MUDOU, clientesDasCaixas, erroEdicaoPedido, etapaFinal, nomeLocal, nomeOrigem, opcoesDeQuem, quemDoPedido, resumoAlteracoes, validarGerarPedido, type EstadoEditavel
@@ -98,6 +99,8 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
     : pedido.baixadoEm
       ? `Baixa registrada nas caixas em ${ddmm(pedido.baixadoEm)}. Quando o destino confirmar o recebimento, arraste o card para ${etapaFinal(etapas)?.nome ?? 'a última etapa'}.`
       : MSG_SOMENTE_LEITURA;
+  // Um link por OS do pedido (pedido que junta várias OS leva a cada uma).
+  const osDoPedido = [...new Set(pedido.itens.map((i) => i.os).filter(Boolean))];
   return (
     <aside className="painel" aria-label={`Pedido ${pedido.id}`}>
       <div className="painel__cabecalho">
@@ -109,6 +112,9 @@ export function PainelPedido({ pedido, board, etapas, executar, onFechar }: Prop
         <div className="painel__peca">{[nomeOrigem(pedido.origem), quemDoPedido(pedido)].filter(Boolean).join(' · ')}</div>
         <div className="painel__meta">{[pedido.criadoEm && `criado ${ddmm(pedido.criadoEm)}`, nomeEtapa].filter(Boolean).join(' · ')}</div>
         {familia && <div className="painel__meta painel__familia">{familia}</div>}
+        {osDoPedido.length > 0 && <div className="painel__links">
+          {osDoPedido.map((os) => <LinkPeca key={os} os={os} rotulo={osDoPedido.length > 1 ? `Ver visão da peça · OS ${os}` : undefined} />)}
+        </div>}
       </div>
       <div className="painel__corpo">
         {editavel ? (
