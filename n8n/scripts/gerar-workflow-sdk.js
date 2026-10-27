@@ -12,6 +12,10 @@ const lote = carregar();
 // Ids dos subworkflows (marcador CONFIGURAR_* ou id real): scripts/ids-subworkflows.js.
 const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('./ids-subworkflows');
 Object.keys(IDS_SUBWORKFLOWS).forEach((k) => { if (!idSubworkflowValido(IDS_SUBWORKFLOWS[k])) throw new Error('Id de subworkflow inválido: ' + k); });
+// Id da credencial Groq (marcador CONFIGURAR_* ou id real): scripts/credenciais.js.
+const { ID_CREDENCIAL_GROQ, idCredencialValido } = require('./credenciais');
+if (!idCredencialValido(ID_CREDENCIAL_GROQ)) throw new Error('Id de credencial inválido: GROQ');
+const CRED_GROQ = "credentials: { groqApi: { id: '" + ID_CREDENCIAL_GROQ + "', name: 'WhatsPCPGroq' } },";
 const DOC = lote.PLANILHA_ID;
 const ORIGENS = 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173';
 
@@ -54,6 +58,8 @@ linha(1100, 0, ['Peça', 'Validar Peça', 'Peça Pronta?', 'Buscar Cards da Peç
   'Peça Pronta (Cards)?', 'Buscar pela Referência?', 'Buscar Registros da Peça', 'Buscar Trocas de Etapa', 'Buscar Etapas do Funil',
   'Montar Peça', 'Responder Peça']);
 linha(1300, 7 * DX, ['Buscar Cards por Referência', 'Preparar Referência da Peça']);
+// Assistente (F5d): POST pcp-assistente confere sessão e limite e repassa a conversa ao Groq.
+linha(1500, 0, ['Assistente', 'Validar Assistente', 'Assistente Pronto?', 'Chamar Groq (Assistente)', 'Montar Resposta do Assistente', 'Responder Assistente']);
 
 const POS_ENVIO = {};
 posAtual = POS_ENVIO;
@@ -307,6 +313,33 @@ const executarWorkflow = (varName, nome, workflowId, esperar, onError, modo) => 
   output: [${esperar ? '{ interpretacao: {} }' : '{}'}]
 });`;
 
+// Groq do Assistente: resposta completa sem erro (o Montar Resposta trata status e falha),
+// sem nova tentativa (o site mostra o erro e a pessoa tenta de novo), 40 s (o site espera 45).
+const chamarGroqAssistente = () => `const chamarGroq = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.2,
+  config: {
+    name: 'Chamar Groq (Assistente)',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'groqApi',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify($json.corpo) }}'),
+      options: {
+        response: { response: { fullResponse: true, neverError: true } },
+        timeout: 40000
+      }
+    },
+    ${CRED_GROQ}
+    position: ${posicao('Chamar Groq (Assistente)')}
+  },
+  output: [{ statusCode: 200, body: { choices: [] } }]
+});`;
+
 RETRY = RETRY_API;
 const IMPORT_API = IMPORT.replace('ifElse, expr', 'ifElse, splitInBatches, nextBatch, expr');
 const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
@@ -334,6 +367,12 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   http('buscarEtapasFunil', 'Buscar Etapas do Funil', 'GET', 'expr(' + JSON.stringify("{{ $('Preparar Leituras da Peça').first().json.urls.etapas }}") + ')', false),
   code('montarPeca', 'Montar Peça', 'montar-peca'),
   responder('responderPeca', 'Responder Peça'),
+  webhook('assistenteWebhook', 'Assistente', 'POST', 'pcp-assistente' + sufixo),
+  code('validarAssistente', 'Validar Assistente', 'validar-assistente'),
+  'const assistentePronto = ' + condicao('Assistente Pronto?', '{{ $json.pronto }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
+  chamarGroqAssistente(),
+  code('montarRespostaAssistente', 'Montar Resposta do Assistente', 'montar-resposta-assistente'),
+  responder('responderAssistente', 'Responder Assistente'),
   webhook('acaoWebhook', 'Acao', 'POST', 'pcp-acao' + sufixo),
   code('preValidarAcao', 'Pre Validar Acao', 'pre-validar-acao'),
   'const preOk = ' + condicao('Pre OK?', '{{ $json.ok }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
@@ -391,6 +430,11 @@ export default workflow('${id}', '${nomeWf}', {
       .onFalse(pecaPorReferencia
         .onTrue(buscarCardsReferencia.to(prepararReferenciaPeca).to(responderPeca))
         .onFalse(buscarRegistrosPeca.to(buscarTrocasEtapa).to(buscarEtapasFunil).to(montarPeca).to(responderPeca))))))
+  .add(assistenteWebhook)
+  .to(validarAssistente)
+  .to(assistentePronto
+    .onTrue(responderAssistente)
+    .onFalse(chamarGroq.to(montarRespostaAssistente).to(responderAssistente)))
   .add(acaoWebhook)
   .to(preValidarAcao)
   .to(preOk
@@ -1022,7 +1066,6 @@ export default workflow('pcp-mrbl-medias-previsao', 'PCP MRBL - Médias de Previ
 // confecção fica no node Config (marcador CONFIGURAR_DOMINIO no repositório público).
 const MARCADOR_DOMINIO = 'CONFIGURAR_DOMINIO';
 const CRED_GMAIL = "credentials: { gmailOAuth2: { id: 'CONFIGURAR_CREDENCIAL_GMAIL', name: 'Gmail PCP (só leitura)' } },";
-const CRED_GROQ = "credentials: { groqApi: { id: 'CONFIGURAR_CREDENCIAL_GROQ', name: 'WhatsPCPGroq' } },";
 const POS_EMAILS = {};
 [['A cada 10 minutos', 0, 0], ['Config', 1, 0], ['Montar Busca', 2, 0], ['Buscar E-mails', 3, 0], ['Ler Planilha E-mails', 4, 0],
   ['Selecionar E-mails', 5, 0], ['Gravar Reservas', 6, 0], ['Montar Pedidos de Interpretação', 7, 0], ['Interpretar E-mail', 8, 0],

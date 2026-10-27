@@ -55,7 +55,9 @@ const NODES = {
   'finalizar-emails-pcp': 'Finalizar E-mails',
   'montar-erro-emails-pcp': 'Montar Erro E-mails',
   'montar-pedido-groq-email-pcp': 'Montar Pedido Groq',
-  'devolver-interpretacao-email-pcp': 'Devolver Interpretação'
+  'devolver-interpretacao-email-pcp': 'Devolver Interpretação',
+  'validar-assistente': 'Validar Assistente',
+  'montar-resposta-assistente': 'Montar Resposta do Assistente'
 };
 
 const corpo = ARQUIVOS
