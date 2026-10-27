@@ -1,4 +1,4 @@
-import type { Acao, Board, RespostaAcao, RespostaPeca, Sessao } from './tipos';
+import type { Acao, Board, ChamadaAssistente, MensagemAssistente, RespostaAcao, RespostaAssistente, RespostaPeca, Sessao } from './tipos';
 
 export class ApiError extends Error {
   status: number;
@@ -19,11 +19,13 @@ export class ErroConfiguracao extends Error {
 
 // Sem resposta em 20 s, o pedido é cancelado e conta como falta de conexão.
 export const TEMPO_LIMITE_MS = 20_000;
+// O assistente espera o modelo: 45 s (o n8n corta o Groq em 40 s).
+export const TEMPO_ASSISTENTE_MS = 45_000;
 
-async function pedir<T>(url: string, init: RequestInit): Promise<T> {
+async function pedir<T>(url: string, init: RequestInit, tempo = TEMPO_LIMITE_MS): Promise<T> {
   let r: Response;
   try {
-    r = await fetch(url, { ...init, signal: AbortSignal.timeout(TEMPO_LIMITE_MS) });
+    r = await fetch(url, { ...init, signal: AbortSignal.timeout(tempo) });
   } catch {
     throw new ApiError(0, 'Sem conexão com o servidor.');
   }
@@ -87,4 +89,27 @@ export async function buscarPeca(token: string, q: string): Promise<RespostaPeca
   });
   if (!Array.isArray(r.cards) || !Array.isArray(r.eventos)) throw new ApiError(200, 'Resposta inválida do servidor.');
   return r;
+}
+
+// O pcp-assistente também mora ao lado do pcp-board (F5d).
+export function urlAssistente(): string {
+  const board = import.meta.env.VITE_API_BOARD ?? '';
+  if (!/pcp-board(-h)?$/.test(board)) throw new ErroConfiguracao('Endereço do assistente não configurado (VITE_API_BOARD deve terminar em pcp-board).');
+  return board.replace(/pcp-board(-h)?$/, 'pcp-assistente$1');
+}
+
+const objeto = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+export async function perguntarAssistente(token: string, hoje: string, mensagens: MensagemAssistente[]): Promise<RespostaAssistente> {
+  const r = await pedir<Record<string, unknown>>(urlAssistente(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ hoje, mensagens })
+  }, TEMPO_ASSISTENTE_MS);
+  if (typeof r.texto === 'string') return { texto: r.texto };
+  const ch = r.chamadas;
+  if (Array.isArray(ch) && ch.length > 0 && ch.every((c) => objeto(c) && typeof c.id === 'string' && typeof c.nome === 'string' && objeto(c.argumentos))) {
+    return { chamadas: ch as ChamadaAssistente[] };
+  }
+  throw new ApiError(200, 'Resposta inválida do servidor.');
 }

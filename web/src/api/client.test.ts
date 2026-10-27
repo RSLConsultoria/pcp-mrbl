@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, buscarBoard, buscarPeca, enviarAcao, entrar, ErroConfiguracao, urlPeca } from './client';
+import { ApiError, buscarBoard, buscarPeca, enviarAcao, entrar, ErroConfiguracao, perguntarAssistente, TEMPO_ASSISTENTE_MS, urlAssistente, urlPeca } from './client';
 
 function resposta(status: number, corpo: unknown) {
   return Promise.resolve(new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }));
@@ -161,5 +161,36 @@ describe('client', () => {
     vi.stubGlobal('fetch', vi.fn(() => resposta(200, { ok: true, versao: 'v', historico: null, anotacaoId: 'H-1' })));
     const r = await enviarAcao('t', { tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: 'oi' });
     expect(r.anotacaoId).toBe('H-1');
+  });
+
+  it('perguntarAssistente: POST no pcp-assistente ao lado do board, com o token, hoje e as mensagens', async () => {
+    const f = vi.fn(() => resposta(200, { texto: 'A OS 90001 está no prazo.' }));
+    vi.stubGlobal('fetch', f);
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const mensagens = [{ papel: 'usuario' as const, texto: 'OS 90001?' }];
+    expect(await perguntarAssistente('abc', '2026-10-27', mensagens)).toEqual({ texto: 'A OS 90001 está no prazo.' });
+    expect(timeout).toHaveBeenCalledWith(TEMPO_ASSISTENTE_MS);
+    expect(TEMPO_ASSISTENTE_MS).toBe(45_000);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('http://api.test/pcp-assistente');
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer abc');
+    expect(JSON.parse(String(init.body))).toEqual({ hoje: '2026-10-27', mensagens });
+    vi.stubEnv('VITE_API_BOARD', 'https://n8n.exemplo.test/webhook/pcp-board-h');
+    expect(urlAssistente()).toBe('https://n8n.exemplo.test/webhook/pcp-assistente-h');
+    vi.stubEnv('VITE_API_BOARD', 'https://n8n.exemplo.test/webhook/outra');
+    expect(() => urlAssistente()).toThrow(ErroConfiguracao);
+  });
+
+  it('perguntarAssistente: aceita chamadas válidas e recusa resposta torta', async () => {
+    const chamadas = [{ id: 'c1', nome: 'faltas_da_os', argumentos: { os: '90001' } }];
+    vi.stubGlobal('fetch', vi.fn(() => resposta(200, { chamadas })));
+    expect(await perguntarAssistente('t', '2026-10-27', [])).toEqual({ chamadas });
+    for (const ruim of [{}, { chamadas: [] }, { chamadas: [{ id: 'c', nome: 'x', argumentos: 'texto' }] }, { texto: 3 }]) {
+      vi.stubGlobal('fetch', vi.fn(() => resposta(200, ruim)));
+      await expect(perguntarAssistente('t', '2026-10-27', [])).rejects.toThrow('Resposta inválida do servidor.');
+    }
+    vi.stubGlobal('fetch', vi.fn(() => resposta(429, { erro: 'Muitas perguntas seguidas. Espere alguns minutos.' })));
+    await expect(perguntarAssistente('t', '2026-10-27', [])).rejects.toMatchObject({ status: 429, message: 'Muitas perguntas seguidas. Espere alguns minutos.' });
   });
 });
