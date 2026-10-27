@@ -43,6 +43,10 @@ async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoA
         itemAtual.historico = [{ quando: '2026-10-07T15:01:00.000Z', usuario: 'Pessoa PCP', texto: 'Data combinada atualizada após confirmação da oficina.', ploomes: 'ENVIADO' }];
       }
     }
+    if (corpo.tipo === 'alterar_producao') {
+      const itemAtual = producaoAtual.find((p) => p.dealId === corpo.dealId);
+      if (itemAtual) Object.assign(itemAtual, { oficinaId: corpo.oficinaId, oficina: corpo.oficinaId ? 'OFICINA MODELO' : 'ALOCAR', dataCombinada: corpo.dataCombinada });
+    }
     let mensagemId: string | undefined;
     if (corpo.tipo === 'enviar_whatsapp' || corpo.tipo === 'reenviar_whatsapp') {
       // Como o servidor: a mensagem enfileirada passa a vir no board com o id devolvido.
@@ -131,6 +135,27 @@ test('altera a data com motivo e mostra o efeito otimista', async ({ page }) => 
   await expect.poll(() => acoes.at(-1)).toMatchObject({
     tipo: 'alterar_producao', dealId: '710002', dataCombinada: '2026-10-14', motivo: 'Prazo confirmado com a oficina.'
   });
+});
+
+test('formulário do combinado acompanha a data aceita e não reenvia a data antiga', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  const motivo = painel.getByRole('textbox', { name: 'Motivo *', exact: true });
+  await painel.getByLabel('Data combinada').fill('2026-10-14');
+  await motivo.fill('Prazo confirmado com a oficina.');
+  await painel.getByRole('button', { name: 'Salvar combinado' }).click();
+  await expect.poll(() => acoes.at(-1)).toMatchObject({ tipo: 'alterar_producao', dataCombinada: '2026-10-14' });
+  // Depois de salvar, o motivo volta vazio.
+  await expect(painel.getByRole('textbox', { name: 'Motivo', exact: true })).toHaveValue('');
+  await painel.getByLabel('Motivo da nova data').fill('Data informada pela oficina.');
+  await painel.getByRole('button', { name: 'Aceitar' }).click();
+  await expect.poll(() => acoes.at(-1)).toMatchObject({ tipo: 'aceitar_sugestao_whatsapp', sugestaoId: 'S1' });
+  await expect(painel.getByLabel('Data combinada')).toHaveValue('2026-10-13');
+  await painel.getByLabel('Oficina').selectOption('');
+  await painel.getByRole('button', { name: 'Salvar combinado' }).click();
+  await expect.poll(() => acoes.at(-1)).toMatchObject({ tipo: 'alterar_producao', oficinaId: '', dataCombinada: '2026-10-13' });
 });
 
 test('bloqueia mudança de data sem motivo', async ({ page }) => {

@@ -22,3 +22,16 @@ export function useValorDoBoard<T>(doBoard: T) {
   const reverter = useCallback(() => setValor(ref.current), []);
   return [valor, setValor, reverter, setFocado] as const;
 }
+
+// Campo de formulário com botão de salvar: acompanha o valor do board quando ele muda
+// (otimista, recarga, sugestão aceita), mas não atropela o que a pessoa já alterou e ainda
+// não salvou (valor diferente do último que veio do board).
+export function useRascunhoDoBoard<T>(doBoard: T) {
+  const [valor, setValor] = useState(doBoard);
+  const [base, setBase] = useState(doBoard);
+  if (!Object.is(base, doBoard)) {
+    setBase(doBoard);
+    if (adotarDoBoard(valor, base, true)) setValor(doBoard);
+  }
+  return [valor, setValor] as const;
+}

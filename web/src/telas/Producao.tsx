@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
+import { useRascunhoDoBoard } from '../hooks/useValorDoBoard';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { CargaProducao } from './ProducaoCarga';
@@ -63,8 +64,9 @@ function TrocarOs({ mensagemId, item, producao, editaveis, executar }: {
 function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: ProducaoItem; board: Board; hojeIso: string; executar: Executar; onFechar: () => void }) {
   const prazo = prazoProducao(item);
   const alertaAviamentos = resumoFaltasAviamentos(item);
-  const [oficinaId, setOficinaId] = useState(item.oficinaId);
-  const [dataCombinada, setDataCombinada] = useState(item.dataCombinada);
+  // O formulário acompanha a OS (sugestão aceita, recarga): salvar só a oficina não reenvia uma data velha.
+  const [oficinaId, setOficinaId] = useRascunhoDoBoard(item.oficinaId);
+  const [dataCombinada, setDataCombinada] = useRascunhoDoBoard(item.dataCombinada);
   const [motivo, setMotivo] = useState('');
   const [motivoSugestao, setMotivoSugestao] = useState('');
   const [erro, setErro] = useState('');
@@ -79,7 +81,9 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
     const e = validarMudancaProducao(item, { oficinaId, dataCombinada, motivo });
     if (e) return setErro(e);
     setErro('');
-    void executar({ tipo: 'alterar_producao', dealId: item.dealId, versao: item.versao, oficinaId, dataCombinada, motivo }, 'Combinado da OS atualizado');
+    const enviado = motivo;
+    void executar({ tipo: 'alterar_producao', dealId: item.dealId, versao: item.versao, oficinaId, dataCombinada, motivo }, 'Combinado da OS atualizado')
+      .then((ok) => { if (ok) setMotivo((atual) => (atual === enviado ? '' : atual)); });
   };
   const decidir = (id: string, aceitar: boolean, exigeMotivo: boolean) => {
     if (aceitar && exigeMotivo && !motivoSugestao.trim()) return setErro('Informe o motivo da alteração da data combinada.');
