@@ -43,7 +43,17 @@ async function entrar(page: Page, acoes: Record<string, unknown>[] = [], atrasoA
         itemAtual.historico = [{ quando: '2026-10-07T15:01:00.000Z', usuario: 'Pessoa PCP', texto: 'Data combinada atualizada após confirmação da oficina.', ploomes: 'ENVIADO' }];
       }
     }
-    await r.fulfill({ json: { ok: true, versao: corpo.versao, historico: null, historicos: [], mensagemId: corpo.tipo === 'reenviar_whatsapp' ? 'M-REENVIO' : undefined } });
+    let mensagemId: string | undefined;
+    if (corpo.tipo === 'enviar_whatsapp' || corpo.tipo === 'reenviar_whatsapp') {
+      // Como o servidor: a mensagem enfileirada passa a vir no board com o id devolvido.
+      const itemAtual = producaoAtual.find((p) => p.dealId === corpo.dealId);
+      mensagemId = corpo.tipo === 'reenviar_whatsapp' ? 'M-REENVIO' : `M-ENVIO-${corpo.chave}`;
+      const original = itemAtual?.mensagens.find((m) => m.id === corpo.mensagemId);
+      if (original) Object.assign(original, { reenviada: true });
+      itemAtual?.mensagens.unshift({ id: mensagemId, quando: '2026-10-07T15:00:00.000Z', participanteNome: 'Pessoa PCP', direcao: 'ENVIADA',
+        texto: original?.texto ?? corpo.texto, associacao: 'MANUAL', statusEnvio: 'PENDENTE', tipoConteudo: 'TEXTO' });
+    }
+    await r.fulfill({ json: { ok: true, versao: corpo.versao, historico: null, historicos: [], mensagemId } });
   });
   await page.route(BOARD, (r) => r.fulfill({ json: { ...base, producao: producaoAtual, oficinas: [{ ploomesId: 'OF-1', nome: 'OFICINA MODELO', grupoConfigurado: true, grupoNome: 'GRUPO MODELO' }],
     mensagensWhatsappSemAssociacao: [{ id: 'M2', quando: '2026-10-07T13:00:00.000Z', participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'As duas ficam prontas amanhã.', associacao: 'SEM_ASSOCIACAO', statusEnvio: '', tipoConteudo: 'TEXTO', oficinaId: 'OF-1', oficina: 'OFICINA MODELO', grupoNome: 'GRUPO MODELO' }, ...pendentesExtras],
@@ -148,6 +158,26 @@ test('revisa e coloca uma cobrança padrão na fila', async ({ page }) => {
     chave: expect.stringMatching(/^[A-Za-z0-9-]{8,64}$/)
   });
   await expect(painel.locator('.producao-conversa p').filter({ hasText: 'Pode confirmar o prazo atualizado de *COLETE TESTE*?' })).toBeVisible();
+});
+
+test('mensagem enfileirada não aparece em dobro quando o board traz a mensagem nova', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await painel.getByLabel('Mensagem').fill('Mensagem única de *COLETE TESTE*.');
+  const recarga = page.waitForResponse((r) => r.url() === BOARD && acoes.length > 0);
+  await painel.getByRole('button', { name: 'Colocar na fila' }).click();
+  await recarga;
+  await page.waitForTimeout(300);
+  await expect(painel.locator('.producao-conversa p').filter({ hasText: 'Mensagem única de *COLETE TESTE*.' })).toHaveCount(1);
+  // Reenviar também: só a tentativa nova do board, sem a provisória por cima.
+  page.once('dialog', (dialog) => dialog.accept());
+  const recarga2 = page.waitForResponse((r) => r.url() === BOARD && acoes.some((a) => a.tipo === 'reenviar_whatsapp'));
+  await painel.getByRole('button', { name: 'Reenviar' }).click();
+  await recarga2;
+  await page.waitForTimeout(300);
+  await expect(painel.getByText('Confirma a entrega de *COLETE TESTE*?', { exact: true })).toHaveCount(2);
 });
 
 test('aceita sugestão com motivo e atualiza a data', async ({ page }) => {

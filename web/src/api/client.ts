@@ -55,5 +55,7 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
   if (typeof r.pedidoId === 'string') resp.pedidoId = r.pedidoId;
   if (Array.isArray(r.partes) && r.partes.every((x) => typeof x === 'string')) resp.partes = r.partes;
   if (Array.isArray(r.itemIds) && r.itemIds.every((x) => typeof x === 'string')) resp.itemIds = r.itemIds;
+  // Sem o mensagemId a fila não reconhece a mensagem enfileirada no board e ela aparece em dobro.
+  if (typeof r.mensagemId === 'string') resp.mensagemId = r.mensagemId;
   return resp;
 }
