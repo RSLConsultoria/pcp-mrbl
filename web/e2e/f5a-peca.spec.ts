@@ -189,3 +189,16 @@ test('link no painel do pedido: um por OS quando o pedido junta várias', async 
   await expect(page).toHaveURL(/#peca\/90002$/);
   await expect(dossie(page, '90002')).toBeVisible();
 });
+
+test('celular (375 px): lateral acima das abas e nada estoura a largura', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await entrar(page, '#peca/90002');
+  const lateral = page.getByRole('complementary', { name: 'Resumo da OS' });
+  const abas = page.getByRole('tablist', { name: 'Seções da OS' });
+  await expect(abas).toBeVisible();
+  expect((await lateral.boundingBox())!.y).toBeLessThan((await abas.boundingBox())!.y);
+  for (const aba of ['Linha do tempo', 'Caixas e faltas', 'Oficina e prazos', 'WhatsApp']) {
+    await page.getByRole('tab', { name: aba }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  }
+});

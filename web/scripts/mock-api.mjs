@@ -1,9 +1,10 @@
-// Servidor local de conferência: imita pcp-login, pcp-board e pcp-acao com dados fictícios.
+// Servidor local de conferência: imita pcp-login, pcp-board, pcp-peca e pcp-acao com dados fictícios.
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
 // MOCK_ATRASO_MS=4000 segura cada resposta da pcp-acao (imita o servidor lento: a tela tem de
 // mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
 // ?atraso=4000 na URL da ação. MOCK_FALHA_GRAVACAO=1 (ou ?falha=gravacao) responde toda ação como a
 // API quando uma gravação na planilha falha no meio: 500 com o aviso (a falha vai para a aba ERROS_APP).
+// Visão da peça (pcp-peca): OS 90002 com dois cards, registros e troca desfeita; REF-COMUM lista 90002 e 90003; OS 90005 simula o Ploomes fora (502).
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
 // Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
 // 90005 em Aguardando entrega (partes em etapas diferentes); 90007 com tudo na última etapa (pode ir à oficina);
@@ -29,6 +30,16 @@ const ativos = (linhas) => [...new Set(linhas.filter((l) => !l.ativo || l.ativo 
   .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 const ENVIO_PLOOMES_MS = 20_000;
 let seqDemanda = 0;
+let seqAnotacao = 0;
+// Histórico com id e acao (coluna do HISTORICO_APP), como o board novo: a Visão da peça usa
+// o id para não repetir evento e a acao para a fonte. acaoAtual = tipo da ação em processamento.
+let seqHistorico = 0;
+let acaoAtual = '';
+const ACAO_HISTORICO_PRODUCAO = {
+  alterar_producao: 'PRODUCAO_ALTERAR_COMBINADO', aceitar_sugestao_whatsapp: 'WHATSAPP_SUGESTAO_ACEITA',
+  ignorar_sugestao_whatsapp: 'WHATSAPP_SUGESTAO_IGNORADA', associar_whatsapp: 'WHATSAPP_ASSOCIAR',
+  enviar_whatsapp: 'WHATSAPP_ENFILEIRAR', reenviar_whatsapp: 'WHATSAPP_REENFILEIRAR'
+};
 const ATRASO_MS = Number(process.env.MOCK_ATRASO_MS) || 0;
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const agoraIso = () => new Date().toISOString();
@@ -102,6 +113,7 @@ const estado = {
   // caixa 90002 fica de fora para mostrar a visão somente leitura
   dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008'],
   dealsProducaoEditaveis: ['700002', '700003', '700005', '700011'],
+  anotacoes: [{ id: 'ANOT-0', quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'Renata', texto: 'Renata anotou: "Cliente confirmou a cor do viés."', dealId: '700002', os: '90002', criadoMs: 0 }],
   oficinas: [
     { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL', capacidadeSemana: 300 },
     { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null }
@@ -241,7 +253,7 @@ function validarDadosPedido(c) {
 }
 
 function registrar(dealId, usuario, texto, historicos) {
-  const h = { quando: agoraIso(), usuario, texto, criadoMs: Date.now() };
+  const h = { id: `HIST-${++seqHistorico}`, acao: acaoAtual, quando: agoraIso(), usuario, texto, criadoMs: Date.now() };
   caixaDe(dealId).historico.push(h);
   historicos.push({ quando: h.quando, usuario, texto, ploomes: 'PENDENTE', dealId });
 }
@@ -262,9 +274,11 @@ function montarBoard() {
     dealsProducaoEditaveis: estado.dealsProducaoEditaveis,
     oficinas: estado.oficinas,
     previsaoSemHistorico: estado.previsaoSemHistorico,
+    anotacoes: estado.anotacoes.map(({ criadoMs, ...a }) => ({ ...a, ploomes: criadoMs && agora - criadoMs < ENVIO_PLOOMES_MS ? 'PENDENTE' : 'ENVIADO' })),
     mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
     producao: estado.producao.map((p) => ({
       ...p,
+      historico: p.historico.map(({ criadoMs, ...h }) => (criadoMs ? { ...h, ploomes: agora - criadoMs < ENVIO_PLOOMES_MS ? 'PENDENTE' : 'ENVIADO' } : h)),
       // Como o servidor (n8n/src/producao.js, mensagensDaProducao): mais nova primeiro.
       mensagens: [...p.mensagens].sort((a, b) => (a.quando < b.quando ? 1 : a.quando > b.quando ? -1 : 0)),
       // Como no servidor: o card da Produção é outro negócio; as caixas se ligam pela OS.
@@ -298,6 +312,7 @@ function montarBoard() {
       ...c,
       id: c.dealId,
       historico: c.historico.map((h) => ({
+        ...(h.id ? { id: h.id } : {}), ...(h.acao ? { acao: h.acao } : {}),
         quando: h.quando, usuario: h.usuario, texto: h.texto,
         ploomes: h.criadoMs && agora - h.criadoMs < ENVIO_PLOOMES_MS ? 'PENDENTE' : 'ENVIADO'
       })),
@@ -682,7 +697,7 @@ function novaDemanda(c, usuario) {
 }
 
 function historicoProducao(p, usuario, texto) {
-  const h = { quando: agoraIso(), usuario, texto, ploomes: 'PENDENTE' };
+  const h = { id: `HIST-${++seqHistorico}`, acao: ACAO_HISTORICO_PRODUCAO[acaoAtual] ?? acaoAtual, quando: agoraIso(), usuario, texto, ploomes: 'PENDENTE' };
   p.historico.unshift(h);
   return h;
 }
@@ -834,7 +849,72 @@ function reenviarWhatsapp(c, usuario) {
   return { ok: true, versao: p.versao, historico: h, historicos: [h], mensagemId };
 }
 
+// ---------- Visão da peça ----------
+// Como o servidor (n8n/src/peca.js): Ploomes lido na hora; registros do app ("[PCP · OS") ficam de fora.
+const ETAPAS_PRODUCAO_MOCK = ['12. Encaixe', '13. Estratégico 2', '14. Corte', '15. Preparação 1', '16. 1ª Peça', '17. Costura', '18. Acabamento', '19. Expedição']
+  .map((nome, k) => ({ id: String(60100 + k), nome, ordem: k + 1 }));
+const horas = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+const ossDoMock = () => [...new Set([...estado.producao.map((p) => p.os), ...estado.caixas.map((c) => c.os)])];
+function dadosDaOs(os) {
+  const p = estado.producao.find((x) => x.os === os);
+  const c = estado.caixas.find((x) => x.os === os);
+  return { p, c, peca: p?.peca ?? c?.peca ?? '', cliente: p?.cliente ?? c?.cliente ?? '', referencia: p?.referencia ?? c?.referencia ?? '', dealId: p?.dealId ?? `8${os}` };
+}
+function dossieMock(os) {
+  const d = dadosDaOs(os);
+  // A OS prevista fica na etapa dela (12 a 16); as outras, na Costura.
+  const etapa = ETAPAS_PRODUCAO_MOCK.find((e) => e.nome === d.p?.etapaNome) ?? ETAPAS_PRODUCAO_MOCK[d.p?.prevista ? 2 : 5];
+  const base = { titulo: `OS ${os}`, cliente: d.cliente, peca: d.peca, referencia: d.referencia, os };
+  const cards = [{ ...base, dealId: d.dealId, funilId: 60015827, funil: 'Produção', etapaId: Number(etapa.id), etapa: etapa.nome, etapaOrdem: etapa.ordem,
+    atualizadoEm: horas(-1), link: `https://app10.ploomes.com/deal/${d.dealId}` }];
+  if (os === '90002') cards.push({ ...base, dealId: '790002', funilId: 60011710, funil: 'PCP', etapaId: 60200, etapa: 'Concluído', etapaOrdem: 9,
+    atualizadoEm: horas(-48), link: 'https://app10.ploomes.com/deal/790002' });
+  const registros = os === '90002' ? [
+    { quando: horas(-30), fonte: 'PLOOMES', texto: 'Cliente pediu para conferir a cor do viés antes do corte.', autor: 'Renata', dealId: d.dealId },
+    { quando: horas(-2), fonte: 'PLOOMES', texto: '[PCP · OS 90002] Atualizações do app PCP\n• 10:00 Lucca deu baixa', autor: 'Integração', dealId: d.dealId }
+  ] : [];
+  const trocas = [{ quando: horas(-72), fonte: 'ETAPA', texto: `Produção: ${ETAPAS_PRODUCAO_MOCK[4].nome} → ${ETAPAS_PRODUCAO_MOCK[5].nome}`, autor: '', dealId: d.dealId }];
+  if (os === '90002') trocas.push({ quando: horas(-96), fonte: 'ETAPA', texto: `Produção: ${ETAPAS_PRODUCAO_MOCK[3].nome} → ${ETAPAS_PRODUCAO_MOCK[4].nome}`, autor: '', dealId: d.dealId, desfeita: true });
+  const eventos = [...registros.filter((r) => !r.texto.startsWith('[PCP · OS')), ...trocas].sort((a, b) => b.quando.localeCompare(a.quando));
+  return { geradoEm: agoraIso(), os, cards, trilha: { funil: 'Produção', dealId: d.dealId, etapas: ETAPAS_PRODUCAO_MOCK, atualId: etapa.id }, eventos };
+}
+function pecaMock(q) {
+  const v = String(q ?? '').trim().replace(/\s+/g, ' ');
+  if (!v || v.length > 60) throw bad('Informe a OS ou a referência.');
+  const oss = ossDoMock();
+  if (/^\d+$/.test(v) && oss.includes(v)) {
+    if (v === '90005') throw new Erro(502, 'Não foi possível ler o Ploomes agora.');
+    return dossieMock(v);
+  }
+  const ref = semAcento(v).toUpperCase();
+  const achadas = ref === 'REF-COMUM' ? ['90002', '90003'] : oss.filter((os) => semAcento(dadosDaOs(os).referencia).toUpperCase() === ref);
+  if (!achadas.length) throw new Erro(404, 'Nenhuma OS encontrada no Ploomes.');
+  return {
+    geradoEm: agoraIso(), os: '', cards: [], trilha: null, eventos: [],
+    candidatos: achadas.map((os) => ({ os, peca: dadosDaOs(os).peca, etapa: '17. Costura', funil: 'Produção', dealId: dadosDaOs(os).dealId }))
+  };
+}
+function anotarPeca(c, usuario) {
+  const bruto = typeof c.texto === 'string' ? c.texto.replace(/\r\n?/g, '\n').trim() : '';
+  if (!/^[0-9A-Za-z./-]{1,20}$/.test(String(c.os ?? '').trim())) throw bad('Informe a OS.');
+  if (!/^\d{1,20}$/.test(String(c.dealId ?? ''))) throw bad('Informe o card do Ploomes.');
+  if (/\n[ \t]*\n/.test(bruto)) throw bad('A anotação não pode ter linha em branco.');
+  const t = bruto.replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ');
+  if (!t) throw bad('Escreva a anotação.');
+  if (t.length > 500) throw bad('Anotação com no máximo 500 caracteres.');
+  const listas = [estado.dealsEditaveis, estado.dealsProducaoEditaveis];
+  if (listas.every((l) => l.length) && !listas.some((l) => l.includes(String(c.dealId)))) throw new Erro(403, 'Edição liberada em breve para esta OS.');
+  const a = { id: `ANOT-${++seqAnotacao}`, quando: agoraIso(), usuario, texto: `${usuario} anotou: "${t}"`, dealId: String(c.dealId), os: String(c.os).trim(), criadoMs: Date.now() };
+  estado.anotacoes.unshift(a);
+  // Como o servidor (historicoDoDeal): a linha ANOTACAO também aparece no histórico do card.
+  const h = { id: a.id, acao: 'ANOTACAO', quando: a.quando, usuario, texto: a.texto, criadoMs: a.criadoMs };
+  estado.caixas.filter((x) => x.dealId === a.dealId).forEach((x) => x.historico.push({ ...h }));
+  estado.producao.filter((x) => x.dealId === a.dealId).forEach((x) => x.historico.unshift({ ...h, ploomes: 'PENDENTE' }));
+  return resposta(a.quando, [{ quando: a.quando, usuario, texto: a.texto, ploomes: 'PENDENTE', dealId: a.dealId }], { anotacaoId: a.id });
+}
+
 function processar(corpo, usuario) {
+  acaoAtual = String(corpo?.tipo ?? '');
   switch (corpo?.tipo) {
     case 'baixa': case 'previsao_item': case 'obs_item':
     case 'responsavel': case 'previsao_caixa': case 'obs_caixa': return acaoF2(corpo, usuario);
@@ -852,6 +932,7 @@ function processar(corpo, usuario) {
     case 'enviar_whatsapp': return enviarWhatsapp(corpo, usuario);
     case 'reenviar_whatsapp': return reenviarWhatsapp(corpo, usuario);
     case 'alterar_capacidade_oficina': return alterarCapacidade(corpo);
+    case 'anotar_peca': return anotarPeca(corpo, usuario);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);
@@ -888,6 +969,7 @@ const servidor = http.createServer(async (req, res) => {
       return enviar(res, 200, { token: 'm'.repeat(64), nome: 'Lucca', perfil: PERFIL, expiraEm: new Date(Date.now() + 12 * 3_600_000).toISOString() });
     }
     if (rota === '/pcp-board' && req.method === 'GET') return enviar(res, 200, montarBoard());
+    if (rota === '/pcp-peca' && req.method === 'GET') return enviar(res, 200, pecaMock(new URLSearchParams(busca).get('q')));
     if (rota === '/pcp-acao' && req.method === 'POST') {
       const corpo = await lerCorpo(req);
       const atraso = Number(new URLSearchParams(busca).get('atraso')) || ATRASO_MS;
@@ -907,4 +989,4 @@ const servidor = http.createServer(async (req, res) => {
     enviar(res, 500, { erro: 'Erro interno do mock.' });
   }
 });
-servidor.listen(PORTA, () => console.log(`Mock da API em http://localhost:${PORTA} (pcp-login, pcp-board, pcp-acao)`));
+servidor.listen(PORTA, () => console.log(`Mock da API em http://localhost:${PORTA} (pcp-login, pcp-board, pcp-peca, pcp-acao)`));

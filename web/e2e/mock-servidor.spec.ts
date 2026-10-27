@@ -304,3 +304,28 @@ test('mock: trocar a OS de uma mensagem da IA interpreta a mensagem na OS nova',
   await expect(destino).toContainText('A camisa sai amanhã cedo.');
   await expect(destino.getByText(/Nova data:/)).toHaveCount(1, { timeout: 10_000 });
 });
+
+test('Visão da peça no simulador: dossiê da OS 90002 e anotação que continua depois da gravação', async ({ page, api }) => {
+  await entrar(page, '#peca/90002');
+  const dossie = page.getByRole('article', { name: 'Visão da peça da OS 90002' });
+  await expect(dossie.getByRole('link', { name: 'Abrir card no Ploomes · PCP' })).toHaveAttribute('href', 'https://app10.ploomes.com/deal/790002');
+  await expect(dossie).toContainText('Cliente pediu para conferir a cor do viés antes do corte.');
+  await expect(dossie).not.toContainText('[PCP · OS');
+  await expect(dossie).toContainText('(desfeita)');
+  await dossie.getByLabel('Anotar algo no histórico').fill('Teste no simulador');
+  await dossie.getByRole('button', { name: 'Anotar' }).click();
+  await expect(dossie.getByText('Você anotou: "Teste no simulador"')).toBeVisible();
+  await expect(salvando(page)).toBeVisible();
+  await expect(salvando(page)).toHaveCount(0, { timeout: 10_000 });
+  await expect(dossie.getByText('Lucca anotou: "Teste no simulador"')).toBeVisible({ timeout: 10_000 });
+  await expect(dossie.getByText('Você anotou: "Teste no simulador"')).toHaveCount(0);
+  expect(api.acoes).toContainEqual(expect.objectContaining({ tipo: 'anotar_peca', os: '90002', dealId: '700002', texto: 'Teste no simulador' }));
+});
+
+test('Visão da peça no simulador: Ploomes fora na OS 90005 mostra o aviso e o board', async ({ page, api }) => {
+  await entrar(page, '#peca/90005');
+  const dossie = page.getByRole('article', { name: 'Visão da peça da OS 90005' });
+  await expect(dossie.getByRole('alert')).toContainText('Não foi possível ler o Ploomes agora.');
+  await expect(dossie).toContainText('PECA TESTE E');
+  expect(api.acoes).toEqual([]);
+});
