@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, buscarBoard, buscarPeca, enviarAcao, entrar, urlPeca } from './client';
+import { ApiError, buscarBoard, buscarPeca, enviarAcao, entrar, ErroConfiguracao, urlPeca } from './client';
 
 function resposta(status: number, corpo: unknown) {
   return Promise.resolve(new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }));
@@ -134,6 +134,18 @@ describe('client', () => {
     expect(f).toHaveBeenCalledWith('http://api.test/pcp-peca?q=REF%2001', expect.objectContaining({ method: 'GET', headers: { Authorization: 'Bearer abc' } }));
     vi.stubEnv('VITE_API_BOARD', 'https://n8n.exemplo.test/webhook/pcp-board-h');
     expect(urlPeca()).toBe('https://n8n.exemplo.test/webhook/pcp-peca-h');
+  });
+
+  it('urlPeca: VITE_API_BOARD que não termina em pcp-board ou pcp-board-h dá erro claro (não chama o board)', async () => {
+    for (const ruim of ['http://api.test/pcp-board/', 'http://api.test/outro', 'http://api.test/pcp-board-x']) {
+      vi.stubEnv('VITE_API_BOARD', ruim);
+      expect(() => urlPeca()).toThrow(ErroConfiguracao);
+      expect(() => urlPeca()).toThrow('Endereço da Visão da peça não configurado (VITE_API_BOARD deve terminar em pcp-board).');
+    }
+    const f = vi.fn(() => resposta(200, {}));
+    vi.stubGlobal('fetch', f);
+    await expect(buscarPeca('t', '1')).rejects.toThrow('Endereço da Visão da peça não configurado');
+    expect(f).not.toHaveBeenCalled();
   });
 
   it('buscarPeca: resposta sem cards ou eventos é inválida; 404 e 502 viram ApiError com a mensagem', async () => {

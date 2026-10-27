@@ -9,6 +9,14 @@ export class ApiError extends Error {
   }
 }
 
+// Build sem o endereço esperado: a tela mostra a mensagem em vez de "Ploomes fora".
+export class ErroConfiguracao extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = 'ErroConfiguracao';
+  }
+}
+
 // Sem resposta em 20 s, o pedido é cancelado e conta como falta de conexão.
 export const TEMPO_LIMITE_MS = 20_000;
 
@@ -64,8 +72,11 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
 
 // O pcp-peca mora ao lado do pcp-board (o homolog termina em -h): a URL sai da do board,
 // sem variável nova no build.
+// Sem o pcp-board no fim, a troca não aconteceria e a busca iria ao board: erro claro.
 export function urlPeca(): string {
-  return import.meta.env.VITE_API_BOARD.replace(/pcp-board(-h)?$/, 'pcp-peca$1');
+  const board = import.meta.env.VITE_API_BOARD ?? '';
+  if (!/pcp-board(-h)?$/.test(board)) throw new ErroConfiguracao('Endereço da Visão da peça não configurado (VITE_API_BOARD deve terminar em pcp-board).');
+  return board.replace(/pcp-board(-h)?$/, 'pcp-peca$1');
 }
 
 export async function buscarPeca(token: string, q: string): Promise<RespostaPeca> {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ApiError, buscarPeca } from '../api/client';
+import { ApiError, buscarPeca, ErroConfiguracao } from '../api/client';
 import type { Board, CandidatoPeca, Producao, RespostaPeca } from '../api/tipos';
 import { ConversaWhatsapp } from '../componentes/ConversaWhatsapp';
 import type { Executar } from '../hooks/useAcao';
@@ -68,6 +68,7 @@ export function Peca({ board, token, hoje, executar, aoExpirar }: PropsPeca) {
       if (e instanceof ApiError && e.status === 401) return expirar.current();
       if (e instanceof ApiError && e.status === 404) return setEstado({ tipo: 'nada' });
       if (e instanceof ApiError && e.status === 400) return setEstado({ tipo: 'erro', texto: e.message });
+      if (e instanceof ErroConfiguracao) return setEstado({ tipo: 'erro', texto: e.message });
       // Ploomes fora (502) ou sem conexão: com uma OS na busca, o dossiê sai só do board.
       setEstado(/^\d+$/.test(q) ? { tipo: 'pronto', os: q, ploomes: null, aviso: MSG_PLOOMES_FORA } : { tipo: 'erro', texto: MSG_PLOOMES_FORA });
     });
