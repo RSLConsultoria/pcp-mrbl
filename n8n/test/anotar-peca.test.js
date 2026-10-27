@@ -11,6 +11,10 @@ function contexto() {
   const estado = {};
   const U = [{ email: 'pcp@teste.local', nome: 'Pessoa PCP', perfil: 'PCP', senha_hash: ctx.gerarHash(crypto, 'senha-ficticia-123'), ativo: 'SIM' }];
   const r = ctx.processarLogin(crypto, estado, { email: 'pcp@teste.local', senha: 'senha-ficticia-123' }, U, T0);
+  // Board em cache com os deals usados nos testes (o deal tem de ser da OS).
+  estado.board = { guardadoEm: T0, corpo: { caixas: [
+    { dealId: '607479158', os: '123456' }, { dealId: '600000001', os: '123456' }
+  ], producao: [{ dealId: '607612577', os: '123456' }] } };
   return { ctx, estado, cab: 'Bearer ' + r.body.token };
 }
 const corpo = (o) => Object.assign({ tipo: 'anotar_peca', os: '123456', dealId: '607612577', texto: '  Cliente pediu\npara segurar  ' }, o || {});
@@ -59,8 +63,56 @@ test('anotar_peca: só nos deals liberados até o go-live (lista vazia = todos)'
   assert.equal(ctx.processarAcao(estado, cab, corpo({ dealId: '607612577' }), {}, T0, () => 'H').status, 200);
   assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo({ dealId: '600000001' }), {}, T0, () => 'H')), erro403);
   assert.deepEqual(limpo(ctx.preValidarAcao(estado, cab, corpo({ dealId: '600000001' }), T0)), Object.assign({ ok: false }, erro403));
+  // Com uma lista vazia e a outra preenchida, vale a preenchida.
+  ctx.DEALS_EDITAVEIS = [];
+  assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo({ dealId: '600000001' }), {}, T0, () => 'H')), erro403);
+  assert.equal(ctx.processarAcao(estado, cab, corpo({ dealId: '607612577' }), {}, T0, () => 'H').status, 200);
+  ctx.DEALS_EDITAVEIS = ['607479158'];
+  ctx.DEALS_PRODUCAO_EDITAVEIS = [];
+  assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo({ dealId: '600000001' }), {}, T0, () => 'H')), erro403);
+  assert.equal(ctx.processarAcao(estado, cab, corpo({ dealId: '607479158' }), {}, T0, () => 'H').status, 200);
+  // As duas vazias: todos.
   ctx.DEALS_EDITAVEIS = [];
   assert.equal(ctx.processarAcao(estado, cab, corpo({ dealId: '600000001' }), {}, T0, () => 'H').status, 200);
+});
+
+test('anotar_peca: o card tem de ser da OS (board ou resposta do pcp-peca em cache)', () => {
+  const { ctx, estado, cab } = contexto();
+  ctx.DEALS_PRODUCAO_EDITAVEIS = [];
+  const erro = { status: 400, body: { erro: 'Este card não é desta OS.' } };
+  const tenta = (c) => limpo(ctx.processarAcao(estado, cab, c, {}, T0, () => 'H'));
+  const pre = (c) => limpo(ctx.preValidarAcao(estado, cab, c, T0));
+  // Pelo board: caixa e produção com essa OS e esse deal.
+  assert.equal(tenta(corpo({ dealId: '607479158' })).status, 200);
+  assert.equal(tenta(corpo({ dealId: '607612577' })).status, 200);
+  // Deal de outra OS: recusa (no board, a caixa 600000002 é da OS 90002).
+  estado.board.corpo.caixas.push({ dealId: '600000002', os: '90002' });
+  assert.deepEqual(tenta(corpo({ dealId: '600000002' })), erro);
+  assert.deepEqual(pre(corpo({ dealId: '600000002' })), Object.assign({ ok: false }, erro));
+  // Deal desconhecido: recusa.
+  assert.deepEqual(tenta(corpo({ dealId: '600000099' })), erro);
+  // Sem board e sem cache da peça: recusa.
+  delete estado.board;
+  assert.deepEqual(tenta(corpo({ dealId: '607612577' })), erro);
+  // Pelo cache do pcp-peca (mesmo vencido: a ligação card–OS não muda).
+  estado.pecas = { '123456': { guardadoEm: T0 - 5 * 60e3, corpo: { os: '123456', cards: [{ dealId: '607612577', os: '123456' }, { dealId: '607600001', os: '123456' }] } } };
+  assert.equal(tenta(corpo({ dealId: '607612577' })).status, 200);
+  assert.equal(tenta(corpo({ dealId: '607600001' })).status, 200);
+  assert.deepEqual(pre(corpo({ dealId: '607600001' })), { ok: true });
+  // O card no cache é de outra OS: recusa.
+  assert.deepEqual(tenta(corpo({ os: '90002', dealId: '607600001' })), erro);
+});
+
+test('anotar_peca: a OS aceita os mesmos caracteres da busca (inclusive espaço)', () => {
+  const { ctx, estado, cab } = contexto();
+  ctx.DEALS_PRODUCAO_EDITAVEIS = [];
+  estado.board.corpo.caixas.push({ dealId: '600000003', os: 'REF Ç 01/A' });
+  const r = limpo(ctx.processarAcao(estado, cab, corpo({ os: '  REF  Ç 01/A ', dealId: '600000003' }), {}, T0, () => 'H'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.historicos[0].os, 'REF Ç 01/A');
+  for (const ruim of ["x' or 1", 'a'.repeat(61), '   ']) {
+    assert.deepEqual(limpo(ctx.processarAcao(estado, cab, corpo({ os: ruim }), {}, T0, () => 'H')), { status: 400, body: { erro: 'Informe a OS.' } }, ruim);
+  }
 });
 
 test('board: histórico com id e acao quando existem; anotações numa lista própria', () => {

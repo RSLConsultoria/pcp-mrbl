@@ -116,7 +116,7 @@ function resolverCardsPeca(busca, resposta) {
   var cards = ordenarCardsPeca(resposta.body.value.map(cardPecaDoDeal).filter(function (c) { return !!c.dealId; }));
   var daOs = busca.numerica ? cards.filter(function (c) { return c.os === busca.q; }) : [];
   if (daOs.length) return { ok: true, os: busca.q, cards: daOs.slice(0, PECA_MAX_CARDS) };
-  var porOs = {};
+  var porOs = Object.create(null);
   var ordem = [];
   cards.forEach(function (c) {
     if (!c.os || semAcento(c.referencia) !== busca.chave || porOs[c.os]) return;
@@ -303,13 +303,16 @@ function finalizarPeca(leituras, respostas, agora, estado) {
 var TIPO_ANOTAR_PECA = 'anotar_peca';
 var ACAO_ANOTACAO = 'ANOTACAO';
 var PECA_MAX_ANOTACOES_BOARD = 300;
+var ERRO_CARD_OUTRA_OS = 'Este card não é desta OS.';
 
 // Texto obrigatório, até 500 caracteres, sem linha em branco; quebras simples viram espaço.
 function validarAnotacaoPeca(corpo) {
   corpo = corpo || {};
-  var os = texto(corpo.os);
+  // A OS aceita os mesmos caracteres da busca (normalizarBuscaPeca), inclusive espaço.
+  var buscaOs = normalizarBuscaPeca(corpo.os);
+  if (!buscaOs.ok) return erroAcao(400, 'Informe a OS.');
+  var os = buscaOs.q;
   var dealId = texto(corpo.dealId);
-  if (!/^[0-9A-Za-z.\/-]{1,20}$/.test(os)) return erroAcao(400, 'Informe a OS.');
   if (!/^\d{1,20}$/.test(dealId)) return erroAcao(400, 'Informe o card do Ploomes.');
   if (typeof corpo.texto !== 'string') return erroAcao(400, 'Escreva a anotação.');
   var bruto = corpo.texto.replace(/\r\n?/g, '\n').trim();
@@ -318,6 +321,26 @@ function validarAnotacaoPeca(corpo) {
   if (!t) return erroAcao(400, 'Escreva a anotação.');
   if (t.length > 500) return erroAcao(400, 'Anotação com no máximo 500 caracteres.');
   return { ok: true, acao: { os: os, dealId: dealId, texto: t } };
+}
+
+function osIgualPeca(a, b) {
+  return texto(a).replace(/\s+/g, ' ') === texto(b).replace(/\s+/g, ' ');
+}
+
+// O card da anotação tem de ser desta OS: aparece com ela no board em cache (caixas ou
+// produção) ou numa resposta do pcp-peca em cache. A validade do cache não conta aqui:
+// a ligação card–OS não muda em minutos, e o site sempre abre a peça (o que guarda a
+// resposta) antes de anotar; o board é refeito a cada leitura do site (60 s).
+function dealDaOsPeca(estado, os, dealId) {
+  estado = estado || {};
+  var bate = function (x) { return !!x && texto(x.dealId) === texto(dealId) && osIgualPeca(x.os, os); };
+  var b = estado.board && estado.board.corpo;
+  if (b && ((b.caixas || []).some(bate) || (b.producao || []).some(bate))) return true;
+  var pecas = estado.pecas || {};
+  return Object.keys(pecas).some(function (k) {
+    var c = pecas[k] && pecas[k].corpo;
+    return !!c && (c.cards || []).some(bate);
+  });
 }
 
 // Uma linha no HISTORICO_APP; o Enviar ao Ploomes junta no registro compilado do deal.

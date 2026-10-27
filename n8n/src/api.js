@@ -22,17 +22,21 @@ var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
 var ERRO_F3_DESLIGADA = 'Esta ação ainda não está disponível.';
 var ERRO_PECA_NAO_EDITAVEL = 'Edição liberada em breve para esta OS.';
 
-// Anotação da Visão da peça: deals das duas allowlists até o go-live (lista vazia = todos).
+// Anotação da Visão da peça: deals das duas allowlists até o go-live. Só libera todos
+// com as DUAS listas vazias; com uma vazia e a outra preenchida, vale a preenchida.
 function dealAnotavel(dealId) {
-  if (!DEALS_EDITAVEIS.length || !DEALS_PRODUCAO_EDITAVEIS.length) return true;
+  if (!DEALS_EDITAVEIS.length && !DEALS_PRODUCAO_EDITAVEIS.length) return true;
   var d = texto(dealId);
   return DEALS_EDITAVEIS.indexOf(d) >= 0 || DEALS_PRODUCAO_EDITAVEIS.indexOf(d) >= 0;
 }
 
-function validarAcaoAnotacao(corpo) {
+// "estado": static data (board e respostas do pcp-peca em cache) para conferir que o
+// card é desta OS.
+function validarAcaoAnotacao(corpo, estado) {
   var v = validarAnotacaoPeca(corpo);
   if (!v.ok) return v;
   if (!dealAnotavel(v.acao.dealId)) return erroAcao(403, ERRO_PECA_NAO_EDITAVEL);
+  if (!dealDaOsPeca(estado, v.acao.os, v.acao.dealId)) return erroAcao(400, ERRO_CARD_OUTRA_OS);
   return v;
 }
 
@@ -168,7 +172,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) {
-    var vAnot = validarAcaoAnotacao(corpo);
+    var vAnot = validarAcaoAnotacao(corpo, estado);
     return vAnot.ok ? { ok: true } : { ok: false, status: vAnot.status, body: { erro: vAnot.erro } };
   }
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
@@ -241,7 +245,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
 
 // Visão da peça (F5a): só a linha ANOTACAO no HISTORICO_APP, sem PATCH no Ploomes.
 function processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId) {
-  var v = validarAcaoAnotacao(corpo);
+  var v = validarAcaoAnotacao(corpo, estado);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
   var r = processarAnotacaoPeca(v.acao, {
     usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId

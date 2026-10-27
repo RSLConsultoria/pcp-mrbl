@@ -4872,7 +4872,7 @@ function resolverCardsPeca(busca, resposta) {
   var cards = ordenarCardsPeca(resposta.body.value.map(cardPecaDoDeal).filter(function (c) { return !!c.dealId; }));
   var daOs = busca.numerica ? cards.filter(function (c) { return c.os === busca.q; }) : [];
   if (daOs.length) return { ok: true, os: busca.q, cards: daOs.slice(0, PECA_MAX_CARDS) };
-  var porOs = {};
+  var porOs = Object.create(null);
   var ordem = [];
   cards.forEach(function (c) {
     if (!c.os || semAcento(c.referencia) !== busca.chave || porOs[c.os]) return;
@@ -5059,13 +5059,16 @@ function finalizarPeca(leituras, respostas, agora, estado) {
 var TIPO_ANOTAR_PECA = 'anotar_peca';
 var ACAO_ANOTACAO = 'ANOTACAO';
 var PECA_MAX_ANOTACOES_BOARD = 300;
+var ERRO_CARD_OUTRA_OS = 'Este card não é desta OS.';
 
 // Texto obrigatório, até 500 caracteres, sem linha em branco; quebras simples viram espaço.
 function validarAnotacaoPeca(corpo) {
   corpo = corpo || {};
-  var os = texto(corpo.os);
+  // A OS aceita os mesmos caracteres da busca (normalizarBuscaPeca), inclusive espaço.
+  var buscaOs = normalizarBuscaPeca(corpo.os);
+  if (!buscaOs.ok) return erroAcao(400, 'Informe a OS.');
+  var os = buscaOs.q;
   var dealId = texto(corpo.dealId);
-  if (!/^[0-9A-Za-z.\/-]{1,20}$/.test(os)) return erroAcao(400, 'Informe a OS.');
   if (!/^\d{1,20}$/.test(dealId)) return erroAcao(400, 'Informe o card do Ploomes.');
   if (typeof corpo.texto !== 'string') return erroAcao(400, 'Escreva a anotação.');
   var bruto = corpo.texto.replace(/\r\n?/g, '\n').trim();
@@ -5074,6 +5077,26 @@ function validarAnotacaoPeca(corpo) {
   if (!t) return erroAcao(400, 'Escreva a anotação.');
   if (t.length > 500) return erroAcao(400, 'Anotação com no máximo 500 caracteres.');
   return { ok: true, acao: { os: os, dealId: dealId, texto: t } };
+}
+
+function osIgualPeca(a, b) {
+  return texto(a).replace(/\s+/g, ' ') === texto(b).replace(/\s+/g, ' ');
+}
+
+// O card da anotação tem de ser desta OS: aparece com ela no board em cache (caixas ou
+// produção) ou numa resposta do pcp-peca em cache. A validade do cache não conta aqui:
+// a ligação card–OS não muda em minutos, e o site sempre abre a peça (o que guarda a
+// resposta) antes de anotar; o board é refeito a cada leitura do site (60 s).
+function dealDaOsPeca(estado, os, dealId) {
+  estado = estado || {};
+  var bate = function (x) { return !!x && texto(x.dealId) === texto(dealId) && osIgualPeca(x.os, os); };
+  var b = estado.board && estado.board.corpo;
+  if (b && ((b.caixas || []).some(bate) || (b.producao || []).some(bate))) return true;
+  var pecas = estado.pecas || {};
+  return Object.keys(pecas).some(function (k) {
+    var c = pecas[k] && pecas[k].corpo;
+    return !!c && (c.cards || []).some(bate);
+  });
 }
 
 // Uma linha no HISTORICO_APP; o Enviar ao Ploomes junta no registro compilado do deal.
@@ -5124,17 +5147,21 @@ var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
 var ERRO_F3_DESLIGADA = 'Esta ação ainda não está disponível.';
 var ERRO_PECA_NAO_EDITAVEL = 'Edição liberada em breve para esta OS.';
 
-// Anotação da Visão da peça: deals das duas allowlists até o go-live (lista vazia = todos).
+// Anotação da Visão da peça: deals das duas allowlists até o go-live. Só libera todos
+// com as DUAS listas vazias; com uma vazia e a outra preenchida, vale a preenchida.
 function dealAnotavel(dealId) {
-  if (!DEALS_EDITAVEIS.length || !DEALS_PRODUCAO_EDITAVEIS.length) return true;
+  if (!DEALS_EDITAVEIS.length && !DEALS_PRODUCAO_EDITAVEIS.length) return true;
   var d = texto(dealId);
   return DEALS_EDITAVEIS.indexOf(d) >= 0 || DEALS_PRODUCAO_EDITAVEIS.indexOf(d) >= 0;
 }
 
-function validarAcaoAnotacao(corpo) {
+// "estado": static data (board e respostas do pcp-peca em cache) para conferir que o
+// card é desta OS.
+function validarAcaoAnotacao(corpo, estado) {
   var v = validarAnotacaoPeca(corpo);
   if (!v.ok) return v;
   if (!dealAnotavel(v.acao.dealId)) return erroAcao(403, ERRO_PECA_NAO_EDITAVEL);
+  if (!dealDaOsPeca(estado, v.acao.os, v.acao.dealId)) return erroAcao(400, ERRO_CARD_OUTRA_OS);
   return v;
 }
 
@@ -5270,7 +5297,7 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
   }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) {
-    var vAnot = validarAcaoAnotacao(corpo);
+    var vAnot = validarAcaoAnotacao(corpo, estado);
     return vAnot.ok ? { ok: true } : { ok: false, status: vAnot.status, body: { erro: vAnot.erro } };
   }
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
@@ -5343,7 +5370,7 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
 
 // Visão da peça (F5a): só a linha ANOTACAO no HISTORICO_APP, sem PATCH no Ploomes.
 function processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId) {
-  var v = validarAcaoAnotacao(corpo);
+  var v = validarAcaoAnotacao(corpo, estado);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
   var r = processarAnotacaoPeca(v.acao, {
     usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId

@@ -66,8 +66,9 @@ function sessao() {
   return { estado, cab: 'Bearer ' + r.body.token };
 }
 
-function acao(corpo) {
+function acao(corpo, estadoExtra) {
   const s = sessao();
+  Object.assign(s.estado, estadoExtra || {});
   const $ = cifrao({ Acao: [{ headers: { authorization: s.cab }, body: corpo }], 'Ler Planilha Acao': [LEITURA_ACAO] });
   const [proc] = rodarNode('processar-acao', { $, $getWorkflowStaticData: () => s.estado });
   const escritas = rodarNode('montar-escritas', {
@@ -112,7 +113,9 @@ test('F3 gerar_pedido: PEDIDOS, PEDIDOS_ITENS e historico, nessa ordem', () => {
 });
 
 test('F5a anotar_peca: um append no HISTORICO_APP e nada mais', () => {
-  const { proc, escritas } = acao({ tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: 'Cliente pediu para segurar' });
+  // O card tem de ser da OS: aqui, pelo board em cache.
+  const board = { guardadoEm: T0, corpo: { caixas: [{ dealId: '600001', os: '90001' }], producao: [] } };
+  const { proc, escritas } = acao({ tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: 'Cliente pediu para segurar' }, { board });
   assert.equal(proc.status, 200, JSON.stringify(proc.body));
   assert.equal(proc.body.anotacaoId, proc.historicos[0].id);
   assert.deepEqual(escritas.map(alvo), ["'HISTORICO_APP'!A1"]);
