@@ -29,6 +29,10 @@ var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSA
 var LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS', 'PREVISAO_MEDIAS'];
 // Workflow diário "PCP MRBL - Médias de Previsão".
 var LEITURAS_MEDIAS_PREVISAO = ['PREVISAO_MEDIAS'];
+// F5c: "PCP MRBL - Ler E-mails do PCP" (FALTANTES e CAIXAS GANHAS dão os itens em aberto
+// da OS ao intérprete) e a releitura da aba antes de gravar as interpretações.
+var LEITURAS_EMAILS_PCP = ['EMAILS_PCP', 'FALTANTES', 'CAIXAS GANHAS'];
+var LEITURAS_EMAILS_PCP_RELER = ['EMAILS_PCP'];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
 // appendOrUpdate = atualiza se achar a chave, senao inclui; append = inclui.
@@ -53,12 +57,16 @@ var DESTINOS_ESCRITA = [
   { aba: 'OFICINAS', operacao: 'update', chave: 'ploomes_id' },  // capacidade_semana (só ADM)
   // Médias da previsão (19/10): linha casada pela coluna chave (tipo|etapa|faixa|oficina_id).
   { aba: 'PREVISAO_MEDIAS', operacao: 'append', chave: 'chave' },
-  { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave' }
+  { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave' },
+  // E-mails do PCP (F5c): linha nova da leitura e update da interpretação/decisão.
+  { aba: 'EMAILS_PCP', operacao: 'append', chave: 'id' },
+  { aba: 'EMAILS_PCP', operacao: 'update', chave: 'id' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
 var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
-var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1, PREVISAO_MEDIAS: 1 };
+// Abas que nunca ganham coluna numa gravação (as da F4 e a EMAILS_PCP da F5c).
+var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1, PREVISAO_MEDIAS: 1, EMAILS_PCP: 1 };
 var ABA_HISTORICO = 'HISTORICO_APP';
 // Falha numa gravacao (depois das tentativas): uma linha na aba ERROS_APP (colunas
 // quando, usuario, tipo, deal_id, passo, url, erro) e 500 com este aviso para o site.

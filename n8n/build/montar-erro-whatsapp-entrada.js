@@ -4369,6 +4369,10 @@ var LEITURAS_RETENTAR_INTERPRETACAO = ['PRODUCAO', 'WHATSAPP_MENSAGENS', 'WHATSA
 var LEITURAS_SYNC_PRODUCAO = ['PRODUCAO', 'OFICINAS', 'PREVISAO_MEDIAS'];
 // Workflow diário "PCP MRBL - Médias de Previsão".
 var LEITURAS_MEDIAS_PREVISAO = ['PREVISAO_MEDIAS'];
+// F5c: "PCP MRBL - Ler E-mails do PCP" (FALTANTES e CAIXAS GANHAS dão os itens em aberto
+// da OS ao intérprete) e a releitura da aba antes de gravar as interpretações.
+var LEITURAS_EMAILS_PCP = ['EMAILS_PCP', 'FALTANTES', 'CAIXAS GANHAS'];
+var LEITURAS_EMAILS_PCP_RELER = ['EMAILS_PCP'];
 
 // Destinos aceitos: (aba, operacao, chave). update = so linha existente;
 // appendOrUpdate = atualiza se achar a chave, senao inclui; append = inclui.
@@ -4393,12 +4397,16 @@ var DESTINOS_ESCRITA = [
   { aba: 'OFICINAS', operacao: 'update', chave: 'ploomes_id' },  // capacidade_semana (só ADM)
   // Médias da previsão (19/10): linha casada pela coluna chave (tipo|etapa|faixa|oficina_id).
   { aba: 'PREVISAO_MEDIAS', operacao: 'append', chave: 'chave' },
-  { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave' }
+  { aba: 'PREVISAO_MEDIAS', operacao: 'update', chave: 'chave' },
+  // E-mails do PCP (F5c): linha nova da leitura e update da interpretação/decisão.
+  { aba: 'EMAILS_PCP', operacao: 'append', chave: 'id' },
+  { aba: 'EMAILS_PCP', operacao: 'update', chave: 'id' }
 ];
 // Ordem dos appends (antes do batchUpdate). HISTORICO_APP vai sempre no fim.
 var ORDEM_APPEND = ['PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'CAIXAS_PCP', 'FALTANTES',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES'];
-var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1, PREVISAO_MEDIAS: 1 };
+// Abas que nunca ganham coluna numa gravação (as da F4 e a EMAILS_PCP da F5c).
+var ABAS_F4 = { PRODUCAO: 1, OFICINAS: 1, WHATSAPP_MENSAGENS: 1, WHATSAPP_SUGESTOES: 1, PREVISAO_MEDIAS: 1, EMAILS_PCP: 1 };
 var ABA_HISTORICO = 'HISTORICO_APP';
 // Falha numa gravacao (depois das tentativas): uma linha na aba ERROS_APP (colunas
 // quando, usuario, tipo, deal_id, passo, url, erro) e 500 com este aviso para o site.
@@ -5361,6 +5369,160 @@ function validarInterpretacaoEmailPcp(valor, ctx) {
   }
   if (tipo === 'OBSERVACAO') { v = ''; itens = []; }
   return { ok: true, tipo: tipo, valor: v, itens: itens, resumo: resumo, evidencia: evidencia, confianca: confianca };
+}
+
+// ----- Leitura do Gmail e rodada de interpretação -----
+// Cada rodada (10 min): os e-mails novos entram na aba já como ERRO com 1 tentativa
+// (reserva) antes do intérprete; sucesso troca para PENDENTE. Linhas ERRO com menos
+// de 3 tentativas voltam ao intérprete a partir do texto já limpo da aba.
+var MAX_TENTATIVAS_EMAIL_PCP = 3;
+var LIMITE_RODADA_EMAIL_PCP = 10;
+var REMETENTE_PLOOMES_EMAIL_PCP = 'noreply@ploomes.com';
+var MARCADOR_DOMINIO_EMAIL_PCP = 'CONFIGURAR_DOMINIO';
+
+// Domínio da confecção (do node Config do workflow): só letras, números, ponto e traço.
+function dominioEmailPcp(valor) {
+  var d = texto(valor).toLowerCase().replace(/^@/, '');
+  if (!d || d.indexOf(MARCADOR_DOMINIO_EMAIL_PCP.toLowerCase()) >= 0) return '';
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) ? d : '';
+}
+
+function buscaGmailEmailsPcp(dominio) {
+  var d = dominioEmailPcp(dominio);
+  return d ? 'from:(@' + d + ') subject:"OS:" -from:' + REMETENTE_PLOOMES_EMAIL_PCP + ' newer_than:7d' : '';
+}
+
+function textoDoHtmlEmailPcp(html) {
+  return texto(html).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr)>/gi, '\n').replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'").replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
+}
+
+// Remetente "Nome <a@b>" (texto) ou { value: [{ name, address }] } (nó Gmail).
+function remetenteEmailPcp(de) {
+  if (de && typeof de === 'object') {
+    var v = (de.value || [])[0];
+    if (v) return { nome: texto(v.name), endereco: texto(v.address).toLowerCase() };
+    de = de.text;
+  }
+  var t = texto(de);
+  var m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(t);
+  if (m) return { nome: texto(m[1]), endereco: texto(m[2]).toLowerCase() };
+  return { nome: '', endereco: t.toLowerCase() };
+}
+
+function quandoEmailPcp(json) {
+  var d = Date.parse(texto(json.date));
+  if (!isFinite(d)) d = Number(texto(json.internalDate));
+  return isFinite(d) && d > 0 ? new Date(d).toISOString() : '';
+}
+
+// Item do nó Gmail (getAll com simple: false) -> e-mail normalizado.
+function emailDoGmailPcp(json) {
+  json = json || {};
+  var de = remetenteEmailPcp(json.from);
+  var cab = json.headers || {};
+  return {
+    id: texto(json.id),
+    threadId: texto(json.threadId),
+    quando: quandoEmailPcp(json),
+    deNome: de.nome,
+    deEndereco: de.endereco,
+    assunto: texto(json.subject) || texto(cab.subject),
+    texto: typeof json.text === 'string' && json.text.trim() ? json.text : textoDoHtmlEmailPcp(json.html) || texto(json.snippet)
+  };
+}
+
+function linhasUnicasEmailPcp(linhas) {
+  var vistos = {};
+  return (linhas || []).filter(function (l) {
+    var id = texto(l && l.id);
+    if (!id || vistos[id]) return false;
+    vistos[id] = 1;
+    return true;
+  });
+}
+
+function tentativasEmailPcp(l) {
+  var n = numero(l && l.tentativas);
+  return n === null || isNaN(n) ? 0 : n;
+}
+
+function linhaNovaEmailPcp(e) {
+  return {
+    id: e.id, thread_id: e.threadId, quando: e.quando, de_nome: e.deNome.slice(0, 120), assunto: e.assunto.slice(0, 300),
+    os: osDoAssuntoEmailPcp(e.assunto), modelo: modeloDoAssuntoEmailPcp(e.assunto), texto: limparTextoEmailPcp(e.texto),
+    tipo: '', valor: '', itens: '', resumo: '', evidencia: '', confianca: '', status: 'ERRO', tentativas: 1, decidido_em: '', decidido_por: ''
+  };
+}
+
+// gmail: itens do nó Gmail ([{ json }]); dados: { emails (aba EMAILS_PCP), faltantes, ganhas }.
+// -> { operacoes: [append das novas, update das novas tentativas], pedidos: [entrada do intérprete] }.
+function selecionarEmailsPcp(gmail, dados, dominio, agora) {
+  dados = dados || {};
+  var d = dominioEmailPcp(dominio);
+  var operacoes = [];
+  var pedidos = [];
+  if (!d) return { operacoes: operacoes, pedidos: pedidos };
+  var caixas = montarCaixas(dados.faltantes || [], dados.ganhas || [], new Date(texto(agora) || Date.now()), {}).caixas;
+  var linhas = linhasUnicasEmailPcp(dados.emails);
+  var existentes = {};
+  (dados.emails || []).forEach(function (l) { if (l && texto(l.id)) existentes[texto(l.id)] = 1; });
+
+  var pedir = function (linha) {
+    pedidos.push(entradaInterpreteEmailPcp(linha, itensAbertosDaOsEmailPcp(caixas, linha.os)));
+  };
+
+  linhas.filter(function (l) {
+    return semAcento(l.status) === 'ERRO' && tentativasEmailPcp(l) < MAX_TENTATIVAS_EMAIL_PCP && texto(l.os) && texto(l.texto);
+  }).sort(function (a, b) { return texto(a.quando) < texto(b.quando) ? -1 : texto(a.quando) > texto(b.quando) ? 1 : 0; })
+    .forEach(function (l) {
+      if (pedidos.length >= LIMITE_RODADA_EMAIL_PCP) return;
+      operacoes.push({ aba: ABA_EMAILS_PCP, operacao: 'update', chave: 'id', linha: { id: texto(l.id), tentativas: tentativasEmailPcp(l) + 1 } });
+      pedir(l);
+    });
+
+  var novos = [];
+  (gmail || []).forEach(function (item) {
+    var e = emailDoGmailPcp(item && item.json);
+    if (!e.id || existentes[e.id]) return;
+    existentes[e.id] = 1;
+    var arroba = e.deEndereco.lastIndexOf('@');
+    if (arroba < 0 || e.deEndereco.slice(arroba + 1) !== d || e.deEndereco === REMETENTE_PLOOMES_EMAIL_PCP) return;
+    var linha = linhaNovaEmailPcp(e);
+    if (!linha.os || !linha.texto) return;
+    novos.push(linha);
+  });
+  novos.sort(function (a, b) { return a.quando < b.quando ? -1 : a.quando > b.quando ? 1 : 0; }).forEach(function (linha) {
+    if (pedidos.length >= LIMITE_RODADA_EMAIL_PCP) return;
+    operacoes.push({ aba: ABA_EMAILS_PCP, operacao: 'append', chave: 'id', linha: linha });
+    pedir(linha);
+  });
+  return { operacoes: operacoes, pedidos: pedidos };
+}
+
+// pedidos: as entradas mandadas ao intérprete; respostas: a saída do Execute Workflow
+// ({ emailId, interpretacao } ou { error }), pareada pelo emailId (ou pela posição);
+// linhas: a aba EMAILS_PCP relida. Só a linha ainda em ERRO vira PENDENTE.
+function concluirEmailsPcp(pedidos, respostas, linhas) {
+  var porId = {};
+  linhasUnicasEmailPcp(linhas).forEach(function (l) { porId[texto(l.id)] = l; });
+  var operacoes = [];
+  (pedidos || []).forEach(function (p, i) {
+    var id = texto(p && p.emailId);
+    var resp = (respostas || []).filter(function (r) { return r && texto(r.emailId) === id; })[0];
+    if (!resp && respostas && respostas[i] && !texto(respostas[i].emailId)) resp = respostas[i];
+    var atual = porId[id];
+    if (!id || !resp || !atual || semAcento(atual.status) !== 'ERRO') return;
+    if (resp.interpretacao === null || resp.interpretacao === undefined) return;
+    var v = validarInterpretacaoEmailPcp(resp.interpretacao, { texto: p.texto, quando: p.quando, itensAbertos: p.itensAbertos });
+    if (!v.ok) return;
+    operacoes.push({ aba: ABA_EMAILS_PCP, operacao: 'update', chave: 'id', linha: {
+      id: id, tipo: v.tipo, valor: v.valor, itens: v.itens.join(';'), resumo: v.resumo, evidencia: v.evidencia,
+      confianca: v.confianca, status: 'PENDENTE'
+    } });
+  });
+  return operacoes;
 }
 
 // ----- src/api.js -----
