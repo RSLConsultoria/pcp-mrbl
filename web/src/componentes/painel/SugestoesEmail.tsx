@@ -24,7 +24,7 @@ export function SugestoesEmail({ sugestoes, executar }: {
           <button type="button" className="botao botao--navy" disabled={!decidivel} onClick={() => decidir(e, 'ACEITAR')}>Aceitar</button>
           <button type="button" className="botao botao--contorno" disabled={!decidivel} onClick={() => decidir(e, 'IGNORAR')}>Ignorar</button>
         </div>
-        {!decidivel && <p className="sugestao-email__nota">Edição liberada em breve para esta caixa.</p>}
+        {!decidivel && <p className="sugestao-email__nota">Decisão liberada em breve para as caixas desta sugestão.</p>}
       </section>
     ))}</>
   );

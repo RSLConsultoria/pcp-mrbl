@@ -99,7 +99,7 @@ test('caixa fora da edição: fora da faixa, Aceitar e Ignorar desabilitados', a
   await expect(faixa(page)).toHaveCount(0);
   await expect(card(page, '90002')).not.toContainText('e-mail do PCP');
   await card(page, '90002').click();
-  await expect(painel(page, '90002')).toContainText('Edição liberada em breve para esta caixa.');
+  await expect(painel(page, '90002')).toContainText('Decisão liberada em breve para as caixas desta sugestão.');
   await expect(painel(page, '90002').getByRole('button', { name: 'Aceitar' })).toBeDisabled();
   await expect(painel(page, '90002').getByRole('button', { name: 'Ignorar' })).toBeDisabled();
 });
