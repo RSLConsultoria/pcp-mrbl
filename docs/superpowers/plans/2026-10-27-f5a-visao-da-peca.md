@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-27-f5a-visao-da-peca-design.md` (fonte da verdade do escopo).
 
+> **Fatos confirmados no Ploomes real em 27/10 (valem por cima do que o plano supõe abaixo):**
+> - Campo OS (`deal_C06992BA-FF1E-47A8-9330-5242026E691E`) é **`StringValue`**: `Deals?$filter=OtherProperties/any(op: op/FieldKey eq '…' and op/StringValue eq '123456')` acha o card 607612577. Não use `IntegerValue` nem `or` no filtro.
+> - Etapas do funil: `GET Deals@Stages?$filter=PipelineId eq <id>` devolve `Id, Name, PipelineId, LastPipelineStage, Ordination` (Ordination 0-based). Use esse caminho (não `/DealsStages`).
+> - `GET /Deals(<id>)` dá **404** em `public-api2`; para um card, use `Deals?$filter=Id eq <id>`.
+> - `DealsStagesHistory`: cada linha é a passagem por uma etapa: `StageId` = etapa de origem, `NewStageId` = destino (`null` na etapa atual), **`CreateDate` = entrada na etapa de origem e `UpdateDate` = hora da troca**. O evento "mudou de X para Y" usa **`UpdateDate`** (no card 607612577: Corte → Costura em 19/10 16:11, que é o `UpdateDate`). Linha com `NewStageId` nulo não vira evento de troca. `Undone: true` = troca desfeita (mostrar com "desfeita").
+
 ## Restrições globais
 
 - Fale e escreva em pt-BR (commits, comentários, textos da interface). Commits terminam com a linha `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
