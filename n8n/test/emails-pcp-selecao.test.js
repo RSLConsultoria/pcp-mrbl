@@ -81,12 +81,12 @@ test('rodada: ERRO com menos de 3 tentativas volta ao intérprete (a partir do t
   assert.deepEqual(r.pedidos.map((p) => [p.emailId, p.texto]), [['G0', 'Chamado aberto #1234567']]);
 });
 
-test('rodada: no máximo 10 interpretações; as novas esperam a próxima rodada', () => {
+test('rodada: no máximo 4 interpretações; as novas esperam a próxima rodada', () => {
   const muitos = Array.from({ length: 12 }, (_, i) => ({ json: gmail({ id: 'N' + i, date: '2026-10-27T1' + (i % 10) + ':00:00.000Z' }) }));
   const r = limpo(ctx.selecionarEmailsPcp(muitos, { emails: [linhaEmail({ id: 'G0' })], faltantes: [], ganhas: [] }, DOMINIO, AGORA));
-  assert.equal(r.pedidos.length, 10);
+  assert.equal(r.pedidos.length, 4);
   assert.equal(r.pedidos[0].emailId, 'G0');
-  assert.equal(r.operacoes.filter((o) => o.operacao === 'append').length, 9);
+  assert.equal(r.operacoes.filter((o) => o.operacao === 'append').length, 3);
 });
 
 test('rodada: domínio não configurado não seleciona e-mail novo', () => {

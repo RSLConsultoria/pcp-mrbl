@@ -160,8 +160,38 @@ test('validação: QUANTIDADE precisa de um item e de um número; CHAMADO precis
 test('validação: saída inválida do modelo é erro (a linha fica ERRO para nova tentativa)', () => {
   assert.equal(v('não é json', 't').ok, false);
   assert.equal(v(base({ tipo: 'OUTRA' }), 't').ok, false);
-  assert.equal(v(base({ confianca: 2 }), 't').ok, false);
+  assert.equal(v(base({ confianca: 101 }), 't').ok, false);
+  assert.equal(v(base({ confianca: -1 }), 't').ok, false);
+  // Em percentual (95) vale como 0,95.
+  assert.equal(v(base({ confianca: 95 }), 't').confianca, 0.95);
   assert.equal(v(base({ confianca: 'alta' }), 't').ok, false);
   // OBSERVACAO válida (de string JSON).
   assert.equal(v(JSON.stringify(base({ resumo: 'Pedido de conferência', evidencia: 'confere' })), 'Pode conferir a quantidade?').tipo, 'OBSERVACAO');
+});
+
+// ----- Revisão final (27/10) -----
+test('limpeza: cabeçalho da citação quebrado em qualquer ponto não deixa nome nem endereço', () => {
+  assert.equal(ctx.limparTextoEmailPcp('Chega dia 30/10.\nEm seg., 27 de out. de 2026 às 10:00, Fulano Teste <\nfulano@confeccao-exemplo.com.br> escreveu:\n> antigo'), 'Chega dia 30/10.');
+  assert.equal(ctx.limparTextoEmailPcp('Chega dia 30/10.\nEm seg., 27 de out. de 2026, Fulano\nTeste <f@confeccao-exemplo.com.br> escreveu:'), 'Chega dia 30/10.');
+  assert.equal(ctx.limparTextoEmailPcp('Ok.\nOn Mon, Oct 27, 2026 Someone <\ns@confeccao-exemplo.com.br>\nwrote:'), 'Ok.');
+  assert.equal(ctx.limparTextoEmailPcp('Falar com p.um@confeccao-exemplo.com.br sobre o zíper.'), 'Falar com sobre o zíper.');
+  // "Enviado:" sozinho é conteúdo.
+  assert.equal(ctx.limparTextoEmailPcp('Enviado: hoje pela transportadora\nchega dia 30/10'), 'Enviado: hoje pela transportadora chega dia 30/10');
+});
+
+test('itens: os lidos da CAIXAS GANHAS (não editáveis) não vão ao intérprete', () => {
+  const caixas = [{ dealId: '700001', os: '90001', itens: [
+    { id: 'F-1', nome: 'ZIPER', status: 'ABERTO', resta: 4, editavel: true },
+    { id: '700001|ganha|0', nome: 'BOTAO', status: 'ABERTO', resta: 2, editavel: false }] }];
+  assert.deepEqual(limpo(ctx.itensAbertosDaOsEmailPcp(caixas, '90001')).map((i) => i.id), ['F-1']);
+});
+
+test('itens: o nome exato vence; substring só com um candidato', () => {
+  const itens = [{ id: 'L1', nome: 'LINHA', cor: '' }, { id: 'L2', nome: 'LINHA BRANCA 120', cor: '' }, { id: 'B1', nome: 'BOTAO MADREPEROLA', cor: '' }];
+  const t = 'A linha e o botão chegam dia 30/10.';
+  const c = (nomes) => limpo(ctx.validarInterpretacaoEmailPcp(base({ tipo: 'PREVISAO', valor: '30/10', itens: nomes, evidencia: 'chegam dia 30/10' }), { texto: t, quando: QUANDO, itensAbertos: itens }));
+  assert.deepEqual(c(['LINHA']).itens, ['L1']);
+  assert.deepEqual(c(['BOTAO']).itens, ['B1']);
+  // "LINHA BRANCA" casa LINHA e LINHA BRANCA 120 por substring: ambíguo, não vale.
+  assert.equal(c(['LINHA BRANCA']).tipo, 'OBSERVACAO');
 });

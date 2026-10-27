@@ -1,6 +1,7 @@
 import type { Board, Caixa, EmailPcp } from '../api/tipos';
 import { itemAberto } from './colunas';
 import { ddmm } from './datas';
+import { caixaEditavelNoApp } from './edicao';
 
 // F5c · E-mails do PCP: regras puras do site. As caixas da sugestão espelham o servidor
 // (n8n/src/emailsPcp.js, dealsAlvoEmailPcp): os deals dos itens citados; sem itens, as caixas
@@ -20,13 +21,25 @@ export function dealsAlvoEmailPcp(email: Pick<EmailPcp, 'os' | 'itens'>, caixas:
 
 const maisNovoPrimeiro = (a: EmailPcp, b: EmailPcp) => (a.quando < b.quando ? 1 : a.quando > b.quando ? -1 : 0);
 
-export function emailsPendentes(board: Board): EmailPcp[] {
-  return (board.emailsPcp ?? []).filter((e) => e.status === 'PENDENTE').sort(maisNovoPrimeiro);
+// O servidor só decide quando todas as caixas da sugestão estão liberadas (DEALS_EDITAVEIS);
+// OS sem caixa só com a lista vazia (Ignorar).
+export function emailDecidivel(board: Board, email: EmailPcp): boolean {
+  const deals = dealsAlvoEmailPcp(email, board.caixas);
+  if (!deals.length) return !board.dealsEditaveis || board.dealsEditaveis.length === 0;
+  return deals.every((dealId) => caixaEditavelNoApp(board, { dealId }));
 }
 
-// Sugestões pendentes que valem para esta caixa (bloco azul no painel e selo no card).
+const pendentesDe = (board: Board): EmailPcp[] => (board.emailsPcp ?? []).filter((e) => e.status === 'PENDENTE').sort(maisNovoPrimeiro);
+
+// Faixa e selo: só as pendentes que alguém consegue decidir (até o go-live, as dos cards de
+// teste); as outras continuam na Visão da peça e no painel, com os botões desligados.
+export function emailsPendentes(board: Board): EmailPcp[] {
+  return pendentesDe(board).filter((e) => emailDecidivel(board, e));
+}
+
+// Sugestões pendentes que valem para esta caixa (bloco azul no painel).
 export function emailsPendentesDaCaixa(board: Board, dealId: string): EmailPcp[] {
-  return emailsPendentes(board).filter((e) => dealsAlvoEmailPcp(e, board.caixas).includes(dealId));
+  return pendentesDe(board).filter((e) => dealsAlvoEmailPcp(e, board.caixas).includes(dealId));
 }
 
 // Todos os e-mails da OS que o board traz (aba da Visão da peça), mais novos primeiro.

@@ -1080,11 +1080,11 @@ const lerEmailsPcp = IMPORT + [
   output: [{ id: 'G-ficticio', threadId: 'T-ficticio', subject: 'RE: Caixa separada - OS:90001', text: 'Chega dia 30/10.' }]
 });`,
   httpGoogle('lerPlanilhaEmails', 'Ler Planilha E-mails', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_EMAILS_PCP)), false, ERRO_SAIDA + unico),
-  code('selecionarEmails', 'Selecionar E-mails', 'selecionar-emails-pcp'),
+  codeComErro('selecionarEmails', 'Selecionar E-mails', 'selecionar-emails-pcp', "{ method: 'POST' }"),
   // Reserva: append das novas (repetir duplicaria a linha) e update das tentativas. Sem retry;
-  // se falhar, nada vai ao intérprete e a próxima rodada tenta de novo.
+  // se alguma falhar, o Montar Pedidos não manda nada ao intérprete e a próxima rodada tenta de novo.
   httpGoogle('gravarReservas', 'Gravar Reservas', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA, ''),
-  code('montarPedidosEmails', 'Montar Pedidos de Interpretação', 'montar-pedidos-emails-pcp'),
+  codeComErro('montarPedidosEmails', 'Montar Pedidos de Interpretação', 'montar-pedidos-emails-pcp', "{ emailId: 'G-ficticio' }"),
   // Um e-mail por vez; a falha de um não para os outros (fica ERRO para a próxima rodada).
   executarWorkflow('interpretarEmail', 'Interpretar E-mail', IDS_SUBWORKFLOWS.INTERPRETE_EMAIL, true, 'continueRegularOutput', 'each'),
   httpGoogle('relerEmails', 'Reler E-mails', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_EMAILS_PCP_RELER)), false, ERRO_SAIDA + unico),
@@ -1107,10 +1107,10 @@ export default workflow('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PC
   .to(montarBuscaEmails)
   .to(buscarEmails.onError(montarErroEmails.to(registrarErroEmails)))
   .add(buscarEmails).to(lerPlanilhaEmails.onError(montarErroEmails.to(registrarErroEmails)))
-  .add(lerPlanilhaEmails).to(selecionarEmails)
-  .to(gravarReservas.onError(montarErroEmails.to(registrarErroEmails)))
-  .add(gravarReservas).to(montarPedidosEmails)
-  .to(interpretarEmail)
+  .add(lerPlanilhaEmails).to(selecionarEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(selecionarEmails).to(gravarReservas.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(gravarReservas).to(montarPedidosEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(montarPedidosEmails).to(interpretarEmail)
   .to(relerEmails.onError(montarErroEmails.to(registrarErroEmails)))
   .add(relerEmails).to(finalizarEmails.onError(montarErroEmails.to(registrarErroEmails)))
   .add(finalizarEmails).to(gravarInterpretacoes.onError(montarErroEmails.to(registrarErroEmails)));
@@ -1141,7 +1141,7 @@ const interpreteEmail = IMPORT + [
     name: 'Chamar Groq',
     retryOnFail: true,
     maxTries: 2,
-    waitBetweenTries: 5000,
+    waitBetweenTries: 3000,
     parameters: {
       method: 'POST',
       url: 'https://api.groq.com/openai/v1/chat/completions',
@@ -1150,7 +1150,7 @@ const interpreteEmail = IMPORT + [
       sendBody: true,
       specifyBody: 'json',
       jsonBody: expr('{{ JSON.stringify($json.corpo) }}'),
-      options: { timeout: 60000 }
+      options: { timeout: 45000 }
     },
     ${CRED_GROQ}
     position: ${posicao('Chamar Groq')}

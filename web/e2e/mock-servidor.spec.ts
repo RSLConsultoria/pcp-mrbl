@@ -345,7 +345,7 @@ test('mock: os 4 cartões dos Insights do dia acendem com os dados fictícios', 
 test('mock: e-mails do PCP acendem todos os tipos; aceitar a previsão continua depois da gravação', async ({ page, api }) => {
   await entrar(page, '');
   const faixa = page.getByRole('region', { name: 'Sugestões dos e-mails do PCP' });
-  await expect(faixa).toContainText('6 sugestões novas dos e-mails do PCP');
+  await expect(faixa).toContainText('5 sugestões novas dos e-mails do PCP');
   await faixa.getByRole('button', { name: /sugestões novas/ }).click();
   for (const t of ['Previsão', 'Quantidade conferida de LINHA 120 RESISTENTE 335: 4', 'Previsão', 'Chamado #1234567', 'Observação: Pediram para conferir']) {
     await expect(faixa.getByRole('button', { name: new RegExp(t) }).first()).toBeVisible();
@@ -356,7 +356,7 @@ test('mock: e-mails do PCP acendem todos os tipos; aceitar a previsão continua 
   await bloco.getByRole('button', { name: 'Aceitar' }).click();
   await expect(bloco).toHaveCount(0);
   await expect(salvando(page)).toHaveCount(0, { timeout: 10_000 });
-  await expect(faixa).toContainText('5 sugestões novas dos e-mails do PCP');
+  await expect(faixa).toContainText('4 sugestões novas dos e-mails do PCP');
   await expect(painel.getByText(/aceitou sugestão do e-mail: previsão/)).toBeVisible({ timeout: 10_000 });
   expect(api.acoes).toContainEqual({ tipo: 'decidir_email_pcp', id: 'EM-1', decisao: 'ACEITAR' });
 });

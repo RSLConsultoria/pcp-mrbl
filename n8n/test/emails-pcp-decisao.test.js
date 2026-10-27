@@ -41,6 +41,7 @@ test('board: emailsPcp com as pendentes e as decididas nos últimos 7 dias, mais
     email({ id: 'B', quando: '2026-10-27T09:00:00.000Z', status: 'ACEITA', decidido_em: '2026-10-21T12:00:00.000Z' }),
     email({ id: 'C', status: 'IGNORADA', decidido_em: '2026-10-19T12:00:00.000Z' }),
     email({ id: 'D', status: 'ERRO' }),
+    email({ id: 'E', quando: '2026-09-20T10:00:00.000Z' }),
     email({ id: 'A', status: 'IGNORADA' })
   ];
   const b = limpo(ctx.emailsPcpBoard(rows, T0));

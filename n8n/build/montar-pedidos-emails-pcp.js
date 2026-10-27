@@ -5178,16 +5178,22 @@ function modeloDoAssuntoEmailPcp(assunto) {
 // ----- Limpeza do texto -----
 // Linha (sem espaços nas pontas) a partir da qual vem o histórico citado.
 var INICIO_HISTORICO_EMAIL_PCP = [
-  /^(De|From|Enviado|Sent)\s*:/i,
+  // "Enviado:/Sent:" sozinhos não cortam: no Outlook vêm sempre depois de "De:/From:", e
+  // "Enviado: hoje pela transportadora" é conteúdo (revisão de 27/10).
+  /^(De|From)\s*:/i,
   /^Em\s.+\sescreveu\s*:?$/i,
   /^On\s.+\swrote\s*:?$/i,
   /^-{2,}\s*(Original|Mensagem original|Mensagem encaminhada|Forwarded)/i,
   /^_{8,}$/,
   /^>/
 ];
-// "Em seg., 27 de out. ... <x@y>" com o "escreveu:" na linha de baixo (o Gmail quebra a linha).
-var INICIO_HISTORICO_QUEBRADO_EMAIL_PCP = [/^Em\s.+/i, /^On\s.+/i];
-var FIM_HISTORICO_QUEBRADO_EMAIL_PCP = [/^escreveu\s*:?$/i, /^wrote\s*:?$/i];
+// "Em seg., 27 de out. ... <x@y>" quebrado em até 3 linhas (o Gmail quebra onde quiser): a
+// linha que termina em "escreveu:"/"wrote:" corta, e com ela as 2 anteriores se uma começar
+// com "Em "/"On ".
+var INICIO_HISTORICO_QUEBRADO_EMAIL_PCP = [/^Em\s/i, /^On\s/i];
+var FIM_HISTORICO_QUEBRADO_EMAIL_PCP = [/(escreveu|wrote)\s*:?$/i];
+// Endereço de e-mail que sobrar no texto (nunca vai à planilha nem ao intérprete).
+var ENDERECO_EMAIL_PCP = /<?[^\s<>@]+@[^\s<>]+\.[^\s<>]+>?/g;
 // Linha a partir da qual vem a assinatura.
 var INICIO_ASSINATURA_EMAIL_PCP = [
   /^--\s*$/,
@@ -5209,11 +5215,15 @@ function limparTextoEmailPcp(valor) {
   for (var i = 0; i < linhas.length; i++) {
     var l = linhas[i].trim();
     if (casaAlgumEmailPcp(l, INICIO_HISTORICO_EMAIL_PCP) || casaAlgumEmailPcp(l, INICIO_ASSINATURA_EMAIL_PCP)) break;
-    var prox = i + 1 < linhas.length ? linhas[i + 1].trim() : '';
-    if (casaAlgumEmailPcp(l, INICIO_HISTORICO_QUEBRADO_EMAIL_PCP) && casaAlgumEmailPcp(prox, FIM_HISTORICO_QUEBRADO_EMAIL_PCP)) break;
+    if (casaAlgumEmailPcp(l, FIM_HISTORICO_QUEBRADO_EMAIL_PCP)) {
+      for (var k = Math.max(0, fica.length - 2); k < fica.length; k++) {
+        if (casaAlgumEmailPcp(fica[k], INICIO_HISTORICO_QUEBRADO_EMAIL_PCP)) { fica = fica.slice(0, k); break; }
+      }
+      break;
+    }
     if (l) fica.push(l);
   }
-  return fica.join(' ').replace(/\s+/g, ' ').trim().slice(0, LIMITE_TEXTO_EMAIL_PCP);
+  return fica.join(' ').replace(ENDERECO_EMAIL_PCP, '').replace(/\s+/g, ' ').trim().slice(0, LIMITE_TEXTO_EMAIL_PCP);
 }
 
 // ----- Intérprete -----
@@ -5249,7 +5259,8 @@ function itensAbertosDaOsEmailPcp(caixas, os) {
   (caixas || []).forEach(function (c) {
     if (!c || texto(c.os) !== alvo) return;
     (c.itens || []).forEach(function (i) {
-      if (i && itemEstaAberto(i)) {
+      // Só itens da FALTANTES: os lidos do texto da CAIXAS GANHAS (editavel false) não recebem previsão.
+      if (i && i.editavel !== false && itemEstaAberto(i)) {
         out.push({ id: texto(i.id), dealId: texto(c.dealId), nome: texto(i.nome), cor: texto(i.cor), un: texto(i.un), resta: i.resta });
       }
     });
@@ -5315,17 +5326,21 @@ function respostaGroqEmailPcp(resposta, emailId) {
 function itensCitadosEmailPcp(citados, itensAbertos) {
   var lista = Array.isArray(citados) ? citados : texto(citados) ? [citados] : [];
   var ids = [];
+  // O id ou o nome exato vence; a substring só vale quando sobra um candidato só.
   lista.forEach(function (c) {
     var bruto = texto(c);
     var ci = textoComparavelWhatsapp(bruto);
     if (!ci) return;
+    var exatos = [];
+    var parciais = [];
     (itensAbertos || []).forEach(function (i) {
       var n1 = textoComparavelWhatsapp(i.nome);
       var n2 = textoComparavelWhatsapp(nomeItemEmailPcp(i));
-      var bate = bruto === texto(i.id) || ci === n1 || ci === n2 ||
-        (ci.length >= 4 && n1.length >= 4 && (n1.indexOf(ci) >= 0 || ci.indexOf(n1) >= 0));
-      if (bate && ids.indexOf(texto(i.id)) < 0) ids.push(texto(i.id));
+      if (bruto === texto(i.id) || ci === n1 || ci === n2) exatos.push(texto(i.id));
+      else if (ci.length >= 4 && n1.length >= 4 && (n1.indexOf(ci) >= 0 || ci.indexOf(n1) >= 0)) parciais.push(texto(i.id));
     });
+    var achados = exatos.length ? exatos : parciais.length === 1 ? parciais : [];
+    achados.forEach(function (id) { if (ids.indexOf(id) < 0) ids.push(id); });
   });
   return { citou: lista.some(function (c) { return !!textoComparavelWhatsapp(c); }), ids: ids };
 }
@@ -5340,6 +5355,8 @@ function validarInterpretacaoEmailPcp(valor, ctx) {
   var tipo = semAcento(o.tipo);
   if (!TIPOS_EMAIL_PCP[tipo]) return { ok: false, erro: 'Tipo de interpretação inválido.' };
   var confianca = typeof o.confianca === 'number' ? o.confianca : numero(o.confianca);
+  // Modelo que responde em percentual (95): vale como 0,95.
+  if (confianca !== null && isFinite(confianca) && confianca > 1 && confianca <= 100) confianca = confianca / 100;
   if (confianca === null || !isFinite(confianca) || confianca < 0 || confianca > 1) return { ok: false, erro: 'Confiança inválida.' };
   var resumo = texto(o.resumo).replace(/\s+/g, ' ').slice(0, 500);
   var evidencia = texto(o.evidencia).replace(/\s+/g, ' ').slice(0, 500);
@@ -5377,7 +5394,8 @@ function validarInterpretacaoEmailPcp(valor, ctx) {
 // (reserva) antes do intérprete; sucesso troca para PENDENTE. Linhas ERRO com menos
 // de 3 tentativas voltam ao intérprete a partir do texto já limpo da aba.
 var MAX_TENTATIVAS_EMAIL_PCP = 3;
-var LIMITE_RODADA_EMAIL_PCP = 10;
+// 4 por rodada: cada interpretação leva até ~2 min (Groq com nova tentativa) e a rodada tem 10 min.
+var LIMITE_RODADA_EMAIL_PCP = 4;
 var REMETENTE_PLOOMES_EMAIL_PCP = 'noreply@ploomes.com';
 var MARCADOR_DOMINIO_EMAIL_PCP = 'CONFIGURAR_DOMINIO';
 
@@ -5528,6 +5546,7 @@ function concluirEmailsPcp(pedidos, respostas, linhas) {
 
 // ----- Board -----
 var DIAS_DECIDIDOS_EMAIL_PCP = 7;
+var DIAS_PENDENTE_EMAIL_PCP = 30;
 var MAX_BOARD_EMAIL_PCP = 300;
 
 function itensDaLinhaEmailPcp(v) {
@@ -5536,10 +5555,13 @@ function itensDaLinhaEmailPcp(v) {
 
 // PENDENTE e as decididas nos últimos 7 dias, mais novas primeiro (linha física repetida: vale a primeira).
 function emailsPcpBoard(linhas, agora) {
-  var limite = (typeof agora === 'number' ? agora : Date.parse(texto(agora))) - DIAS_DECIDIDOS_EMAIL_PCP * 86400000;
+  var agoraMs = typeof agora === 'number' ? agora : Date.parse(texto(agora));
+  var limite = agoraMs - DIAS_DECIDIDOS_EMAIL_PCP * 86400000;
+  var limitePendente = agoraMs - DIAS_PENDENTE_EMAIL_PCP * 86400000;
   return linhasUnicasEmailPcp(linhas).filter(function (l) {
     var s = semAcento(l.status);
-    if (s === 'PENDENTE') return true;
+    // Pendente com mais de 30 dias sai do board (o e-mail ficou velho; a linha continua na aba).
+    if (s === 'PENDENTE') return !isFinite(Date.parse(texto(l.quando))) || Date.parse(texto(l.quando)) >= limitePendente;
     if (s !== 'ACEITA' && s !== 'IGNORADA') return false;
     var d = Date.parse(texto(l.decidido_em));
     return isFinite(d) && d >= limite;
@@ -6064,4 +6086,8 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 
 // ===== adaptador: Montar Pedidos de Interpretação (workflow Ler E-mails do PCP) =====
 // Depois de gravada a reserva: um item por e-mail para o subworkflow do intérprete.
+// Reserva gravada só em parte (um item foi para a saída de erro): nada vai ao intérprete, para
+// nenhuma tentativa passar sem ser contada; a próxima rodada tenta de novo.
+var selecaoEmails = $('Selecionar E-mails').all();
+if ($('Gravar Reservas').all().length !== selecaoEmails.length) return [];
 return ($('Selecionar E-mails').first().json.pedidos || []).map(function (p) { return { json: p }; });

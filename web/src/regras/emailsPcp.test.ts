@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Board, EmailPcp } from '../api/tipos';
 import { chaveDaAcao, mensagemSucesso } from './acoes';
 import {
-  dealsAlvoEmailPcp, destinoDoEmail, emailsDaOs, emailsPendentes, emailsPendentesDaCaixa, resumoFaixaEmails, textoSugestaoEmail
+  dealsAlvoEmailPcp, destinoDoEmail, emailDecidivel, emailsDaOs, emailsPendentes, emailsPendentesDaCaixa, resumoFaixaEmails, textoSugestaoEmail
 } from './emailsPcp';
 import { acaoNoBoard, aplicarOtimista, versaoNoBoard, type Pendente } from './otimista';
 import { caixa, item } from './teste-util';
@@ -53,6 +53,13 @@ describe('listas e textos', () => {
   it('destino do clique: a caixa, ou a Visão da peça sem caixa', () => {
     expect(destinoDoEmail(b, email())).toEqual({ caixaId: '700001' });
     expect(destinoDoEmail(b, email({ os: '90009', itens: [] }))).toEqual({ os: '90009' });
+  });
+  it('faixa e selo só com as decidíveis (todas as caixas liberadas)', () => {
+    const restrito = { ...b, dealsEditaveis: ['700001'] };
+    expect(emailsPendentes(restrito).map((e) => e.id)).toEqual(['G1']);
+    expect(emailsPendentesDaCaixa(restrito, '700011').map((e) => e.id)).toEqual(['G2']);
+    expect(emailDecidivel(restrito, email({ os: '90009', itens: [] }))).toBe(false);
+    expect(emailDecidivel(b, email({ os: '90009', itens: [] }))).toBe(true);
   });
   it('faixa no singular e no plural', () => {
     expect(resumoFaixaEmails(1)).toBe('1 sugestão nova dos e-mails do PCP');

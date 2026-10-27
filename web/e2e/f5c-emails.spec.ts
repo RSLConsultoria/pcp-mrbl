@@ -88,14 +88,18 @@ test('ignorar: só marca; sem pendentes a faixa some', async ({ page }) => {
   await expect.poll(() => estado.acoes).toEqual([{ tipo: 'decidir_email_pcp', id: 'G2', decisao: 'IGNORAR' }]);
 });
 
-test('caixa fora da edição: Aceitar e Ignorar desabilitados', async ({ page }) => {
+test('caixa fora da edição: fora da faixa, Aceitar e Ignorar desabilitados', async ({ page }) => {
   await page.route('http://api.test/pcp-board', (r) => r.fulfill({ json: { ...base, dealsEditaveis: ['700001'], emailsPcp: [EMAILS[1]] } }));
   await page.route('http://api.test/pcp-login', (r) => r.fulfill({ json: SESSAO }));
   await page.goto('./');
   await page.getByLabel('E-mail').fill('pcp@teste.local');
   await page.getByLabel('Senha').fill('senha-ficticia');
   await page.getByRole('button', { name: 'Entrar' }).click();
+  await expect(card(page, '90002')).toBeVisible();
+  await expect(faixa(page)).toHaveCount(0);
+  await expect(card(page, '90002')).not.toContainText('e-mail do PCP');
   await card(page, '90002').click();
+  await expect(painel(page, '90002')).toContainText('Edição liberada em breve para esta caixa.');
   await expect(painel(page, '90002').getByRole('button', { name: 'Aceitar' })).toBeDisabled();
   await expect(painel(page, '90002').getByRole('button', { name: 'Ignorar' })).toBeDisabled();
 });

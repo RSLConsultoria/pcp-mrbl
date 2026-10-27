@@ -11,5 +11,5 @@ var rodadaEmails = selecionarEmailsPcp($('Buscar E-mails').all(), {
 if (!rodadaEmails.pedidos.length) return [];
 var reservasEmails = requisicoesDeEscrita(rodadaEmails.operacoes, [], planilhaEmails, PLANILHA_ID);
 return reservasEmails.map(function (r, i) {
-  return { json: { method: r.method, url: r.url, body: r.body, pedidos: i === 0 ? rodadaEmails.pedidos : [] } };
+  return { json: { method: r.method, url: r.url, body: r.body, pedidos: i === 0 ? rodadaEmails.pedidos : [], total: reservasEmails.length } };
 });

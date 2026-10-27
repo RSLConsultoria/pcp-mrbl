@@ -46,7 +46,7 @@ test('Ler E-mails do PCP: agendado a cada 10 min, Config com o marcador do domí
   const cadeia = ['A cada 10 minutos', 'Config', 'Montar Busca', 'Buscar E-mails', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas',
     'Montar Pedidos de Interpretação', 'Interpretar E-mail', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações'];
   for (let i = 0; i < cadeia.length - 1; i++) assert.deepEqual(destinos(w, cadeia[i]), [cadeia[i + 1]], cadeia[i]);
-  for (const n of ['Buscar E-mails', 'Ler Planilha E-mails', 'Gravar Reservas', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações']) {
+  for (const n of ['Buscar E-mails', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas', 'Montar Pedidos de Interpretação', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações']) {
     assert.deepEqual(destinos(w, n, 1), ['Montar Erro E-mails'], n);
   }
   assert.deepEqual(destinos(w, 'Montar Erro E-mails'), ['Registrar Erro E-mails']);
@@ -128,7 +128,9 @@ test('Selecionar → Montar Pedidos → Finalizar: reserva, pedido ao intérpret
   assert.match(sel[0].json.url, /EMAILS_PCP'!A2:append/);
   assert.equal(sel[0].json.body.values[0][0], 'G1');
   assert.equal(sel[0].json.body.values[0][7], 'O zíper chega dia 30/10.');
-  const pedidos = rodarAdaptador('montar-pedidos-emails-pcp', {}, { 'Selecionar E-mails': sel.map((i) => i.json) });
+  const pedidos = rodarAdaptador('montar-pedidos-emails-pcp', {}, { 'Selecionar E-mails': sel.map((i) => i.json), 'Gravar Reservas': [{}] });
+  // Reserva gravada só em parte: nada vai ao intérprete.
+  assert.deepEqual(rodarAdaptador('montar-pedidos-emails-pcp', {}, { 'Selecionar E-mails': [sel[0].json, sel[0].json], 'Gravar Reservas': [{}] }), []);
   assert.deepEqual(pedidos.map((p) => p.json.emailId), ['G1']);
   const relida = leitura([['G1', 'T1', '2026-10-27T12:30:00.000Z', 'Pessoa Um', 'RE: Caixa separada - OS:90001', '90001', 'CAIXA_SEPARADA',
     'O zíper chega dia 30/10.', '', '', '', '', '', '', 'ERRO', 1, '', '']]);

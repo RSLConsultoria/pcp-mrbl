@@ -20,7 +20,7 @@ interface Props {
   editavel: boolean;
   executar: Executar;
   onFechar: () => void;
-  sugestoesEmail?: { email: EmailPcp; entendeu: string }[]; // F5c: sugestões pendentes dos e-mails do PCP
+  sugestoesEmail?: { email: EmailPcp; entendeu: string; decidivel: boolean }[]; // F5c: sugestões pendentes dos e-mails do PCP
 }
 
 export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFechar, sugestoesEmail = [] }: Props) {
@@ -52,7 +52,7 @@ export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFecha
       </div>
       <div className="painel__corpo">
         {!editavel && <p className="item__nota" role="note">{MSG_SOMENTE_LEITURA}</p>}
-        <SugestoesEmail sugestoes={sugestoesEmail} executar={executar} somenteLeitura={!editavel} />
+        <SugestoesEmail sugestoes={sugestoesEmail} executar={executar} />
         <dl className="leitura">
           <div><dt>Etapa</dt><dd>{coluna.nome}</dd></div>
           <div><dt>Registro</dt><dd>{caixa.registradoEm ? `${ddmm(caixa.registradoEm)} · ${textoDias(dias)}` : '—'}</dd></div>

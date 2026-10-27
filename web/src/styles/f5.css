@@ -143,6 +143,7 @@
 .sugestao-email__entendeu span { font-weight: 400; color: var(--suave); }
 .sugestao-email__botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .sugestao-email__botoes .botao { height: 32px; padding: 0 14px; font-size: 13px; }
+.sugestao-email__nota { margin: 0; font-size: 12px; color: var(--suave); }
 .selo-email { padding: 2px 8px; border-radius: 999px; background: rgba(47, 85, 212, .1); color: var(--tipo-acabamento); font-size: 11.5px; font-weight: 700; }
 .peca__sugestao { color: var(--tipo-acabamento); font-weight: 600; }
 .peca__selo--email-pendente { background: rgba(47, 85, 212, .1); color: var(--tipo-acabamento); }

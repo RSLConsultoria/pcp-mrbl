@@ -6,7 +6,7 @@ import { caixaEditavelNoApp } from '../regras/edicao';
 import { PainelCaixa } from '../componentes/PainelCaixa';
 import { caixaAtendeBusca } from '../regras/busca';
 import { colunaDaCaixa, COLUNAS, semPosSaida, visivelNoQuadro } from '../regras/colunas';
-import { dealsAlvoEmailPcp, emailsPendentes, emailsPendentesDaCaixa, textoSugestaoEmail } from '../regras/emailsPcp';
+import { dealsAlvoEmailPcp, emailDecidivel, emailsPendentes, emailsPendentesDaCaixa, textoSugestaoEmail } from '../regras/emailsPcp';
 
 // caixaPedida: a faixa dos e-mails do PCP pede para abrir esta caixa (id); a tela avisa quando abriu.
 interface Props { board: Board; q: string; hoje: Date; executar: Executar; caixaPedida?: string | null; onCaixaPedidaAtendida?: () => void }
@@ -53,7 +53,7 @@ export function NoPloomes({ board, q, hoje, executar, caixaPedida, onCaixaPedida
       {sel && (
         <PainelCaixa key={sel.id} caixa={sel} hoje={hoje} usuarios={board.usuarios ?? []}
           editavel={caixaEditavelNoApp(board, sel)} executar={executar} onFechar={fechar}
-          sugestoesEmail={emailsPendentesDaCaixa(board, sel.dealId).map((email) => ({ email, entendeu: textoSugestaoEmail(email, board) }))} />
+          sugestoesEmail={emailsPendentesDaCaixa(board, sel.dealId).map((email) => ({ email, entendeu: textoSugestaoEmail(email, board), decidivel: emailDecidivel(board, email) }))} />
       )}
     </div>
   );
