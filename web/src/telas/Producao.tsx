@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from '
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { useRascunhoDoBoard } from '../hooks/useValorDoBoard';
+import { ConversaWhatsapp } from '../componentes/ConversaWhatsapp';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
 import { TabelaProducao } from './ProducaoTabela';
 import { CargaProducao } from './ProducaoCarga';
@@ -208,19 +209,9 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
         </section>
         <section className="producao-secao">
           <h3>Conversa relacionada</h3>
-          {item.mensagens.length === 0 ? <p className="producao-vazio">Nenhuma mensagem associada.</p>
-            : <ol className="producao-conversa">{item.mensagens.map((m) => <li key={m.id} className={`producao-mensagem producao-mensagem--${m.direcao.toLowerCase()}`}>
-              <span>{m.direcao === 'ENVIADA' ? 'PCP' : m.participanteNome || 'Oficina'} · {dataHora(m.quando)}</span>
-              <p>{m.tipoConteudo === 'NAO_TEXTUAL' ? 'Conteúdo não textual' : m.texto}</p>
-              {m.associacao === 'SEM_ASSOCIACAO' && <small>Mensagem ainda sem associação</small>}
-              {m.associacao === 'IA' && <small className="producao-selo producao-selo--ia" title={m.associacaoMotivo}>ligada pela IA</small>}
-              {m.pergunta && <small className="producao-selo producao-selo--ia">pergunta da IA</small>}
-              {m.associacao === 'IA' && editavel && <TrocarOs mensagemId={m.id} item={item} producao={board.producao ?? []} editaveis={board.dealsProducaoEditaveis} executar={executar} />}
-              {m.statusEnvio === 'PENDENTE' && (m.envioTentativas ? <small>Aguardando nova tentativa ({m.envioTentativas} de 5)</small> : <small>Na fila de envio</small>)}
-              {m.interpretacao === 'ERRO' && <small>Não foi possível interpretar esta mensagem.</small>}
-              {m.statusEnvio === 'ERRO' && <small>Falha no envio.</small>}
-              {m.statusEnvio === 'ERRO' && !m.reenviada && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>}
-            </li>)}</ol>}
+          <ConversaWhatsapp mensagens={item.mensagens}
+            trocarOs={(m) => m.associacao === 'IA' && editavel && <TrocarOs mensagemId={m.id} item={item} producao={board.producao ?? []} editaveis={board.dealsProducaoEditaveis} executar={executar} />}
+            reenviar={(m) => m.statusEnvio === 'ERRO' && !m.reenviada && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>} />
         </section>
         <section className="producao-secao"><h3>Histórico</h3>{item.historico.length === 0 ? <p className="producao-vazio">Sem alterações registradas.</p>
           : <ul className="producao-historico">{item.historico.map((h, i) => <li key={`${h.quando}-${i}`}><span>{dataHora(h.quando)}</span><p>{h.texto}</p></li>)}</ul>}</section>

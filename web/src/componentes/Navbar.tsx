@@ -10,7 +10,7 @@ const GUIAS: { nome: string; icone: NomeIcone; tela?: Tela }[] = [
   { nome: 'Saídas com falta', icone: 'bell', tela: 'saidas' },
   { nome: 'Solicitações de faltas', icone: 'propostas', tela: 'pedidos' },
   { nome: 'Controle de produção', icone: 'funil', tela: 'producao' },
-  { nome: 'Visão das peças', icone: 'doc' }
+  { nome: 'Visão das peças', icone: 'doc', tela: 'peca' }
 ];
 
 interface Props { nome: string; geradoEm?: string; salvando?: boolean; tela: Tela; onTela: (t: Tela) => void; onSair: () => void }

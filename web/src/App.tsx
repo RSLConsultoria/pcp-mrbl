@@ -19,6 +19,7 @@ import { NoPloomes } from './telas/NoPloomes';
 import { Pedidos, type JanelaPedidos } from './telas/Pedidos';
 import { Saidas } from './telas/Saidas';
 import { Producao } from './telas/Producao';
+import { Peca } from './telas/Peca';
 
 // Guia atual guardada no hash (#saidas, #pedidos) para o recarregar voltar nela.
 function useTela(): [Tela, (t: Tela) => void] {
@@ -42,7 +43,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   const avisar = useAviso();
   const { board, executar, salvando } = useAcao({ fila, token: sessao.token, board: doServidor, marco, recarregar, aoExpirar, avisar });
   const [tela, irPara] = useTela();
-  const [buscas, setBuscas] = useState<Record<Tela, string>>({ ploomes: '', saidas: '', pedidos: '', producao: '' });
+  const [buscas, setBuscas] = useState<Record<Tela, string>>({ ploomes: '', saidas: '', pedidos: '', producao: '', peca: '' });
   const [filtro, setFiltro] = useState<FiltroPedidos>('aberto');
   const [janela, setJanela] = useState<JanelaPedidos>(null);
   const [selecao, setSelecao] = useState<Set<string>>(() => new Set());
@@ -61,17 +62,19 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   return (
     <div className="app">
       <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair} />
-      <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
+      {/* A Visão da peça tem a própria busca (OS ou referência no Ploomes). */}
+      {tela !== 'peca' && <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
         {tela === 'pedidos'
           ? <AcoesPedidos filtro={filtro} onFiltro={setFiltro} selecionados={selecionados} podeEditarEtapas={ehAdm}
               onEtapas={() => setJanela('etapas')} onGerar={() => setJanela('gerar')}
               onNovaDemanda={() => setJanela('demanda')} />
           : tela === 'producao' ? <LegendaProducao />
           : <Legenda />}
-      </Subnav>
+      </Subnav>}
       {erroDesde && <FaixaOffline desde={erroDesde} temDados={board !== null} />}
       <main className="app__principal">
         {!board ? <div className="carregando">{carregando ? 'Carregando o quadro…' : 'Não foi possível carregar o quadro.'}</div>
+          : tela === 'peca' ? <Peca board={board} token={sessao.token} hoje={hoje} executar={executar} aoExpirar={aoExpirar} />
           : tela === 'saidas' ? <Saidas board={board} q={q} hoje={hoje} onSelecionarParaPedido={selecionarParaPedido} />
           : tela === 'pedidos' ? <Pedidos board={board} q={q} filtro={filtro} janela={janela} selecao={selecao} executar={executar}
               onJanela={setJanela} onSelecao={setSelecao} />
