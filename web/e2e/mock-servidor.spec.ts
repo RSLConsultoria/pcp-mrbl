@@ -329,3 +329,15 @@ test('Visão da peça no simulador: Ploomes fora na OS 90005 mostra o aviso e o 
   await expect(dossie).toContainText('PECA TESTE E');
   expect(api.acoes).toEqual([]);
 });
+
+test('mock: os 4 cartões dos Insights do dia acendem com os dados fictícios', async ({ page, api }) => {
+  void api;
+  await entrar(page, '');
+  const faixa = page.getByRole('region', { name: 'Insights do dia' });
+  await faixa.getByRole('button', { name: 'Ver insights do dia' }).click();
+  for (const nome of ['Prazo estourando', 'Caixas paradas', 'Oficinas com mais atraso', 'Cobrança sem resposta']) {
+    await expect(faixa.getByRole('group', { name: nome }).locator('li').first()).toBeVisible();
+  }
+  await expect(faixa.getByRole('group', { name: 'Oficinas com mais atraso' })).toContainText('OFICINA LUA');
+  await expect(faixa.getByRole('group', { name: 'Cobrança sem resposta' })).toContainText('90012');
+});

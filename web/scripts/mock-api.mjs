@@ -4,6 +4,7 @@
 // mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
 // ?atraso=4000 na URL da ação. MOCK_FALHA_GRAVACAO=1 (ou ?falha=gravacao) responde toda ação como a
 // API quando uma gravação na planilha falha no meio: 500 com o aviso (a falha vai para a aba ERROS_APP).
+// Insights do dia: OS 90012 vencida na OFICINA LUA, com cobrança sem resposta há 2 dias; as caixas paradas e o prazo da 90003 já acendem os outros cartões.
 // Visão da peça (pcp-peca): OS 90002 com dois cards, registros e troca desfeita; REF-COMUM lista 90002 e 90003; OS 90005 simula o Ploomes fora (502).
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
 // Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
@@ -154,6 +155,13 @@ const estado = {
       ], sugestoes: [], historico: [] },
     // Segunda OS editável da OFICINA SOL (22/10): destino do "Trocar OS".
     { dealId: '700011', os: '90011', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: diaIso(-1), dataCombinada: diaIso(9), leadTime: diaIso(10), pecas: 30, valorCorte: 2700, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE K', referencia: 'REF-11', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    // Insights do dia (F5b): vencida numa oficina de verdade (Oficinas com mais atraso) e com
+    // cobrança enviada há 2 dias sem resposta (Cobrança sem resposta).
+    { dealId: '700012', os: '90012', oficinaId: 'OF-02', oficina: 'OFICINA LUA', inicioCostura: diaIso(-12), dataCombinada: diaIso(-4), leadTime: diaIso(-3), pecas: 60, valorCorte: 5400, cliente: 'CLIENTE ALFA', peca: 'PECA TESTE L', referencia: 'REF-12', versao: 'v1',
+      mensagens: [
+        { id: 'MSG-L-1', quando: new Date(Date.now() - 3 * 86_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Estamos finalizando.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' },
+        { id: 'MSG-L-2', quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE L*, 60 peças, estava prevista. Qual a nova data de entrega?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' }
+      ], sugestoes: [], historico: [] },
     // OS previstas (19/10): ainda nas etapas 12 a 16; a Costura projetada vem do servidor.
     { dealId: '700009', os: '90009', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 200, valorCorte: null, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE I', referencia: 'REF-09', versao: 'v1',
       prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', etapaInicio: diaIso(-1), inicioCosturaPrevisto: diaIso(5), fimCosturaPrevisto: diaIso(12), mensagens: [], sugestoes: [], historico: [] },
