@@ -896,7 +896,9 @@ function pecaMock(q) {
 }
 function anotarPeca(c, usuario) {
   const bruto = typeof c.texto === 'string' ? c.texto.replace(/\r\n?/g, '\n').trim() : '';
-  if (!/^[0-9A-Za-z./-]{1,20}$/.test(String(c.os ?? '').trim())) throw bad('Informe a OS.');
+  // OS com os mesmos caracteres da busca (n8n/src/peca.js), inclusive espaço.
+  const os = String(c.os ?? '').trim().replace(/\s+/g, ' ');
+  if (!os || os.length > 60 || !/^[0-9A-Za-zÀ-ÿ ._/-]+$/.test(os)) throw bad('Informe a OS.');
   if (!/^\d{1,20}$/.test(String(c.dealId ?? ''))) throw bad('Informe o card do Ploomes.');
   if (/\n[ \t]*\n/.test(bruto)) throw bad('A anotação não pode ter linha em branco.');
   const t = bruto.replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ');
@@ -904,7 +906,7 @@ function anotarPeca(c, usuario) {
   if (t.length > 500) throw bad('Anotação com no máximo 500 caracteres.');
   const listas = [estado.dealsEditaveis, estado.dealsProducaoEditaveis];
   if (listas.every((l) => l.length) && !listas.some((l) => l.includes(String(c.dealId)))) throw new Erro(403, 'Edição liberada em breve para esta OS.');
-  const a = { id: `ANOT-${++seqAnotacao}`, quando: agoraIso(), usuario, texto: `${usuario} anotou: "${t}"`, dealId: String(c.dealId), os: String(c.os).trim(), criadoMs: Date.now() };
+  const a = { id: `ANOT-${++seqAnotacao}`, quando: agoraIso(), usuario, texto: `${usuario} anotou: "${t}"`, dealId: String(c.dealId), os, criadoMs: Date.now() };
   estado.anotacoes.unshift(a);
   // Como o servidor (historicoDoDeal): a linha ANOTACAO também aparece no histórico do card.
   const h = { id: a.id, acao: 'ANOTACAO', quando: a.quando, usuario, texto: a.texto, criadoMs: a.criadoMs };
