@@ -14,11 +14,12 @@ var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha d
 // FORNECEDORES e RESPONSAVEIS (opcoes do pedido) precisam existir na planilha:
 // aba que nao existe derruba o batchGet inteiro (400). Aba vazia tudo bem.
 // PREVISAO_MEDIAS (previsao de futuro) tambem precisa existir antes de publicar.
+// EMAILS_PCP (F5c) idem: crie a aba com o cabecalho antes de publicar a API.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
   'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
-  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS'];
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS', 'EMAILS_PCP'];
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
-  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES',
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'EMAILS_PCP',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
 // Entrada do WhatsApp (e o workflow Interpretar WhatsApp): FALTANTES e CAIXAS GANHAS
 // dão as faltas abertas da OS ao contexto do intérprete.

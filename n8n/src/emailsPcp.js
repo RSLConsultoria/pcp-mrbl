@@ -377,3 +377,151 @@ function concluirEmailsPcp(pedidos, respostas, linhas) {
   });
   return operacoes;
 }
+
+// ----- Board -----
+var DIAS_DECIDIDOS_EMAIL_PCP = 7;
+var MAX_BOARD_EMAIL_PCP = 300;
+
+function itensDaLinhaEmailPcp(v) {
+  return texto(v).split(';').map(function (x) { return texto(x); }).filter(function (x) { return x; });
+}
+
+// PENDENTE e as decididas nos últimos 7 dias, mais novas primeiro (linha física repetida: vale a primeira).
+function emailsPcpBoard(linhas, agora) {
+  var limite = (typeof agora === 'number' ? agora : Date.parse(texto(agora))) - DIAS_DECIDIDOS_EMAIL_PCP * 86400000;
+  return linhasUnicasEmailPcp(linhas).filter(function (l) {
+    var s = semAcento(l.status);
+    if (s === 'PENDENTE') return true;
+    if (s !== 'ACEITA' && s !== 'IGNORADA') return false;
+    var d = Date.parse(texto(l.decidido_em));
+    return isFinite(d) && d >= limite;
+  }).sort(function (a, b) {
+    var x = texto(a.quando);
+    var y = texto(b.quando);
+    return x < y ? 1 : x > y ? -1 : 0;
+  }).slice(0, MAX_BOARD_EMAIL_PCP).map(function (l) {
+    var c = numero(l.confianca);
+    return {
+      id: texto(l.id), quando: texto(l.quando), de: texto(l.de_nome), assunto: texto(l.assunto), os: texto(l.os),
+      modelo: texto(l.modelo), texto: texto(l.texto), tipo: semAcento(l.tipo), valor: texto(l.valor), itens: itensDaLinhaEmailPcp(l.itens),
+      resumo: texto(l.resumo), evidencia: texto(l.evidencia), confianca: c === null || isNaN(c) ? null : c, status: semAcento(l.status)
+    };
+  });
+}
+
+// ----- Decisão (ação decidir_email_pcp) -----
+// Caixas da sugestão (igual em web/src/regras/emailsPcp.ts): os deals dos itens citados;
+// sem itens, as caixas da OS com item em aberto; sem nenhuma em aberto, todas da OS.
+function dealsAlvoEmailPcp(email, caixas) {
+  var os = texto(email && email.os);
+  var itens = (email && email.itens) || [];
+  var daOs = (caixas || []).filter(function (c) { return c && os && texto(c.os) === os; });
+  var deals = [];
+  var juntar = function (c) { if (deals.indexOf(texto(c.dealId)) < 0) deals.push(texto(c.dealId)); };
+  if (itens.length) {
+    daOs.forEach(function (c) {
+      if ((c.itens || []).some(function (i) { return itens.indexOf(texto(i.id)) >= 0; })) juntar(c);
+    });
+    return deals;
+  }
+  daOs.forEach(function (c) { if ((c.itens || []).some(itemEstaAberto)) juntar(c); });
+  if (!deals.length) daOs.forEach(juntar);
+  return deals;
+}
+
+var TIPO_DECIDIR_EMAIL_PCP = 'decidir_email_pcp';
+var ACAO_EMAIL_PCP_ACEITA = 'EMAIL_PCP_ACEITA';
+
+function validarDecisaoEmailPcp(corpo) {
+  corpo = corpo || {};
+  var id = texto(corpo.id);
+  if (!id || id.length > 200) return erroAcao(400, 'Sugestão não informada.');
+  var decisao = semAcento(corpo.decisao);
+  if (decisao !== 'ACEITAR' && decisao !== 'IGNORAR') return erroAcao(400, 'Decisão inválida.');
+  return { ok: true, acao: { id: id, decisao: decisao } };
+}
+
+function textoAceiteEmailPcp(usuario, sufixo) {
+  return usuario + ' aceitou sugestão do e-mail: ' + sufixo;
+}
+
+// corpo: { id, decisao: 'ACEITAR' | 'IGNORAR', versao? } (versao é aceita e não conferida: a
+// idempotência vem do status da linha). linhas: { faltantes, ganhas, caixasPcp, emailsPcp }.
+// ctx: { usuario, email, agora (ISO), gerarId, editavel(dealId), todosEditaveis }.
+function decidirEmailPcp(corpo, linhas, ctx) {
+  var v = validarDecisaoEmailPcp(corpo);
+  if (!v.ok) return v;
+  linhas = linhas || {};
+  var linha = linhasUnicasEmailPcp(linhas.emailsPcp).filter(function (l) { return texto(l.id) === v.acao.id; })[0];
+  if (!linha) return erroAcao(404, 'Sugestão não encontrada.');
+  var aceitar = v.acao.decisao === 'ACEITAR';
+  var destino = aceitar ? 'ACEITA' : 'IGNORADA';
+  var status = semAcento(linha.status);
+  if (status === destino) return { ok: true, idempotente: true, versao: ctx.agora, operacoes: [], historicos: [] };
+  if (status !== 'PENDENTE') return erroAcao(409, 'Esta sugestão já foi decidida.');
+
+  var os = texto(linha.os);
+  var itens = itensDaLinhaEmailPcp(linha.itens);
+  var caixas = montarCaixas(linhas.faltantes || [], linhas.ganhas || [], new Date(ctx.agora), { caixasPcp: linhas.caixasPcp }).caixas;
+  var alvos = dealsAlvoEmailPcp({ os: os, itens: itens }, caixas);
+  if (!alvos.length) {
+    if (aceitar && itens.length) return erroAcao(409, 'Os itens da sugestão não estão mais na caixa. Atualize a página.');
+    if (aceitar) return erroAcao(404, 'Nenhuma caixa desta OS no app.');
+    if (!ctx.todosEditaveis) return erroAcao(403, ERRO_NAO_EDITAVEL);
+  }
+  if (alvos.some(function (d) { return !ctx.editavel(d); })) return erroAcao(403, ERRO_NAO_EDITAVEL);
+
+  var operacoes = [];
+  var historicos = [];
+  var registrar = function (dealId, sufixo) {
+    historicos.push(historicoProducao(ctx, dealId, os, ACAO_EMAIL_PCP_ACEITA, textoAceiteEmailPcp(ctx.usuario, sufixo)));
+  };
+  var ctxAcao = { usuario: ctx.usuario, email: ctx.email, agora: ctx.agora, os: os, gerarId: ctx.gerarId };
+  var tipo = semAcento(linha.tipo);
+  var faltantesDaOs = (linhas.faltantes || []).filter(function (l) { return l && texto(l.os) === os; });
+  var linhaDoItem = function (id) { return faltantesDaOs.filter(function (l) { return texto(l.id) === id; })[0] || null; };
+
+  if (aceitar && tipo === 'PREVISAO') {
+    var data = texto(linha.valor);
+    if (!dataValida(data)) return erroAcao(400, 'Data da sugestão inválida.');
+    if (itens.length) {
+      var porDeal = {};
+      var ordem = [];
+      itens.forEach(function (id) {
+        var row = linhaDoItem(id);
+        if (!row) return;
+        var r = aplicarAcao({ tipo: 'previsao_item', dealId: texto(row.deal_id), itemId: id, valor: data, versao: texto(row.atualizado_em_app) },
+          row, Object.assign({ nomeItem: texto(row.descricao_item), un: texto(row.unidade) }, ctxAcao));
+        if (!r.ok) return;
+        operacoes = operacoes.concat(r.operacoes);
+        var d = texto(row.deal_id);
+        if (!porDeal[d]) { porDeal[d] = []; ordem.push(d); }
+        porDeal[d].push(texto(row.descricao_item));
+      });
+      if (!ordem.length) return erroAcao(409, 'Os itens da sugestão não estão mais na caixa. Atualize a página.');
+      ordem.forEach(function (d) { registrar(d, 'previsão ' + dataCurta(data) + ' para ' + porDeal[d].join(', ')); });
+    } else {
+      alvos.forEach(function (d) {
+        var cpRow = (linhas.caixasPcp || []).filter(function (c) { return c && texto(c.deal_id) === d; })[0] || null;
+        var responsavelAtual = '';
+        faltantesDaOs.forEach(function (l) { if (!responsavelAtual && texto(l.deal_id) === d) responsavelAtual = texto(l.responsavel); });
+        var r = aplicarAcao({ tipo: 'previsao_caixa', dealId: d, valor: data, versao: cpRow ? texto(cpRow.atualizado_em) : '' },
+          cpRow, Object.assign({ responsavelAtual: responsavelAtual }, ctxAcao));
+        if (r.ok) operacoes = operacoes.concat(r.operacoes);
+        registrar(d, 'previsão ' + dataCurta(data) + ' para a caixa');
+      });
+    }
+  } else if (aceitar) {
+    var sufixo = texto(linha.resumo) || 'resposta registrada';
+    if (tipo === 'CHAMADO') sufixo = 'chamado #' + texto(linha.valor);
+    if (tipo === 'QUANTIDADE') {
+      var rowQtd = itens.length ? linhaDoItem(itens[0]) : null;
+      var qtd = numero(linha.valor);
+      sufixo = 'quantidade conferida de ' + (rowQtd ? texto(rowQtd.descricao_item) : 'item') + ': ' +
+        (qtd === null || isNaN(qtd) ? texto(linha.valor) : formatarQtd(qtd)) + (rowQtd && texto(rowQtd.unidade) ? ' ' + texto(rowQtd.unidade) : '');
+    }
+    alvos.forEach(function (d) { registrar(d, sufixo); });
+  }
+  operacoes.push({ aba: ABA_EMAILS_PCP, operacao: 'update', chave: 'id', linha: { id: texto(linha.id), status: destino, decidido_em: ctx.agora, decidido_por: ctx.usuario } });
+  return { ok: true, idempotente: false, versao: ctx.agora, operacoes: operacoes, historicos: historicos, emailId: texto(linha.id) };
+}

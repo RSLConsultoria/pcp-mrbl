@@ -149,7 +149,9 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     // A PREVISAO_MEDIAS ainda vazia (o workflow diário não rodou): a tela avisa "Previsão sem histórico".
     previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias)),
     // Visão da peça (F5a): anotações de qualquer card, cruzadas pela OS no site.
-    anotacoes: anotacoesDoBoard(extras.historico)
+    anotacoes: anotacoesDoBoard(extras.historico),
+    // E-mails do PCP (F5c): sugestões pendentes e as decididas nos últimos 7 dias.
+    emailsPcp: emailsPcpBoard(extras.emailsPcp, agora)
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
@@ -171,6 +173,10 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
     return vProd.ok ? { ok: true } : { ok: false, status: vProd.status, body: { erro: vProd.erro } };
   }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && corpo.tipo === TIPO_DECIDIR_EMAIL_PCP) {
+    var vEmail = validarDecisaoEmailPcp(corpo);
+    return vEmail.ok ? { ok: true } : { ok: false, status: vEmail.status, body: { erro: vEmail.erro } };
+  }
   if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) {
     var vAnot = validarAcaoAnotacao(corpo, estado);
     return vAnot.ok ? { ok: true } : { ok: false, status: vAnot.status, body: { erro: vAnot.erro } };
@@ -258,6 +264,22 @@ function processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId) {
   return saida;
 }
 
+// E-mails do PCP (F5c): aceitar ou ignorar a sugestão. A allowlist (DEALS_EDITAVEIS) vale
+// para todas as caixas da sugestão; o PATCH no Ploomes não existe (só o registro compilado).
+function processarAcaoEmailPcp(estado, sessao, corpo, linhas, agora, gerarId) {
+  var r = decidirEmailPcp(corpo, linhas || {}, {
+    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId,
+    editavel: dealEditavel, todosEditaveis: !DEALS_EDITAVEIS.length
+  });
+  if (!r.ok) return { status: r.status, body: { erro: r.erro } };
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, { emailId: texto(corpo && corpo.id) });
+  saida.ploomes = null;
+  saida.interpretar = null;
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
+}
+
 function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var v = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
@@ -309,6 +331,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
   }
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
   if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) return processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId);
+  if (corpo && corpo.tipo === TIPO_DECIDIR_EMAIL_PCP) return processarAcaoEmailPcp(estado, sessao, corpo, linhas, agora, gerarId);
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);
   }

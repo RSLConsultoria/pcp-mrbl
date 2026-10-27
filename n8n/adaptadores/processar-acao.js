@@ -15,7 +15,8 @@ var linhas = {
   producao: abas['PRODUCAO'],
   oficinas: abas['OFICINAS'],
   whatsappMensagens: abas['WHATSAPP_MENSAGENS'],
-  whatsappSugestoes: abas['WHATSAPP_SUGESTOES']
+  whatsappSugestoes: abas['WHATSAPP_SUGESTOES'],
+  emailsPcp: abas['EMAILS_PCP']
 };
 var gerarId = function () { return require('crypto').randomUUID(); };
 return [{ json: processarAcao(estado, cabecalho, corpo, linhas, Date.now(), gerarId) }];

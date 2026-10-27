@@ -52,6 +52,7 @@ const LEITURA_ACAO = {
     vr('OFICINAS', [['ploomes_id', 'nome', 'grupo_jid', 'grupo_nome', 'ativo', 'atualizado_em']]),
     vr('WHATSAPP_MENSAGENS', [['id', 'evolution_id', 'deal_id', 'oficina_id']]),
     vr('WHATSAPP_SUGESTOES', [['id', 'mensagem_id', 'deal_id', 'os', 'tipo', 'valor', 'resumo', 'status', 'versao']]),
+    vr('EMAILS_PCP', [['id', 'thread_id', 'quando', 'de_nome', 'assunto', 'os', 'modelo', 'texto', 'tipo', 'valor', 'itens', 'resumo', 'evidencia', 'confianca', 'status', 'tentativas', 'decidido_em', 'decidido_por']]),
     { range: "'HISTORICO_APP'!A1:M1", majorDimension: 'ROWS', values: [CAB_HIST] }
   ]
 };
@@ -209,7 +210,8 @@ test('Montar Board: monta o board a partir do lote (mesmas linhas do node Sheets
       { range: "'RESPONSAVEIS'!A1:Z1000", majorDimension: 'ROWS' }, // aba vazia: a API nao manda values
       vr('PRODUCAO', [['deal_id', 'em_costura']]), vr('OFICINAS', [['ploomes_id', 'nome']]),
       vr('WHATSAPP_MENSAGENS', [['id']]), vr('WHATSAPP_SUGESTOES', [['id']]),
-      vr('PREVISAO_MEDIAS', [['tipo', 'etapa', 'faixa', 'oficina_id', 'valor', 'amostra', 'calculado_em', 'chave']])
+      vr('PREVISAO_MEDIAS', [['tipo', 'etapa', 'faixa', 'oficina_id', 'valor', 'amostra', 'calculado_em', 'chave']]),
+      vr('EMAILS_PCP', [['id', 'os', 'status', 'decidido_em']])
     ]
   };
   const [saida] = rodarNode('montar-board', { $: cifrao({ 'Ler Planilha': [leitura] }), $getWorkflowStaticData: () => s.estado });
