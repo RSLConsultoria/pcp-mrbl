@@ -287,8 +287,9 @@ test('pcp-api.sdk.js: nodes do lote, sem Filtrar/Tem/Gravar por aba', () => {
 
 test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi; retry 3x / 3 s so onde repetir nao duplica', () => {
   const sdk = lerSdk('pcp-api.sdk.js');
-  // Os GET do Ploomes da Visão da peça têm teste próprio (workflow-peca.test.js).
-  const PECA_PLOOMES = ['Buscar Cards da Peça', 'Buscar Cards por Referência', 'Buscar Registros da Peça', 'Buscar Trocas de Etapa', 'Buscar Etapas do Funil'];
+  // Os GET do Ploomes da Visão da peça e o Groq do Assistente têm teste próprio
+  // (workflow-peca.test.js e workflow-assistente.test.js).
+  const PECA_PLOOMES = ['Buscar Cards da Peça', 'Buscar Cards por Referência', 'Buscar Registros da Peça', 'Buscar Trocas de Etapa', 'Buscar Etapas do Funil', 'Chamar Groq (Assistente)'];
   const google = blocos(sdk).filter((b) => /type: 'n8n-nodes-base\.(httpRequest|googleSheets)'/.test(b.txt) && !PECA_PLOOMES.includes(b.nome));
   assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Alteracao Ploomes', 'Gravar Anexo', 'Gravar Erro', 'Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
   const COM_RETRY = ['Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS'];

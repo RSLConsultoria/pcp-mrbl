@@ -41,7 +41,7 @@ test('nomes de node unicos, webhooks com webhookId e credencial nas leituras em 
   const nomes = w.nodes.map((n) => n.name);
   assert.strictEqual(new Set(nomes).size, nomes.length);
   const hooks = w.nodes.filter((n) => n.type === 'n8n-nodes-base.webhook');
-  assert.deepStrictEqual(hooks.map((n) => n.parameters.path).sort(), ['pcp-acao-h', 'pcp-board-h', 'pcp-login-h', 'pcp-peca-h']);
+  assert.deepStrictEqual(hooks.map((n) => n.parameters.path).sort(), ['pcp-acao-h', 'pcp-assistente-h', 'pcp-board-h', 'pcp-login-h', 'pcp-peca-h']);
   assert.ok(hooks.every((n) => /^[0-9a-f-]{36}$/.test(n.webhookId)));
   const ler = w.nodes.find((n) => n.name === 'Ler Planilha');
   assert.strictEqual(ler.credentials.googleApi.id, '72hvCT9jkADwOOo1');
