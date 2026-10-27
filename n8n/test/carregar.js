@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const ARQUIVOS = ['util.js', 'auth.js', 'montarCaixas.js', 'acoes.js', 'pedidos.js', 'previsao.js', 'producao.js', 'whatsapp.js', 'associador.js', 'envioPloomes.js', 'planilhaLote.js', 'peca.js', 'api.js'];
+const ARQUIVOS = ['util.js', 'auth.js', 'montarCaixas.js', 'acoes.js', 'pedidos.js', 'previsao.js', 'producao.js', 'whatsapp.js', 'associador.js', 'envioPloomes.js', 'planilhaLote.js', 'peca.js', 'emailsPcp.js', 'api.js'];
 
 // Por padrao os testes rodam com DEALS_EDITAVEIS vazio (todos editaveis);
 // { real: true } mantem o valor de producao.
