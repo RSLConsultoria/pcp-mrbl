@@ -103,6 +103,8 @@ export function mensagemSucesso(
       return acao.capacidade === null ? 'Capacidade da oficina removida' : `Capacidade da oficina: ${acao.capacidade.toLocaleString('pt-BR')} peças por semana`;
     case 'anotar_peca':
       return 'Anotação registrada';
+    case 'decidir_email_pcp':
+      return acao.decisao === 'ACEITAR' ? 'Sugestão do e-mail aceita' : 'Sugestão do e-mail ignorada';
   }
 }
 
@@ -165,6 +167,7 @@ export function chaveDaAcao(acao: Acao): string {
     return `producao:${acao.dealId}`;
   }
   if (acao.tipo === 'anotar_peca') return `anotacao:${acao.os}`;
+  if (acao.tipo === 'decidir_email_pcp') return `email:${acao.id}`;
   if ('itemId' in acao) return `item:${acao.dealId}:${acao.itemId}`;
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
   if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';

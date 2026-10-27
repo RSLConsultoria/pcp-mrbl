@@ -1,6 +1,7 @@
 import type { Acao, Board, Caixa, Item, ItemPedido, Pedido, RespostaAcao } from '../api/tipos';
 import { arredondar3, chaveDaAcao } from './acoes';
 import { caixaDaDemanda } from './demanda';
+import { dealsAlvoEmailPcp } from './emailsPcp';
 import { itemAberto } from './colunas';
 import { PREFIXO_NOVO, etapaDaBaixa, etapaFinal } from './pedidos';
 import { etapasOrdenadas, motivoMoverPedido, partesPorPrevisao, podeDividir, proximoIdParte, raizDoPedido } from './pedidosQuadro';
@@ -235,6 +236,21 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
           texto: `Você anotou: "${normalizarAnotacao(acao.texto)}"`, ploomes: 'PENDENTE' as const, dealId: acao.dealId, os: acao.os
         }, ...(board.anotacoes ?? [])]
       };
+    case 'decidir_email_pcp': {
+      // Como o servidor (n8n/src/emailsPcp.js, decidirEmailPcp): só a pendente muda; PREVISAO
+      // aceita grava a data nos itens citados ou, sem itens, nas caixas da sugestão.
+      const e = board.emailsPcp?.find((x) => x.id === acao.id);
+      if (!e || e.status !== 'PENDENTE') return board;
+      const status = acao.decisao === 'ACEITAR' ? 'ACEITA' as const : 'IGNORADA' as const;
+      let b: Board = { ...board, emailsPcp: board.emailsPcp!.map((x) => (x.id === acao.id ? { ...x, status } : x)) };
+      if (acao.decisao !== 'ACEITAR' || e.tipo !== 'PREVISAO' || !/^\d{4}-\d{2}-\d{2}$/.test(e.valor)) return b;
+      if (e.itens.length) {
+        for (const c of board.caixas) for (const i of c.itens) if (e.itens.includes(i.id)) b = comItem(b, c.dealId, i.id, (x) => ({ ...x, previsao: e.valor }));
+        return b;
+      }
+      for (const d of dealsAlvoEmailPcp(e, board.caixas)) b = comCaixa(b, d, (c) => ({ ...c, previsao: e.valor }));
+      return b;
+    }
     case 'salvar_etapas':
       return {
         ...board,
@@ -345,7 +361,7 @@ export const LIMITE_CONFIRMADA_MS = 120_000;
 export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
   if ('itemId' in acao) return board.caixas.find((c) => c.dealId === acao.dealId)?.itens.find((i) => i.id === acao.itemId)?.versao;
   if ('pedidoId' in acao) return pedidoDe(board, acao.pedidoId)?.versao;
-  if (acao.tipo === 'anotar_peca') return undefined; // anotação não tem versão: só acrescenta
+  if (acao.tipo === 'anotar_peca' || acao.tipo === 'decidir_email_pcp') return undefined; // sem versão: só acrescenta ou marca
   if ('dealId' in acao) {
     if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp' || acao.tipo === 'associar_whatsapp' || acao.tipo === 'enviar_whatsapp' || acao.tipo === 'reenviar_whatsapp') {
       return board.producao?.find((p) => p.dealId === acao.dealId)?.versao;
@@ -378,6 +394,8 @@ export function acaoNoBoard(board: Board, p: Pendente): boolean {
       return !!r.mensagemId && !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === r.mensagemId);
     case 'anotar_peca':
       return !!r.anotacaoId && !!board.anotacoes?.some((x) => x.id === r.anotacaoId);
+    case 'decidir_email_pcp':
+      return board.emailsPcp?.find((x) => x.id === a.id)?.status === (a.decisao === 'ACEITAR' ? 'ACEITA' : 'IGNORADA');
     case 'gerar_pedido':
       return temPedido(board, r.pedidoId);
     case 'dividir_pedido':

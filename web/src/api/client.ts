@@ -67,6 +67,7 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
   if (typeof r.mensagemId === 'string') resp.mensagemId = r.mensagemId;
   // Sem o anotacaoId a fila não reconhece a anotação gravada no board.
   if (typeof r.anotacaoId === 'string') resp.anotacaoId = r.anotacaoId;
+  if (typeof r.emailId === 'string') resp.emailId = r.emailId;
   return resp;
 }
 

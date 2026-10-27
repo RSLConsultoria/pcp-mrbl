@@ -187,6 +187,7 @@ export interface Board {
   dealsProducaoEditaveis?: string[];
   previsaoSemHistorico?: boolean; // PREVISAO_MEDIAS ainda vazia: a previsão usa o fallback (duração 1, fila 0)
   anotacoes?: AnotacaoPeca[]; // anotações da Visão da peça (qualquer card), cruzadas pela OS
+  emailsPcp?: EmailPcp[]; // F5c: sugestões dos e-mails do PCP (pendentes e decididas nos últimos 7 dias)
 }
 
 // Corpo do POST /pcp-acao.
@@ -225,7 +226,9 @@ export type Acao =
   // Só ADM. capacidade null = sem capacidade (a carga aparece sem cor de alerta).
   | { tipo: 'alterar_capacidade_oficina'; oficinaId: string; capacidade: number | null }
   // Visão da peça (F5a): única escrita; texto até 500 caracteres, sem linha em branco.
-  | { tipo: 'anotar_peca'; os: string; dealId: string; texto: string };
+  | { tipo: 'anotar_peca'; os: string; dealId: string; texto: string }
+  // E-mails do PCP (F5c): aceitar grava (previsão ou anotação no histórico); ignorar só marca.
+  | { tipo: 'decidir_email_pcp'; id: string; decisao: 'ACEITAR' | 'IGNORAR' };
 
 export interface DadosPedido {
   origem: OrigemPedido;
@@ -244,6 +247,7 @@ export interface RespostaAcao {
   itemIds?: string[]; // nova_demanda: ids dos itens gravados na FALTANTES
   mensagemId?: string; // enviar_whatsapp/reenviar_whatsapp: id da linha enfileirada
   anotacaoId?: string; // anotar_peca: id da linha no HISTORICO_APP
+  emailId?: string; // decidir_email_pcp: id do e-mail decidido
 }
 
 export interface Sessao {
@@ -300,4 +304,24 @@ export interface AnotacaoPeca {
   ploomes: StatusPloomes;
   dealId: string;
   os: string;
+}
+
+// F5c · sugestão de um e-mail do PCP (aba EMAILS_PCP, n8n/src/emailsPcp.js).
+export type TipoEmailPcp = 'PREVISAO' | 'QUANTIDADE' | 'CHAMADO' | 'OBSERVACAO';
+
+export interface EmailPcp {
+  id: string;
+  quando: string; // ISO
+  de: string; // nome do remetente (nunca o endereço)
+  assunto: string;
+  os: string;
+  modelo: string; // CAIXA_SEPARADA | POS_CORTE | RECEBIDOS_SP | OUTRO
+  texto: string; // resposta sem histórico citado e sem assinatura
+  tipo: TipoEmailPcp;
+  valor: string; // PREVISAO: 'aaaa-mm-dd'; QUANTIDADE: número; CHAMADO: número
+  itens: string[]; // ids dos itens das caixas da OS
+  resumo: string;
+  evidencia: string;
+  confianca: number | null;
+  status: 'PENDENTE' | 'ACEITA' | 'IGNORADA';
 }
