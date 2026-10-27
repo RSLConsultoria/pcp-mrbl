@@ -11,7 +11,7 @@ Data: 27/10/2026. Terceira parte da F5. Aprovado pelo dono em 27/10. Base: `desi
 Transformar essas respostas em **sugestões** no app, que só gravam depois do **Aceitar**.
 
 ## 3. Leitura (workflow novo "PCP MRBL - Ler E-mails do PCP", a cada 10 min)
-- Gmail (credencial OAuth2 só leitura, criada pelo dono no n8n) com a busca `from:(@<domínio da confecção>) subject:"OS:" -from:noreply@ploomes.com newer_than:7d`. O domínio fica numa constante de configuração (não no código público: vem de uma variável do workflow/credencial ou da aba de configuração; no repositório só um marcador).
+- Gmail pela API (HTTP Request: `GET users/me/messages?q=<busca>&maxResults=50` e, para cada id, `GET users/me/messages/{id}?format=full`), com credencial **OAuth2 genérica** (`oAuth2Api`) de escopo só `https://www.googleapis.com/auth/gmail.readonly`, criada pelo dono no n8n: o "só leitura" é garantido pelo Google, não só pelo workflow (decisão do dono, 27/10; a credencial Gmail OAuth2 nativa vem com escopos de envio e modificação). Busca `from:(@<domínio da confecção>) subject:"OS:" -from:noreply@ploomes.com newer_than:7d`. O domínio fica numa constante de configuração (não no código público: vem de uma variável do workflow/credencial ou da aba de configuração; no repositório só um marcador).
 - Cada mensagem é tratada uma vez: id do Gmail na aba nova **EMAILS_PCP** (append; nunca apaga nem ordena).
 - **OS** = número depois de "OS:" no assunto. Sem OS → ignora.
 - **Limpeza** (função pura): corta o histórico citado (linhas a partir de "De:", "From:", "Em … escreveu:", "-----Original", "Enviado:") e a assinatura (a partir de "Atenciosamente", "Att", "--"); máximo 1500 caracteres.
@@ -41,12 +41,12 @@ Transformar essas respostas em **sugestões** no app, que só gravam depois do *
 - Ação nova `decidir_email_pcp` `{ id, decisao: 'ACEITAR'|'IGNORAR', versao? }`. Allowlist: `DEALS_EDITAVEIS` (cards de caixa) até o go-live. Tela otimista.
 
 ## 5. Segurança e privacidade
-- Credencial do Gmail só leitura; nunca envia, apaga ou marca e-mail.
+- Credencial do Gmail só leitura (OAuth2 genérica, escopo `gmail.readonly`); nunca envia, apaga ou marca e-mail. O workflow só faz GET em `messages` e `messages/{id}`.
 - Repositório público: domínio, nomes e e-mails reais nunca entram no código nem nos testes (dados fictícios; domínio vem de configuração).
 - O intérprete recebe o texto limpo sem assinatura.
 
 ## 6. Testes
 - Puros: OS do assunto, modelo, limpeza (histórico/assinatura em PT e EN), validação do intérprete (evidência, itens, confiança), decisão (previsão em itens, anotação).
-- Workflows: estrutura e ligações; nada de nó que envie e-mail.
+- Workflows: estrutura e ligações; nenhum nó nativo do Gmail nem de envio; o Gmail só por GET na `gmail.googleapis.com`, nos caminhos `messages` e `messages/{id}`, com a credencial `oAuth2Api`.
 - Simulador com e-mails fictícios; e2e do bloco no painel, faixa, aceitar/ignorar e aba na Visão da peça.
 - Homologação: depois que o dono criar a credencial do Gmail no n8n.

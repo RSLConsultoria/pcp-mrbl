@@ -13,7 +13,8 @@ const lote = carregar();
 const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('./ids-subworkflows');
 Object.keys(IDS_SUBWORKFLOWS).forEach((k) => { if (!idSubworkflowValido(IDS_SUBWORKFLOWS[k])) throw new Error('Id de subworkflow inválido: ' + k); });
 // Id da credencial Groq (marcador CONFIGURAR_* ou id real): scripts/credenciais.js.
-const { ID_CREDENCIAL_GROQ, idCredencialValido } = require('./credenciais');
+const { ID_CREDENCIAL_GROQ, ID_CREDENCIAL_GMAIL, idCredencialValido } = require('./credenciais');
+if (!idCredencialValido(ID_CREDENCIAL_GMAIL)) throw new Error('Id de credencial inválido: GMAIL');
 if (!idCredencialValido(ID_CREDENCIAL_GROQ)) throw new Error('Id de credencial inválido: GROQ');
 const CRED_GROQ = "credentials: { groqApi: { id: '" + ID_CREDENCIAL_GROQ + "', name: 'WhatsPCPGroq' } },";
 const DOC = lote.PLANILHA_ID;
@@ -1060,17 +1061,40 @@ export default workflow('pcp-mrbl-medias-previsao', 'PCP MRBL - Médias de Previ
 `;
 
 // F5c · E-mails do PCP (27/10). "Ler E-mails do PCP": a cada 10 min lê o Gmail do PCP
-// (credencial OAuth2 SÓ LEITURA; o nó só faz getAll: nunca envia, apaga ou marca e-mail),
+// pela Gmail API (HTTP Request só GET em messages e messages/{id}, com credencial OAuth2
+// genérica de escopo gmail.readonly: o "só leitura" é garantido pelo Google),
 // reserva cada e-mail novo na aba EMAILS_PCP (ERRO com 1 tentativa), chama o intérprete
 // (subworkflow Groq) e grava as interpretações válidas como PENDENTE. O domínio da
 // confecção fica no node Config (marcador CONFIGURAR_DOMINIO no repositório público).
 const MARCADOR_DOMINIO = 'CONFIGURAR_DOMINIO';
-const CRED_GMAIL = "credentials: { gmailOAuth2: { id: 'CONFIGURAR_CREDENCIAL_GMAIL', name: 'Gmail PCP (só leitura)' } },";
+const CRED_GMAIL = "credentials: { oAuth2Api: { id: '" + ID_CREDENCIAL_GMAIL + "', name: 'Gmail PCP (só leitura)' } },";
+const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me/messages';
+// GET na Gmail API com a credencial OAuth2 genérica (oAuth2Api, escopo gmail.readonly); nunca manda corpo.
+const httpGmail = (varName, nome, urlCodigo, consulta, extra, saida) => `const ${varName} = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.2,
+  config: {
+    name: '${nome}',
+    ${extra}${RETRY}parameters: {
+      method: 'GET',
+      url: ${urlCodigo},
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'oAuth2Api',
+      sendQuery: true,
+      queryParameters: { parameters: ${consulta} },
+      options: { timeout: 30000 }
+    },
+    ${CRED_GMAIL}
+    position: ${posicao(nome)}
+  },
+  output: [${saida}]
+});`;
 const POS_EMAILS = {};
-[['A cada 10 minutos', 0, 0], ['Config', 1, 0], ['Montar Busca', 2, 0], ['Buscar E-mails', 3, 0], ['Ler Planilha E-mails', 4, 0],
-  ['Selecionar E-mails', 5, 0], ['Gravar Reservas', 6, 0], ['Montar Pedidos de Interpretação', 7, 0], ['Interpretar E-mail', 8, 0],
-  ['Reler E-mails', 9, 0], ['Finalizar E-mails', 10, 0], ['Gravar Interpretações', 11, 0],
-  ['Montar Erro E-mails', 8, 260], ['Registrar Erro E-mails', 9, 260]]
+[['A cada 10 minutos', 0, 0], ['Config', 1, 0], ['Montar Busca', 2, 0], ['Buscar E-mails', 3, 0], ['Separar E-mails', 4, 0],
+  ['Tem E-mails?', 5, 0], ['Ler E-mail', 6, -160], ['Ler Planilha E-mails', 7, 0],
+  ['Selecionar E-mails', 8, 0], ['Gravar Reservas', 9, 0], ['Montar Pedidos de Interpretação', 10, 0], ['Interpretar E-mail', 11, 0],
+  ['Reler E-mails', 12, 0], ['Finalizar E-mails', 13, 0], ['Gravar Interpretações', 14, 0],
+  ['Montar Erro E-mails', 11, 260], ['Registrar Erro E-mails', 12, 260]]
   .forEach(([n, c, y]) => { POS_EMAILS[n] = [c * DX, y]; });
 posAtual = POS_EMAILS;
 RETRY = RETRY_API;
@@ -1101,27 +1125,17 @@ const lerEmailsPcp = IMPORT + [
   output: [{ dominio: '${MARCADOR_DOMINIO}' }]
 });`,
   code('montarBuscaEmails', 'Montar Busca', 'montar-busca-emails-pcp'),
-  // Gmail SÓ LEITURA: getAll com a busca; simple: false traz o texto inteiro do e-mail.
-  `const buscarEmails = node({
-  type: 'n8n-nodes-base.gmail',
-  version: 2.1,
-  config: {
-    name: 'Buscar E-mails',
-    ${ERRO_SAIDA}${unico}alwaysOutputData: true,
-    parameters: {
-      resource: 'message',
-      operation: 'getAll',
-      returnAll: false,
-      limit: 50,
-      simple: false,
-      filters: { q: expr('{{ $json.q }}') },
-      options: { downloadAttachments: false }
-    },
-    ${CRED_GMAIL}
-    position: ${posicao('Buscar E-mails')}
-  },
-  output: [{ id: 'G-ficticio', threadId: 'T-ficticio', subject: 'RE: Caixa separada - OS:90001', text: 'Chega dia 30/10.' }]
-});`,
+  // Gmail SÓ LEITURA pela API: lista os ids da busca (users.messages.list) e lê cada um
+  // inteiro (users.messages.get, format=full). Só GET; nada envia, apaga ou marca e-mail.
+  httpGmail('buscarEmails', 'Buscar E-mails', JSON.stringify(GMAIL_API),
+    "[{ name: 'q', value: expr('{{ $json.q }}') }, { name: 'maxResults', value: '50' }]", ERRO_SAIDA + unico,
+    "{ messages: [{ id: 'G-ficticio', threadId: 'T-ficticio' }], resultSizeEstimate: 1 }"),
+  // Lista vazia (sem "messages"): um item semEmails e o Tem E-mails? segue direto para a planilha.
+  code('separarEmails', 'Separar E-mails', 'separar-emails-pcp'),
+  'const temEmails = ' + condicao('Tem E-mails?', '{{ $json.semEmails === true }}', 'boolean', 'false', "''")
+    .replace("operation: 'false' }", "operation: 'false', singleValue: true }") + ';',
+  httpGmail('lerEmail', 'Ler E-mail', 'expr(' + JSON.stringify(GMAIL_API + '/{{ $json.id }}') + ')', "[{ name: 'format', value: 'full' }]", ERRO_SAIDA,
+    "{ id: 'G-ficticio', threadId: 'T-ficticio', payload: { mimeType: 'text/plain', headers: [{ name: 'Subject', value: 'RE: Caixa separada - OS:90001' }], body: { data: 'Q2hlZ2EgZGlhIDMwLzEwLg' } } }"),
   httpGoogle('lerPlanilhaEmails', 'Ler Planilha E-mails', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_EMAILS_PCP)), false, ERRO_SAIDA + unico),
   codeComErro('selecionarEmails', 'Selecionar E-mails', 'selecionar-emails-pcp', "{ method: 'POST' }"),
   // Reserva: append das novas (repetir duplicaria a linha) e update das tentativas. Sem retry;
@@ -1149,7 +1163,11 @@ export default workflow('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PC
   .to(configEmails)
   .to(montarBuscaEmails)
   .to(buscarEmails.onError(montarErroEmails.to(registrarErroEmails)))
-  .add(buscarEmails).to(lerPlanilhaEmails.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(buscarEmails).to(separarEmails)
+  .to(temEmails
+    .onTrue(lerEmail.onError(montarErroEmails.to(registrarErroEmails)))
+    .onFalse(lerPlanilhaEmails))
+  .add(lerEmail).to(lerPlanilhaEmails.onError(montarErroEmails.to(registrarErroEmails)))
   .add(lerPlanilhaEmails).to(selecionarEmails.onError(montarErroEmails.to(registrarErroEmails)))
   .add(selecionarEmails).to(gravarReservas.onError(montarErroEmails.to(registrarErroEmails)))
   .add(gravarReservas).to(montarPedidosEmails.onError(montarErroEmails.to(registrarErroEmails)))

@@ -1,9 +1,16 @@
 // ===== adaptador: Selecionar E-mails (workflow Ler E-mails do PCP) =====
-// E-mails novos do Gmail e linhas ERRO com menos de 3 tentativas. Saída: as requisições
+// E-mails novos do Gmail (mensagens do Ler E-mail; sem e-mail na busca ele não roda) e
+// linhas ERRO com menos de 3 tentativas. Saída: as requisições
 // da reserva (append das novas como ERRO/1 tentativa e update das tentativas), uma por
 // item, com os pedidos ao intérprete no primeiro. Nada a interpretar: nenhum item.
 var planilhaEmails = planilhaDoLote($('Ler Planilha E-mails').first().json, LEITURAS_EMAILS_PCP);
-var rodadaEmails = selecionarEmailsPcp($('Buscar E-mails').all(), {
+var mensagensEmails = [];
+try {
+  mensagensEmails = $('Ler E-mail').all();
+} catch (e) {
+  mensagensEmails = [];
+}
+var rodadaEmails = selecionarEmailsPcp(mensagensEmails, {
   emails: planilhaEmails.linhas['EMAILS_PCP'],
   faltantes: planilhaEmails.linhas['FALTANTES'],
   ganhas: planilhaEmails.linhas['CAIXAS GANHAS']

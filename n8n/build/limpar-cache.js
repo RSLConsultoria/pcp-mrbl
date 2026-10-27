@@ -5417,38 +5417,127 @@ function textoDoHtmlEmailPcp(html) {
     .replace(/&#39;/gi, "'").replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim();
 }
 
-// Remetente "Nome <a@b>" (texto) ou { value: [{ name, address }] } (nó Gmail).
+// Remetente "Nome <a@b>" (cabeçalho From) -> { nome, endereco }.
 function remetenteEmailPcp(de) {
-  if (de && typeof de === 'object') {
-    var v = (de.value || [])[0];
-    if (v) return { nome: texto(v.name), endereco: texto(v.address).toLowerCase() };
-    de = de.text;
-  }
   var t = texto(de);
   var m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(t);
   if (m) return { nome: texto(m[1]), endereco: texto(m[2]).toLowerCase() };
   return { nome: '', endereco: t.toLowerCase() };
 }
 
-function quandoEmailPcp(json) {
-  var d = Date.parse(texto(json.date));
-  if (!isFinite(d)) d = Number(texto(json.internalDate));
+// ----- Formato bruto da Gmail API (users.messages.get?format=full) -----
+
+// Ids da resposta de users.messages.list. Sem "messages" (nenhum e-mail): lista vazia.
+// Só ids com letras, números, traço e sublinhado: o id vai no caminho da URL.
+function idsListaGmailPcp(resposta) {
+  var ids = [];
+  ((resposta && resposta.messages) || []).forEach(function (m) {
+    var id = texto(m && m.id);
+    if (/^[A-Za-z0-9_-]+$/.test(id) && ids.indexOf(id) < 0) ids.push(id);
+  });
+  return ids;
+}
+
+// Valor do cabeçalho (nome sem diferença de caixa) numa lista [{ name, value }].
+function cabecalhoGmailPcp(headers, nome) {
+  var alvo = nome.toLowerCase();
+  var h = (headers || []).filter(function (x) { return x && texto(x.name).toLowerCase() === alvo; })[0];
+  return h ? texto(h.value) : '';
+}
+
+var ALFABETO_BASE64_EMAIL_PCP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+// base64url (ou base64) -> bytes.
+function bytesBase64EmailPcp(dado) {
+  var s = texto(dado).replace(/-/g, '+').replace(/_/g, '/').replace(/[^A-Za-z0-9+/]/g, '');
+  var bytes = [];
+  var buf = 0;
+  var bits = 0;
+  for (var i = 0; i < s.length; i++) {
+    buf = (buf << 6) | ALFABETO_BASE64_EMAIL_PCP.indexOf(s.charAt(i));
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buf >> bits) & 255);
+    }
+  }
+  return bytes;
+}
+
+// Bytes UTF-8 -> texto (sequência inválida vira U+FFFD).
+function textoUtf8EmailPcp(bytes) {
+  var out = '';
+  for (var i = 0; i < bytes.length;) {
+    var b = bytes[i];
+    var n = b < 0x80 ? 0 : b >= 0xF0 && b < 0xF8 ? 3 : b >= 0xE0 ? 2 : b >= 0xC0 ? 1 : -1;
+    if (n < 0) { out += '\uFFFD'; i++; continue; }
+    if (n === 0) { out += String.fromCharCode(b); i++; continue; }
+    var cp = b & (0x3F >> n);
+    var ok = true;
+    for (var k = 1; k <= n; k++) {
+      var c = bytes[i + k];
+      if (c === undefined || (c & 0xC0) !== 0x80) { ok = false; break; }
+      cp = (cp << 6) | (c & 0x3F);
+    }
+    if (!ok) { out += '\uFFFD'; i++; continue; }
+    if (cp > 0xFFFF) {
+      cp -= 0x10000;
+      out += String.fromCharCode(0xD800 + (cp >> 10), 0xDC00 + (cp & 0x3FF));
+    } else {
+      out += String.fromCharCode(cp);
+    }
+    i += n + 1;
+  }
+  return out;
+}
+
+// Corpo de uma parte: base64url decodificado no charset do Content-Type (latin1 ou UTF-8).
+function corpoParteGmailPcp(parte) {
+  var bytes = bytesBase64EmailPcp(parte && parte.body && parte.body.data);
+  if (!bytes.length) return '';
+  var tipo = cabecalhoGmailPcp(parte.headers, 'Content-Type').toLowerCase();
+  if (/charset\s*=\s*"?(iso-8859-1|latin1|windows-1252|us-ascii)/.test(tipo)) {
+    return bytes.map(function (b) { return String.fromCharCode(b); }).join('');
+  }
+  return textoUtf8EmailPcp(bytes);
+}
+
+// Primeira parte (busca em profundidade em payload.parts) com o mimeType pedido e corpo.
+function parteGmailPcp(parte, mime) {
+  if (!parte) return '';
+  if (texto(parte.mimeType).toLowerCase() === mime && !texto(parte.filename)) {
+    var t = corpoParteGmailPcp(parte);
+    if (t.trim()) return t;
+  }
+  var partes = parte.parts || [];
+  for (var i = 0; i < partes.length; i++) {
+    var achou = parteGmailPcp(partes[i], mime);
+    if (achou) return achou;
+  }
+  return '';
+}
+
+function quandoEmailPcp(data, internalDate) {
+  var d = Date.parse(texto(data));
+  if (!isFinite(d)) d = Number(texto(internalDate));
   return isFinite(d) && d > 0 ? new Date(d).toISOString() : '';
 }
 
-// Item do nó Gmail (getAll com simple: false) -> e-mail normalizado.
+// Mensagem da Gmail API (format=full) -> e-mail normalizado. Corpo: o text/plain; se só
+// houver text/html, o texto sem as tags; sem corpo, o snippet.
 function emailDoGmailPcp(json) {
   json = json || {};
-  var de = remetenteEmailPcp(json.from);
-  var cab = json.headers || {};
+  var payload = json.payload || {};
+  var headers = payload.headers || [];
+  var de = remetenteEmailPcp(cabecalhoGmailPcp(headers, 'From'));
   return {
     id: texto(json.id),
     threadId: texto(json.threadId),
-    quando: quandoEmailPcp(json),
+    quando: quandoEmailPcp(cabecalhoGmailPcp(headers, 'Date'), json.internalDate),
     deNome: de.nome,
     deEndereco: de.endereco,
-    assunto: texto(json.subject) || texto(cab.subject),
-    texto: typeof json.text === 'string' && json.text.trim() ? json.text : textoDoHtmlEmailPcp(json.html) || texto(json.snippet)
+    assunto: cabecalhoGmailPcp(headers, 'Subject'),
+    texto: parteGmailPcp(payload, 'text/plain') || textoDoHtmlEmailPcp(parteGmailPcp(payload, 'text/html')) || texto(json.snippet)
   };
 }
 
@@ -5475,7 +5564,7 @@ function linhaNovaEmailPcp(e) {
   };
 }
 
-// gmail: itens do nó Gmail ([{ json }]); dados: { emails (aba EMAILS_PCP), faltantes, ganhas }.
+// gmail: itens do nó Ler E-mail ([{ json }], mensagens da Gmail API); dados: { emails (aba EMAILS_PCP), faltantes, ganhas }.
 // -> { operacoes: [append das novas, update das novas tentativas], pedidos: [entrada do intérprete] }.
 function selecionarEmailsPcp(gmail, dados, dominio, agora) {
   dados = dados || {};

@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const { converter } = require('../scripts/sdk-para-json');
 const { ARQUIVOS, carregar, limpo } = require('./carregar');
 const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('../scripts/ids-subworkflows');
-const { ID_CREDENCIAL_GROQ } = require('../scripts/credenciais');
+const { ID_CREDENCIAL_GROQ, ID_CREDENCIAL_GMAIL, idCredencialValido } = require('../scripts/credenciais');
 
 const RAIZ = path.join(__dirname, '..');
 const ler = () => converter(path.join(RAIZ, 'workflows', 'pcp-emails.sdk.js'));
@@ -34,8 +34,13 @@ const leitura = (linhasEmail) => ({ valueRanges: [
     ['F-1', '700001', '90001', 'PEDIDO', 'COSTURA', 'ZIPER METAL 18CM', 'UN', 40, 0, 'ABERTO']]),
   vr('CAIXAS GANHAS', [['deal_id', 'os']])
 ] });
-const gmail = { id: 'G1', threadId: 'T1', subject: 'RE: Caixa separada - OS:90001', date: '2026-10-27T12:30:00.000Z',
-  from: { value: [{ address: 'pessoa.um@' + DOMINIO, name: 'Pessoa Um' }] }, text: 'O zíper chega dia 30/10.\nAtenciosamente,\nPessoa Um' };
+const b64 = (t) => Buffer.from(t, 'utf8').toString('base64url');
+// Mensagem fictícia no formato bruto da Gmail API (users.messages.get?format=full).
+const gmail = { id: 'G1', threadId: 'T1', internalDate: '1793100000000', payload: { mimeType: 'multipart/alternative',
+  headers: [{ name: 'From', value: 'Pessoa Um <pessoa.um@' + DOMINIO + '>' }, { name: 'Subject', value: 'RE: Caixa separada - OS:90001' },
+    { name: 'Date', value: 'Tue, 27 Oct 2026 09:30:00 -0300' }],
+  parts: [{ mimeType: 'text/plain', body: { data: b64('O zíper chega dia 30/10.\nAtenciosamente,\nPessoa Um') } }] } };
+const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me/messages';
 
 test('Ler E-mails do PCP: agendado a cada 10 min, Config com o marcador do domínio e a ordem dos nós', () => {
   const w = ler();
@@ -44,10 +49,12 @@ test('Ler E-mails do PCP: agendado a cada 10 min, Config com o marcador do domí
   assert.equal(w.settings.saveDataErrorExecution, 'none');
   assert.deepEqual(no(w, 'A cada 10 minutos').parameters.rule.interval, [{ field: 'minutes', minutesInterval: 10 }]);
   assert.deepEqual(no(w, 'Config').parameters.assignments.assignments, [{ id: 'dominio', name: 'dominio', value: 'CONFIGURAR_DOMINIO', type: 'string' }]);
-  const cadeia = ['A cada 10 minutos', 'Config', 'Montar Busca', 'Buscar E-mails', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas',
+  const cadeia = ['A cada 10 minutos', 'Config', 'Montar Busca', 'Buscar E-mails', 'Separar E-mails', 'Tem E-mails?', 'Ler E-mail', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas',
     'Montar Pedidos de Interpretação', 'Interpretar E-mail', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações'];
   for (let i = 0; i < cadeia.length - 1; i++) assert.deepEqual(destinos(w, cadeia[i]), [cadeia[i + 1]], cadeia[i]);
-  for (const n of ['Buscar E-mails', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas', 'Montar Pedidos de Interpretação', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações']) {
+  // Sem e-mail novo (falso) segue direto para a planilha: as linhas ERRO ainda voltam ao intérprete.
+  assert.deepEqual(destinos(w, 'Tem E-mails?', 1), ['Ler Planilha E-mails']);
+  for (const n of ['Buscar E-mails', 'Ler E-mail', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas', 'Montar Pedidos de Interpretação', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações']) {
     assert.deepEqual(destinos(w, n, 1), ['Montar Erro E-mails'], n);
   }
   assert.deepEqual(destinos(w, 'Montar Erro E-mails'), ['Registrar Erro E-mails']);
@@ -58,26 +65,43 @@ test('Ler E-mails do PCP: agendado a cada 10 min, Config com o marcador do domí
   assert.equal(no(w, 'Gravar Interpretações').retryOnFail, true);
 });
 
-test('Ler E-mails do PCP: Gmail só leitura (getAll) e nenhum nó que envie, apague ou marque e-mail', () => {
+test('Ler E-mails do PCP: Gmail só leitura pela API (GET em messages e messages/{id}) com OAuth2 genérica gmail.readonly', () => {
   const w = ler();
-  const gmailNos = w.nodes.filter((n) => /gmail/i.test(n.type));
-  assert.equal(gmailNos.length, 1);
-  const g = gmailNos[0];
-  assert.equal(g.name, 'Buscar E-mails');
-  assert.equal(g.parameters.resource, 'message');
-  assert.equal(g.parameters.operation, 'getAll');
-  assert.equal(g.parameters.simple, false);
-  assert.equal(g.parameters.filters.q, '={{ $json.q }}');
-  assert.deepEqual(Object.keys(g.credentials), ['gmailOAuth2']);
-  assert.equal(g.credentials.gmailOAuth2.id, 'CONFIGURAR_CREDENCIAL_GMAIL');
+  // Nenhum nó nativo do Gmail (a credencial gmailOAuth2 vem com escopos de envio e modificação).
+  assert.deepEqual(w.nodes.filter((n) => /gmail/i.test(n.type)), []);
   const tipos = w.nodes.map((n) => n.type);
-  for (const proibido of ['emailSend', 'gmailTrigger', 'microsoftOutlook', 'emailReadImap', 'evolution']) {
+  for (const proibido of ['emailSend', 'gmail', 'microsoftOutlook', 'emailReadImap', 'evolution']) {
     assert.ok(!tipos.some((t) => t.toLowerCase().includes(proibido.toLowerCase())), proibido);
   }
-  // Só HTTP para a planilha (Google), nada que fale com o Gmail pela API.
-  for (const n of w.nodes.filter((x) => x.type === 'n8n-nodes-base.httpRequest')) {
-    assert.equal(n.parameters.nodeCredentialType, 'googleApi', n.name);
-    assert.ok(!/gmail\.googleapis|\/messages\/.*\/(send|trash|modify)/.test(JSON.stringify(n.parameters)), n.name);
+  const buscar = no(w, 'Buscar E-mails');
+  const lerUm = no(w, 'Ler E-mail');
+  for (const g of [buscar, lerUm]) {
+    assert.equal(g.type, 'n8n-nodes-base.httpRequest', g.name);
+    assert.equal(g.parameters.method, 'GET', g.name);
+    assert.equal(g.parameters.authentication, 'predefinedCredentialType', g.name);
+    assert.equal(g.parameters.nodeCredentialType, 'oAuth2Api', g.name);
+    assert.deepEqual(Object.keys(g.credentials), ['oAuth2Api'], g.name);
+    assert.equal(g.credentials.oAuth2Api.id, ID_CREDENCIAL_GMAIL, g.name);
+    assert.ok(!g.parameters.sendBody, g.name);
+  }
+  assert.ok(idCredencialValido(ID_CREDENCIAL_GMAIL));
+  assert.equal(buscar.parameters.url, GMAIL_API);
+  assert.equal(buscar.executeOnce, true);
+  assert.deepEqual(buscar.parameters.queryParameters.parameters, [{ name: 'q', value: '={{ $json.q }}' }, { name: 'maxResults', value: '50' }]);
+  assert.equal(lerUm.parameters.url, '=' + GMAIL_API + '/{{ $json.id }}');
+  assert.deepEqual(lerUm.parameters.queryParameters.parameters, [{ name: 'format', value: 'full' }]);
+  // Tudo que fala com o Gmail: só GET, só nos caminhos messages e messages/{id}; o resto é a planilha.
+  const http = w.nodes.filter((n) => n.type === 'n8n-nodes-base.httpRequest');
+  for (const n of http) {
+    const p = JSON.stringify(n.parameters);
+    if (/gmail/i.test(p)) {
+      assert.ok([buscar.name, lerUm.name].includes(n.name), n.name);
+      assert.ok([GMAIL_API, '=' + GMAIL_API + '/{{ $json.id }}'].includes(n.parameters.url), n.name);
+      assert.ok(!/send|trash|modify|delete|batch|import|insert|drafts|labels|watch|stop/i.test(n.parameters.url), n.name);
+    } else {
+      assert.equal(n.parameters.nodeCredentialType, 'googleApi', n.name);
+      assert.match(n.parameters.url, /sheets\.googleapis\.com|\$json\.url/, n.name);
+    }
   }
   const disparo = no(w, 'Interpretar E-mail');
   assert.equal(disparo.type, 'n8n-nodes-base.executeWorkflow');
@@ -85,6 +109,12 @@ test('Ler E-mails do PCP: Gmail só leitura (getAll) e nenhum nó que envie, apa
   assert.ok(idSubworkflowValido(disparo.parameters.workflowId.value));
   assert.equal(disparo.parameters.mode, 'each');
   assert.equal(disparo.onError, 'continueRegularOutput');
+});
+
+test('Separar E-mails: um item por id; lista vazia segue sem e-mail', () => {
+  assert.deepEqual(rodarAdaptador('separar-emails-pcp', { messages: [{ id: 'G1', threadId: 'T1' }, { id: 'G2', threadId: 'T1' }] }),
+    [{ json: { id: 'G1' } }, { json: { id: 'G2' } }]);
+  assert.deepEqual(rodarAdaptador('separar-emails-pcp', { resultSizeEstimate: 0 }), [{ json: { semEmails: true } }]);
 });
 
 test('repositório público: nenhum endereço de e-mail além do remetente do Ploomes nos workflows gerados', () => {
@@ -123,7 +153,7 @@ test('Montar Busca: sem domínio configurado o workflow para', () => {
 
 test('Selecionar → Montar Pedidos → Finalizar: reserva, pedido ao intérprete e PENDENTE', () => {
   const sel = rodarAdaptador('selecionar-emails-pcp', {}, {
-    Config: [{ dominio: DOMINIO }], 'Buscar E-mails': [gmail, {}], 'Ler Planilha E-mails': [leitura()]
+    Config: [{ dominio: DOMINIO }], 'Ler E-mail': [gmail, {}], 'Ler Planilha E-mails': [leitura()]
   });
   assert.equal(sel.length, 1);
   assert.match(sel[0].json.url, /EMAILS_PCP'!A2:append/);
@@ -150,8 +180,14 @@ test('Selecionar → Montar Pedidos → Finalizar: reserva, pedido ao intérpret
   }), []);
   // Nada novo: nenhum item (o workflow para sem gravar).
   assert.deepEqual(rodarAdaptador('selecionar-emails-pcp', {}, {
-    Config: [{ dominio: DOMINIO }], 'Buscar E-mails': [{}], 'Ler Planilha E-mails': [leitura()]
+    Config: [{ dominio: DOMINIO }], 'Ler E-mail': [{}], 'Ler Planilha E-mails': [leitura()]
   }), []);
+  // Nenhum e-mail na busca: o Ler E-mail nem roda (o $() dele falha) e a rodada segue com as linhas ERRO.
+  const comErro = leitura([['G0', 'T0', '2026-10-27T10:00:00.000Z', 'Pessoa Dois', 'RE: Caixa separada - OS:90001', '90001', 'CAIXA_SEPARADA',
+    'Chamado aberto #1234567', '', '', '', '', '', '', 'ERRO', 1, '', '']]);
+  const semBusca = rodarAdaptador('selecionar-emails-pcp', {}, { Config: [{ dominio: DOMINIO }], 'Ler Planilha E-mails': [comErro] });
+  assert.equal(semBusca.length, 1);
+  assert.deepEqual(semBusca[0].json.pedidos.map((p) => p.emailId), ['G0']);
 });
 
 test('Montar Erro E-mails: linha no ERROS_APP sem texto nem remetente', () => {

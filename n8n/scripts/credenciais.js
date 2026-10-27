@@ -5,6 +5,9 @@
 // - GROQ: a credencial "WhatsPCPGroq" (groqApi), usada pelo intérprete dos e-mails (F5c)
 //   e pelo Assistente na API (F5d).
 const ID_CREDENCIAL_GROQ = 'njh1FO6l7bYhWhIL';
+// - GMAIL: a credencial "Gmail PCP (só leitura)", OAuth2 genérica (oAuth2Api) com o escopo
+//   https://www.googleapis.com/auth/gmail.readonly, usada pelo Ler E-mails do PCP (F5c).
+const ID_CREDENCIAL_GMAIL = 'CONFIGURAR_CREDENCIAL_GMAIL';
 
 function idCredencialValido(id) {
   if (typeof id !== 'string') return false;
@@ -12,4 +15,4 @@ function idCredencialValido(id) {
   return /^[A-Za-z0-9_-]{4,64}$/.test(id) && id.indexOf('CONFIGURAR_') !== 0;
 }
 
-module.exports = { ID_CREDENCIAL_GROQ, idCredencialValido };
+module.exports = { ID_CREDENCIAL_GROQ, ID_CREDENCIAL_GMAIL, idCredencialValido };

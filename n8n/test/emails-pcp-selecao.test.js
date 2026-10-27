@@ -8,12 +8,28 @@ const ctx = carregar();
 const DOMINIO = 'confeccao-exemplo.com.br';
 const AGORA = '2026-10-27T13:00:00.000Z';
 
-const gmail = (o) => Object.assign({
-  id: 'G1', threadId: 'T1', subject: 'RE: Caixa separada - OS:90001 | Ref: REF-01 | Desc: PECA TESTE',
-  date: '2026-10-27T12:30:00.000Z',
-  from: { value: [{ address: 'pessoa.um@' + DOMINIO, name: 'Pessoa Um' }], text: 'Pessoa Um <pessoa.um@' + DOMINIO + '>' },
-  text: 'O zíper chega dia 30/10.\n\nAtenciosamente,\nPessoa Um\n\nEm seg., 27 de out. de 2026, PCP <pcp@' + DOMINIO + '> escreveu:\n> Caixa separada'
-}, o);
+// Mensagem no formato bruto da Gmail API (users.messages.get?format=full): cabeçalhos em
+// payload.headers e o corpo em base64url dentro de payload.parts (recursivo).
+const b64 = (t) => Buffer.from(t, 'utf8').toString('base64url');
+const TEXTO_G1 = 'O zíper chega dia 30/10.\n\nAtenciosamente,\nPessoa Um\n\nEm seg., 27 de out. de 2026, PCP <pcp@' + DOMINIO + '> escreveu:\n> Caixa separada';
+const msgApi = (c) => ({
+  id: c.id, threadId: c.threadId, internalDate: c.internalDate || '1793100000000', snippet: c.snippet || '',
+  payload: {
+    mimeType: 'multipart/alternative',
+    headers: [{ name: 'From', value: c.from }, { name: 'Subject', value: c.subject }, { name: 'Date', value: c.date }],
+    parts: [
+      { mimeType: 'text/plain', headers: [{ name: 'Content-Type', value: 'text/plain; charset="UTF-8"' }], body: { size: 1, data: b64(c.text) } },
+      { mimeType: 'text/html', body: { size: 1, data: b64('<div>' + c.text + '</div>') } }
+    ]
+  }
+});
+const gmail = (o) => {
+  const c = Object.assign({
+    id: 'G1', threadId: 'T1', subject: 'RE: Caixa separada - OS:90001 | Ref: REF-01 | Desc: PECA TESTE',
+    date: 'Tue, 27 Oct 2026 09:30:00 -0300', from: 'Pessoa Um <pessoa.um@' + DOMINIO + '>', text: TEXTO_G1
+  }, o);
+  return msgApi(c);
+};
 const FALTANTES = [
   { id: 'F-1', deal_id: '700001', os: '90001', ciclo: 'PEDIDO', secao: 'COSTURA', descricao_item: 'ZIPER METAL 18CM', cor: 'PRETO', unidade: 'UN',
     qtd_necessaria: 40, qtd_separada: 0, qtd_falta: 40, qtd_baixada: 0, status: 'ABERTO', registrado_em: '2026-10-20' }
@@ -24,17 +40,56 @@ const linhaEmail = (o) => Object.assign({
   status: 'ERRO', tentativas: 1, decidido_em: '', decidido_por: ''
 }, o);
 
-test('e-mail do nó Gmail (simple: false): id, conversa, data, nome do remetente e texto', () => {
+test('e-mail da Gmail API (format=full): id, conversa, data, nome do remetente e texto text/plain', () => {
   assert.deepEqual(limpo(ctx.emailDoGmailPcp(gmail())), {
     id: 'G1', threadId: 'T1', quando: '2026-10-27T12:30:00.000Z', deNome: 'Pessoa Um', deEndereco: 'pessoa.um@' + DOMINIO,
-    assunto: 'RE: Caixa separada - OS:90001 | Ref: REF-01 | Desc: PECA TESTE', texto: gmail().text
+    assunto: 'RE: Caixa separada - OS:90001 | Ref: REF-01 | Desc: PECA TESTE', texto: TEXTO_G1
   });
-  const texto = limpo(ctx.emailDoGmailPcp({ id: 'G2', from: 'Pessoa Tres <p3@' + DOMINIO + '>', headers: { subject: 'OS:90002' }, html: '<p>Ok&nbsp;conferido</p><br>linha', internalDate: '1793106000000' }));
-  assert.equal(texto.deNome, 'Pessoa Tres');
-  assert.equal(texto.deEndereco, 'p3@' + DOMINIO);
-  assert.equal(texto.assunto, 'OS:90002');
-  assert.equal(texto.texto, 'Ok conferido\nlinha');
-  assert.equal(texto.quando, new Date(1793106000000).toISOString());
+});
+
+test('e-mail da Gmail API: text/plain aninhado em multipart/mixed, cabeçalhos em qualquer caixa e sem Date', () => {
+  const m = { id: 'G3', threadId: 'T3', internalDate: '1793106000000', payload: {
+    mimeType: 'multipart/mixed',
+    headers: [{ name: 'FROM', value: '"Pessoa Quatro" <P4@' + DOMINIO.toUpperCase() + '>' }, { name: 'subject', value: 'OS:90003' }],
+    parts: [
+      { mimeType: 'multipart/alternative', parts: [
+        { mimeType: 'text/html', body: { data: b64('<p>não use</p>') } },
+        { mimeType: 'text/plain', body: { data: b64('Conferido: 12 peças ✓') } }
+      ] },
+      { mimeType: 'application/pdf', filename: 'anexo.pdf', body: { attachmentId: 'ANEXO-1', size: 10 } }
+    ] } };
+  const e = limpo(ctx.emailDoGmailPcp(m));
+  assert.equal(e.deNome, 'Pessoa Quatro');
+  assert.equal(e.deEndereco, 'p4@' + DOMINIO);
+  assert.equal(e.assunto, 'OS:90003');
+  assert.equal(e.texto, 'Conferido: 12 peças ✓');
+  assert.equal(e.quando, new Date(1793106000000).toISOString());
+});
+
+test('e-mail da Gmail API: só text/html vira texto sem tags; corpo direto no payload; charset latin1', () => {
+  const soHtml = limpo(ctx.emailDoGmailPcp({ id: 'G2', threadId: 'T2', payload: { mimeType: 'multipart/alternative',
+    headers: [{ name: 'From', value: 'Pessoa Tres <p3@' + DOMINIO + '>' }, { name: 'Subject', value: 'OS:90002' }],
+    parts: [{ mimeType: 'text/html', body: { data: b64('<p>Ok&nbsp;conferido</p><br>linha') } }] } }));
+  assert.equal(soHtml.texto, 'Ok conferido\nlinha');
+  const direto = limpo(ctx.emailDoGmailPcp({ id: 'G4', payload: { mimeType: 'text/plain', headers: [{ name: 'Subject', value: 'OS:1' }],
+    body: { data: b64('Chega amanhã') } } }));
+  assert.equal(direto.texto, 'Chega amanhã');
+  const latin1 = Buffer.from('Previsão 30/10', 'latin1').toString('base64url');
+  const l1 = limpo(ctx.emailDoGmailPcp({ id: 'G5', payload: { mimeType: 'text/plain',
+    headers: [{ name: 'Content-Type', value: 'text/plain; charset=ISO-8859-1' }], body: { data: latin1 } } }));
+  assert.equal(l1.texto, 'Previsão 30/10');
+  // Sem corpo: cai no snippet; nada: vazio, sem quebrar.
+  assert.equal(limpo(ctx.emailDoGmailPcp({ id: 'G6', snippet: 'resumo', payload: { mimeType: 'text/plain', body: { size: 0 } } })).texto, 'resumo');
+  assert.deepEqual(limpo(ctx.emailDoGmailPcp(null)), { id: '', threadId: '', quando: '', deNome: '', deEndereco: '', assunto: '', texto: '' });
+});
+
+test('lista da Gmail API: ids das mensagens; sem "messages" (nenhum e-mail) devolve lista vazia', () => {
+  assert.deepEqual(limpo(ctx.idsListaGmailPcp({ messages: [{ id: 'A1', threadId: 'T' }, { id: 'A2', threadId: 'T' }, { id: 'A1' }, {}], resultSizeEstimate: 3 })), ['A1', 'A2']);
+  assert.deepEqual(limpo(ctx.idsListaGmailPcp({ resultSizeEstimate: 0 })), []);
+  assert.deepEqual(limpo(ctx.idsListaGmailPcp({})), []);
+  assert.deepEqual(limpo(ctx.idsListaGmailPcp(null)), []);
+  // Id só com letras, números, traço e sublinhado (vai no caminho da URL).
+  assert.deepEqual(limpo(ctx.idsListaGmailPcp({ messages: [{ id: '../send' }, { id: 'abc?x=1' }, { id: '18f0a1B2' }] })), ['18f0a1B2']);
 });
 
 test('busca do Gmail: só com o domínio configurado', () => {
@@ -62,12 +117,12 @@ test('rodada: e-mail novo entra como ERRO com 1 tentativa e vai ao intérprete c
 test('rodada: ignora sem OS, de fora do domínio, do Ploomes, já gravado, repetido e sem texto', () => {
   const itens = [
     gmail({ id: 'A', subject: 'RE: reunião' }),
-    gmail({ id: 'B', from: { value: [{ address: 'alguem@outro-exemplo.com.br', name: 'X' }] } }),
-    gmail({ id: 'C', from: { value: [{ address: 'noreply@ploomes.com', name: 'Ploomes' }] } }),
+    gmail({ id: 'B', from: 'X <alguem@outro-exemplo.com.br>' }),
+    gmail({ id: 'C', from: 'Ploomes <noreply@ploomes.com>' }),
     gmail({ id: 'G0' }),
     gmail({ id: 'D' }), gmail({ id: 'D' }),
     gmail({ id: 'E', text: 'Em seg., 27 de out. de 2026, PCP escreveu:\n> só citação' }),
-    gmail({ id: 'F', from: { value: [{ address: 'p@sub.' + DOMINIO + '.falso.com', name: 'X' }] } }),
+    gmail({ id: 'F', from: 'X <p@sub.' + DOMINIO + '.falso.com>' }),
     {}
   ].map((json) => ({ json }));
   const r = limpo(ctx.selecionarEmailsPcp(itens, { emails: [linhaEmail({ status: 'PENDENTE' })], faltantes: [], ganhas: [] }, DOMINIO, AGORA));

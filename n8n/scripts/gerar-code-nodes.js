@@ -50,6 +50,7 @@ const NODES = {
   'preparar-referencia-peca': 'Preparar Referência da Peça',
   'montar-peca': 'Montar Peça',
   'montar-busca-emails-pcp': 'Montar Busca',
+  'separar-emails-pcp': 'Separar E-mails',
   'selecionar-emails-pcp': 'Selecionar E-mails',
   'montar-pedidos-emails-pcp': 'Montar Pedidos de Interpretação',
   'finalizar-emails-pcp': 'Finalizar E-mails',

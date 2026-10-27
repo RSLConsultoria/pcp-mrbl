@@ -7,7 +7,7 @@ Spec: `docs/superpowers/specs/2026-10-27-f5c-emails-do-pcp-design.md` (fonte da 
 - Repositório público: domínio, nomes e e-mails só fictícios (`@confeccao-exemplo.com.br`, OS 9000x, deals 7000x). O domínio real nunca entra no código: o node **Config** do workflow tem o marcador `CONFIGURAR_DOMINIO`.
 - `n8n/src` e `n8n/adaptadores`: ES5 puro (sem arrow, template string, `const`/`let`, import/export). Depois de mexer: `cd n8n && npm test && npm run build` e commitar `n8n/build`, `n8n/workflows/*.sdk.js`, `n8n/workflows/json/*.json`.
 - Planilha: só append e update por `id` na aba nova **EMAILS_PCP** (nunca apaga nem ordena); colunas exatamente: `id | thread_id | quando | de_nome | assunto | os | modelo | texto | tipo | valor | itens | resumo | evidencia | confianca | status | tentativas | decidido_em | decidido_por`. A gravação nunca cria coluna nessa aba (como as abas da F4).
-- Gmail: credencial OAuth2 só leitura, nó Gmail só `getAll`; nenhum nó envia, apaga ou marca e-mail. Credenciais com marcadores (`CONFIGURAR_CREDENCIAL_GMAIL`, `CONFIGURAR_CREDENCIAL_GROQ`) e o subworkflow com `CONFIGURAR_INTERPRETE_EMAIL`.
+- Gmail: credencial OAuth2 só leitura, nó Gmail só `getAll`; nenhum nó envia, apaga ou marca e-mail. **Atualizado (27/10, decisão do dono):** o nó Gmail nativo foi trocado por HTTP Request na Gmail API (só GET em `messages` e `messages/{id}?format=full`) com credencial OAuth2 genérica (`oAuth2Api`) de escopo `gmail.readonly`; `emailDoGmailPcp` lê o formato bruto da API. Credenciais com marcadores (`CONFIGURAR_CREDENCIAL_GMAIL`, `CONFIGURAR_CREDENCIAL_GROQ`) e o subworkflow com `CONFIGURAR_INTERPRETE_EMAIL`.
 - Nada é publicado no n8n, na planilha, no Ploomes ou no Gmail nesta entrega.
 
 ## Decisões de desenho (além do spec)
