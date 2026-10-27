@@ -1,4 +1,4 @@
-import type { Acao, Board, RespostaAcao, Sessao } from './tipos';
+import type { Acao, Board, RespostaAcao, RespostaPeca, Sessao } from './tipos';
 
 export class ApiError extends Error {
   status: number;
@@ -57,5 +57,22 @@ export async function enviarAcao(token: string, acao: Acao): Promise<RespostaAca
   if (Array.isArray(r.itemIds) && r.itemIds.every((x) => typeof x === 'string')) resp.itemIds = r.itemIds;
   // Sem o mensagemId a fila não reconhece a mensagem enfileirada no board e ela aparece em dobro.
   if (typeof r.mensagemId === 'string') resp.mensagemId = r.mensagemId;
+  // Sem o anotacaoId a fila não reconhece a anotação gravada no board.
+  if (typeof r.anotacaoId === 'string') resp.anotacaoId = r.anotacaoId;
   return resp;
+}
+
+// O pcp-peca mora ao lado do pcp-board (o homolog termina em -h): a URL sai da do board,
+// sem variável nova no build.
+export function urlPeca(): string {
+  return import.meta.env.VITE_API_BOARD.replace(/pcp-board(-h)?$/, 'pcp-peca$1');
+}
+
+export async function buscarPeca(token: string, q: string): Promise<RespostaPeca> {
+  const r = await pedir<RespostaPeca>(`${urlPeca()}?q=${encodeURIComponent(q)}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!Array.isArray(r.cards) || !Array.isArray(r.eventos)) throw new ApiError(200, 'Resposta inválida do servidor.');
+  return r;
 }

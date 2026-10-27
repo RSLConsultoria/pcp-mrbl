@@ -184,5 +184,7 @@ describe('capacidade da oficina (19/10)', () => {
     expect(mensagemSucesso({ tipo: 'alterar_capacidade_oficina', oficinaId: 'of-1', capacidade: 1200 })).toBe('Capacidade da oficina: 1.200 peças por semana');
     expect(mensagemSucesso({ tipo: 'alterar_capacidade_oficina', oficinaId: 'of-1', capacidade: null })).toBe('Capacidade da oficina removida');
     expect(chaveDaAcao({ tipo: 'alterar_capacidade_oficina', oficinaId: 'of-1', capacidade: 1 })).toBe('oficina:of-1');
+    expect(chaveDaAcao({ tipo: 'anotar_peca', os: '90001', dealId: '7', texto: 'x' })).toBe('anotacao:90001');
+    expect(mensagemSucesso({ tipo: 'anotar_peca', os: '90001', dealId: '7', texto: 'x' })).toBe('Anotação registrada');
   });
 });

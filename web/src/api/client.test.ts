@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, buscarBoard, enviarAcao, entrar } from './client';
+import { ApiError, buscarBoard, buscarPeca, enviarAcao, entrar, urlPeca } from './client';
 
 function resposta(status: number, corpo: unknown) {
   return Promise.resolve(new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }));
@@ -124,5 +124,30 @@ describe('client', () => {
     vi.stubGlobal('fetch', vi.fn(() => resposta(200, { ok: true })));
     await expect(enviarAcao('t', { tipo: 'responsavel', dealId: '1', valor: 'Maria', versao: '' }))
       .rejects.toMatchObject({ message: 'Resposta inválida do servidor.' });
+  });
+
+  it('buscarPeca usa a URL do board trocando pcp-board por pcp-peca (inclusive no homolog)', async () => {
+    const corpo = { geradoEm: 'x', os: '90001', cards: [], trilha: null, eventos: [] };
+    const f = vi.fn(() => resposta(200, corpo));
+    vi.stubGlobal('fetch', f);
+    expect(await buscarPeca('abc', 'REF 01')).toEqual(corpo);
+    expect(f).toHaveBeenCalledWith('http://api.test/pcp-peca?q=REF%2001', expect.objectContaining({ method: 'GET', headers: { Authorization: 'Bearer abc' } }));
+    vi.stubEnv('VITE_API_BOARD', 'https://n8n.exemplo.test/webhook/pcp-board-h');
+    expect(urlPeca()).toBe('https://n8n.exemplo.test/webhook/pcp-peca-h');
+  });
+
+  it('buscarPeca: resposta sem cards ou eventos é inválida; 404 e 502 viram ApiError com a mensagem', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => resposta(200, { os: '1' })));
+    await expect(buscarPeca('t', '1')).rejects.toMatchObject({ status: 200, message: 'Resposta inválida do servidor.' });
+    vi.stubGlobal('fetch', vi.fn(() => resposta(404, { erro: 'Nenhuma OS encontrada no Ploomes.' })));
+    await expect(buscarPeca('t', '1')).rejects.toMatchObject({ status: 404, message: 'Nenhuma OS encontrada no Ploomes.' });
+    vi.stubGlobal('fetch', vi.fn(() => resposta(502, { erro: 'Não foi possível ler o Ploomes agora.' })));
+    await expect(buscarPeca('t', '1')).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('enviarAcao devolve o anotacaoId da anotação', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => resposta(200, { ok: true, versao: 'v', historico: null, anotacaoId: 'H-1' })));
+    const r = await enviarAcao('t', { tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: 'oi' });
+    expect(r.anotacaoId).toBe('H-1');
   });
 });

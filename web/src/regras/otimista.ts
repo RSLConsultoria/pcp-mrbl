@@ -224,6 +224,15 @@ export function aplicarOtimista(board: Board, acao: Acao, ctx: ContextoOtimista)
       }));
       return comCaixa(board, c.dealId, (y) => ({ ...y, itens: [...y.itens, ...novos] }));
     }
+    case 'anotar_peca':
+      // Como o servidor (n8n/src/peca.js): texto numa linha só; o nome real chega com a recarga.
+      return {
+        ...board,
+        anotacoes: [{
+          id: `novo:anotacao:${ctx.n}`, quando: quandoProvisorio(ctx), usuario: 'Você',
+          texto: `Você anotou: "${normalizarTexto(acao.texto)}"`, ploomes: 'PENDENTE' as const, dealId: acao.dealId, os: acao.os
+        }, ...(board.anotacoes ?? [])]
+      };
     case 'salvar_etapas':
       return {
         ...board,
@@ -319,7 +328,7 @@ export interface Pendente {
   confirmadaEm: number; // marco da confirmação (0 enquanto não confirmou)
   versaoNova?: string; // versão que o servidor devolveu
   versoesAntigas?: string[]; // versões do alvo antes da ação: a que a tela viu e as trocas seguidas até a enviada
-  resposta?: Pick<RespostaAcao, 'pedidoId' | 'partes' | 'itemIds' | 'mensagemId'>; // o que a resposta traz para achar a ação no board
+  resposta?: Pick<RespostaAcao, 'pedidoId' | 'partes' | 'itemIds' | 'mensagemId' | 'anotacaoId'>; // o que a resposta traz para achar a ação no board
   confirmadaAs?: number; // relógio (ms) da confirmação
   criadaAs?: number; // relógio (ms) da entrada na fila
   recargasDepois?: number; // boards pedidos depois da confirmação que ainda não mostravam a ação
@@ -334,6 +343,7 @@ export const LIMITE_CONFIRMADA_MS = 120_000;
 export function versaoNoBoard(board: Board, acao: Acao): string | undefined {
   if ('itemId' in acao) return board.caixas.find((c) => c.dealId === acao.dealId)?.itens.find((i) => i.id === acao.itemId)?.versao;
   if ('pedidoId' in acao) return pedidoDe(board, acao.pedidoId)?.versao;
+  if (acao.tipo === 'anotar_peca') return undefined; // anotação não tem versão: só acrescenta
   if ('dealId' in acao) {
     if (acao.tipo === 'alterar_producao' || acao.tipo === 'aceitar_sugestao_whatsapp' || acao.tipo === 'ignorar_sugestao_whatsapp' || acao.tipo === 'associar_whatsapp' || acao.tipo === 'enviar_whatsapp' || acao.tipo === 'reenviar_whatsapp') {
       return board.producao?.find((p) => p.dealId === acao.dealId)?.versao;
@@ -364,6 +374,8 @@ export function acaoNoBoard(board: Board, p: Pendente): boolean {
       return !!r.mensagemId && !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === r.mensagemId);
     case 'reenviar_whatsapp':
       return !!r.mensagemId && !!board.producao?.find((x) => x.dealId === a.dealId)?.mensagens.some((m) => m.id === r.mensagemId);
+    case 'anotar_peca':
+      return !!r.anotacaoId && !!board.anotacoes?.some((x) => x.id === r.anotacaoId);
     case 'gerar_pedido':
       return temPedido(board, r.pedidoId);
     case 'dividir_pedido':

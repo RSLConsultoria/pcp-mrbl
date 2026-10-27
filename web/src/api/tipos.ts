@@ -26,6 +26,8 @@ export interface Item {
 export type StatusPloomes = 'PENDENTE' | 'ENVIADO' | 'ERRO';
 
 export interface EntradaHistorico {
+  id?: string; // linha do HISTORICO_APP (API nova): evita evento repetido na Visão da peça
+  acao?: string; // coluna acao do HISTORICO_APP (baixa, gerar_pedido, ANOTACAO...): fonte na linha do tempo
   quando: string; // ISO
   usuario: string;
   texto: string;
@@ -184,6 +186,7 @@ export interface Board {
   mensagensWhatsappSemAssociacao?: MensagemWhatsappSemAssociacao[];
   dealsProducaoEditaveis?: string[];
   previsaoSemHistorico?: boolean; // PREVISAO_MEDIAS ainda vazia: a previsão usa o fallback (duração 1, fila 0)
+  anotacoes?: AnotacaoPeca[]; // anotações da Visão da peça (qualquer card), cruzadas pela OS
 }
 
 // Corpo do POST /pcp-acao.
@@ -220,7 +223,9 @@ export type Acao =
   | { tipo: 'reenviar_whatsapp'; dealId: string; mensagemId: string; versao: string; confirmou: true }
   | { tipo: 'salvar_etapas'; etapas: { id?: string; nome: string }[] }
   // Só ADM. capacidade null = sem capacidade (a carga aparece sem cor de alerta).
-  | { tipo: 'alterar_capacidade_oficina'; oficinaId: string; capacidade: number | null };
+  | { tipo: 'alterar_capacidade_oficina'; oficinaId: string; capacidade: number | null }
+  // Visão da peça (F5a): única escrita; texto até 500 caracteres, sem linha em branco.
+  | { tipo: 'anotar_peca'; os: string; dealId: string; texto: string };
 
 export interface DadosPedido {
   origem: OrigemPedido;
@@ -238,6 +243,7 @@ export interface RespostaAcao {
   partes?: string[]; // dividir_por_previsao: ids das partes criadas
   itemIds?: string[]; // nova_demanda: ids dos itens gravados na FALTANTES
   mensagemId?: string; // enviar_whatsapp/reenviar_whatsapp: id da linha enfileirada
+  anotacaoId?: string; // anotar_peca: id da linha no HISTORICO_APP
 }
 
 export interface Sessao {
@@ -245,4 +251,53 @@ export interface Sessao {
   nome: string;
   perfil: string;
   expiraEm: string; // ISO
+}
+
+// Contrato do webhook pcp-peca (n8n/src/peca.js): o que o board não tem (Ploomes na hora).
+export interface CardPeca {
+  dealId: string;
+  funilId: number | null;
+  funil: string; // 'Produção' | 'PCP' | 'Funil <id>'
+  etapaId: number | null;
+  etapa: string;
+  etapaOrdem: number | null;
+  titulo: string;
+  cliente: string;
+  peca: string;
+  referencia: string;
+  os: string;
+  atualizadoEm: string;
+  link: string;
+}
+
+export interface CandidatoPeca { os: string; peca: string; etapa: string; funil: string; dealId: string }
+
+export interface EventoPloomes {
+  quando: string;
+  fonte: 'PLOOMES' | 'ETAPA';
+  texto: string;
+  autor: string;
+  dealId: string;
+  desfeita?: boolean; // troca de etapa desfeita no Ploomes
+}
+
+export interface TrilhaPeca { funil: string; dealId: string; etapas: { id: string; nome: string; ordem: number | null }[]; atualId: string }
+
+export interface RespostaPeca {
+  geradoEm: string;
+  os: string; // '' quando a busca devolve a lista de candidatos
+  candidatos?: CandidatoPeca[];
+  cards: CardPeca[];
+  trilha: TrilhaPeca | null;
+  eventos: EventoPloomes[];
+}
+
+export interface AnotacaoPeca {
+  id: string;
+  quando: string;
+  usuario: string;
+  texto: string;
+  ploomes: StatusPloomes;
+  dealId: string;
+  os: string;
 }

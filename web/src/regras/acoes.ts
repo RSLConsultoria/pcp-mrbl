@@ -101,6 +101,8 @@ export function mensagemSucesso(
       return 'Etapas do quadro salvas';
     case 'alterar_capacidade_oficina':
       return acao.capacidade === null ? 'Capacidade da oficina removida' : `Capacidade da oficina: ${acao.capacidade.toLocaleString('pt-BR')} peças por semana`;
+    case 'anotar_peca':
+      return 'Anotação registrada';
   }
 }
 
@@ -162,6 +164,7 @@ export function chaveDaAcao(acao: Acao): string {
       acao.tipo === 'associar_whatsapp' || acao.tipo === 'enviar_whatsapp' || acao.tipo === 'reenviar_whatsapp') {
     return `producao:${acao.dealId}`;
   }
+  if (acao.tipo === 'anotar_peca') return `anotacao:${acao.os}`;
   if ('itemId' in acao) return `item:${acao.dealId}:${acao.itemId}`;
   if ('pedidoId' in acao) return `pedido:${acao.pedidoId}`;
   if (acao.tipo === 'gerar_pedido') return 'gerar_pedido';

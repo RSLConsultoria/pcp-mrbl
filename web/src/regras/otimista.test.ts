@@ -381,3 +381,20 @@ describe('capacidade da oficina (19/10)', () => {
     expect(versaoNoBoard(quadro({ oficinas }), acao)).toBeUndefined();
   });
 });
+
+describe('anotar_peca', () => {
+  it('a anotação aparece na hora e sai da fila quando o board traz o id gravado', () => {
+    const a: Acao = { tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: ' Ligar\npara a oficina ' };
+    const b = aplicar(quadro(), a);
+    expect(b.anotacoes?.[0]).toEqual({
+      id: 'novo:anotacao:7', quando: '2026-10-08T12:00:00.000Z', usuario: 'Você', texto: 'Você anotou: "Ligar para a oficina"',
+      ploomes: 'PENDENTE', dealId: '600001', os: '90001'
+    });
+    expect(aplicar(quadro({ anotacoes: b.anotacoes }), a).anotacoes).toHaveLength(2);
+    const p = pend(1, a, { estado: 'confirmada', confirmadaEm: 1, versaoNova: 'x', resposta: { anotacaoId: 'H-1' } });
+    expect(pendentesVivos([p], quadro(), 1)).toEqual([p]);
+    const gravado = quadro({ anotacoes: [{ id: 'H-1', quando: '', usuario: 'Lucca', texto: 'x', ploomes: 'PENDENTE', dealId: '600001', os: '90001' }] });
+    expect(pendentesVivos([p], gravado, 1)).toEqual([]);
+    expect(versaoNoBoard(quadro(), a)).toBeUndefined();
+  });
+});
