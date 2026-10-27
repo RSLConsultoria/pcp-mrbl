@@ -52,12 +52,16 @@ function historicoDoDeal(historico, dealId) {
     })
     .slice(0, 30)
     .map(function (h) {
-      return {
+      var e = {
         quando: texto(h.quando),
         usuario: texto(h.usuario),
         texto: texto(h.texto),
         ploomes: texto(h.ploomes_status).toUpperCase() || 'PENDENTE'
       };
+      // Visão da peça (F5a): id evita evento repetido; acao diz a fonte na linha do tempo.
+      if (texto(h.id)) e.id = texto(h.id);
+      if (texto(h.acao)) e.acao = texto(h.acao);
+      return e;
     });
 }
 

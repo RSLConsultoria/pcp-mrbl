@@ -20,6 +20,21 @@ function dealEditavel(dealId) {
 
 var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
 var ERRO_F3_DESLIGADA = 'Esta ação ainda não está disponível.';
+var ERRO_PECA_NAO_EDITAVEL = 'Edição liberada em breve para esta OS.';
+
+// Anotação da Visão da peça: deals das duas allowlists até o go-live (lista vazia = todos).
+function dealAnotavel(dealId) {
+  if (!DEALS_EDITAVEIS.length || !DEALS_PRODUCAO_EDITAVEIS.length) return true;
+  var d = texto(dealId);
+  return DEALS_EDITAVEIS.indexOf(d) >= 0 || DEALS_PRODUCAO_EDITAVEIS.indexOf(d) >= 0;
+}
+
+function validarAcaoAnotacao(corpo) {
+  var v = validarAnotacaoPeca(corpo);
+  if (!v.ok) return v;
+  if (!dealAnotavel(v.acao.dealId)) return erroAcao(403, ERRO_PECA_NAO_EDITAVEL);
+  return v;
+}
 
 function proprio(obj, chave) {
   return Object.prototype.hasOwnProperty.call(obj, chave) ? obj[chave] : undefined;
@@ -128,7 +143,9 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     producao: producao, oficinas: oficinas, mensagensWhatsappSemAssociacao: mensagensWhatsappSemAssociacao,
     dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice(),
     // A PREVISAO_MEDIAS ainda vazia (o workflow diário não rodou): a tela avisa "Previsão sem histórico".
-    previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias))
+    previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias)),
+    // Visão da peça (F5a): anotações de qualquer card, cruzadas pela OS no site.
+    anotacoes: anotacoesDoBoard(extras.historico)
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
@@ -150,6 +167,10 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
     return vProd.ok ? { ok: true } : { ok: false, status: vProd.status, body: { erro: vProd.erro } };
   }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) {
+    var vAnot = validarAcaoAnotacao(corpo);
+    return vAnot.ok ? { ok: true } : { ok: false, status: vAnot.status, body: { erro: vAnot.erro } };
+  }
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     if (!ACOES_F3_ATIVAS) return { ok: false, status: 400, body: { erro: ERRO_F3_DESLIGADA } };
     if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
@@ -218,6 +239,21 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   return saida;
 }
 
+// Visão da peça (F5a): só a linha ANOTACAO no HISTORICO_APP, sem PATCH no Ploomes.
+function processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId) {
+  var v = validarAcaoAnotacao(corpo);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var r = processarAnotacaoPeca(v.acao, {
+    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId
+  });
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, { anotacaoId: r.anotacaoId });
+  saida.ploomes = null;
+  saida.interpretar = null;
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
+}
+
 function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var v = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
@@ -268,6 +304,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
     return processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId);
   }
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) return processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId);
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);
   }

@@ -111,6 +111,18 @@ test('F3 gerar_pedido: PEDIDOS, PEDIDOS_ITENS e historico, nessa ordem', () => {
   assert.equal(escritas[1].body.values.length, 2);
 });
 
+test('F5a anotar_peca: um append no HISTORICO_APP e nada mais', () => {
+  const { proc, escritas } = acao({ tipo: 'anotar_peca', os: '90001', dealId: '600001', texto: 'Cliente pediu para segurar' });
+  assert.equal(proc.status, 200, JSON.stringify(proc.body));
+  assert.equal(proc.body.anotacaoId, proc.historicos[0].id);
+  assert.deepEqual(escritas.map(alvo), ["'HISTORICO_APP'!A1"]);
+  assert.equal(escritas[0].repetir, false);
+  assert.ok(escritas[0].url.endsWith('insertDataOption=INSERT_ROWS'), escritas[0].url);
+  const linha = escritas[0].body.values[0];
+  assert.equal(linha[CAB_HIST.indexOf('acao')], 'ANOTACAO');
+  assert.equal(linha[CAB_HIST.indexOf('texto')], 'Lucca anotou: "Cliente pediu para segurar"');
+});
+
 test('acao recusada ou sem nada a gravar: um item { vazio: true }', () => {
   const { proc, escritas } = acao({ tipo: 'baixa', dealId: '600001', itemId: 'zz', valor: 2, versao: '' });
   assert.equal(proc.status, 404);

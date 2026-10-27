@@ -133,12 +133,16 @@ function historicoDoDeal(historico, dealId) {
     })
     .slice(0, 30)
     .map(function (h) {
-      return {
+      var e = {
         quando: texto(h.quando),
         usuario: texto(h.usuario),
         texto: texto(h.texto),
         ploomes: texto(h.ploomes_status).toUpperCase() || 'PENDENTE'
       };
+      // Visão da peça (F5a): id evita evento repetido; acao diz a fonte na linha do tempo.
+      if (texto(h.id)) e.id = texto(h.id);
+      if (texto(h.acao)) e.acao = texto(h.acao);
+      return e;
     });
 }
 
@@ -5051,6 +5055,50 @@ function finalizarPeca(leituras, respostas, agora, estado) {
   return { status: 200, body: corpo };
 }
 
+// ---------- anotação (única escrita da Visão da peça) ----------
+var TIPO_ANOTAR_PECA = 'anotar_peca';
+var ACAO_ANOTACAO = 'ANOTACAO';
+var PECA_MAX_ANOTACOES_BOARD = 300;
+
+// Texto obrigatório, até 500 caracteres, sem linha em branco; quebras simples viram espaço.
+function validarAnotacaoPeca(corpo) {
+  corpo = corpo || {};
+  var os = texto(corpo.os);
+  var dealId = texto(corpo.dealId);
+  if (!/^[0-9A-Za-z.\/-]{1,20}$/.test(os)) return erroAcao(400, 'Informe a OS.');
+  if (!/^\d{1,20}$/.test(dealId)) return erroAcao(400, 'Informe o card do Ploomes.');
+  if (typeof corpo.texto !== 'string') return erroAcao(400, 'Escreva a anotação.');
+  var bruto = corpo.texto.replace(/\r\n?/g, '\n').trim();
+  if (/\n[ \t]*\n/.test(bruto)) return erroAcao(400, 'A anotação não pode ter linha em branco.');
+  var t = bruto.replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ');
+  if (!t) return erroAcao(400, 'Escreva a anotação.');
+  if (t.length > 500) return erroAcao(400, 'Anotação com no máximo 500 caracteres.');
+  return { ok: true, acao: { os: os, dealId: dealId, texto: t } };
+}
+
+// Uma linha no HISTORICO_APP; o Enviar ao Ploomes junta no registro compilado do deal.
+function processarAnotacaoPeca(acao, ctx) {
+  var h = historicoProducao(ctx, acao.dealId, acao.os, ACAO_ANOTACAO, ctx.usuario + ' anotou: "' + acao.texto + '"');
+  return { ok: true, versao: ctx.agora, operacoes: [], historicos: [h], anotacaoId: h.id };
+}
+
+// Anotações de qualquer card (o deal da anotação pode não ser caixa nem produção):
+// o front cruza pela OS. Mais novas primeiro, até 300.
+function anotacoesDoBoard(historico) {
+  return (historico || []).filter(function (h) {
+    return h && semAcento(h.acao) === ACAO_ANOTACAO && texto(h.os) !== '';
+  }).sort(function (a, b) {
+    var x = texto(a.quando);
+    var y = texto(b.quando);
+    return x < y ? 1 : x > y ? -1 : 0;
+  }).slice(0, PECA_MAX_ANOTACOES_BOARD).map(function (h) {
+    return {
+      id: texto(h.id), quando: texto(h.quando), usuario: texto(h.usuario), texto: texto(h.texto),
+      ploomes: texto(h.ploomes_status).toUpperCase() || 'PENDENTE', dealId: texto(h.deal_id), os: texto(h.os)
+    };
+  });
+}
+
 // ----- src/api.js -----
 // ===== src/api.js =====
 // Regras dos dois webhooks do workflow "PCP MRBL - API". "estado" e o
@@ -5074,6 +5122,21 @@ function dealEditavel(dealId) {
 
 var ERRO_NAO_EDITAVEL = 'Edição liberada em breve para esta caixa.';
 var ERRO_F3_DESLIGADA = 'Esta ação ainda não está disponível.';
+var ERRO_PECA_NAO_EDITAVEL = 'Edição liberada em breve para esta OS.';
+
+// Anotação da Visão da peça: deals das duas allowlists até o go-live (lista vazia = todos).
+function dealAnotavel(dealId) {
+  if (!DEALS_EDITAVEIS.length || !DEALS_PRODUCAO_EDITAVEIS.length) return true;
+  var d = texto(dealId);
+  return DEALS_EDITAVEIS.indexOf(d) >= 0 || DEALS_PRODUCAO_EDITAVEIS.indexOf(d) >= 0;
+}
+
+function validarAcaoAnotacao(corpo) {
+  var v = validarAnotacaoPeca(corpo);
+  if (!v.ok) return v;
+  if (!dealAnotavel(v.acao.dealId)) return erroAcao(403, ERRO_PECA_NAO_EDITAVEL);
+  return v;
+}
 
 function proprio(obj, chave) {
   return Object.prototype.hasOwnProperty.call(obj, chave) ? obj[chave] : undefined;
@@ -5182,7 +5245,9 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     producao: producao, oficinas: oficinas, mensagensWhatsappSemAssociacao: mensagensWhatsappSemAssociacao,
     dealsProducaoEditaveis: DEALS_PRODUCAO_EDITAVEIS.slice(),
     // A PREVISAO_MEDIAS ainda vazia (o workflow diário não rodou): a tela avisa "Previsão sem histórico".
-    previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias))
+    previsaoSemHistorico: !temMedias(tabelaMedias(extras.previsaoMedias)),
+    // Visão da peça (F5a): anotações de qualquer card, cruzadas pela OS no site.
+    anotacoes: anotacoesDoBoard(extras.historico)
   };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
@@ -5204,6 +5269,10 @@ function preValidarAcao(estado, cabecalho, corpo, agora) {
     return vProd.ok ? { ok: true } : { ok: false, status: vProd.status, body: { erro: vProd.erro } };
   }
   if (!sessao) return { ok: false, status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) {
+    var vAnot = validarAcaoAnotacao(corpo);
+    return vAnot.ok ? { ok: true } : { ok: false, status: vAnot.status, body: { erro: vAnot.erro } };
+  }
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     if (!ACOES_F3_ATIVAS) return { ok: false, status: 400, body: { erro: ERRO_F3_DESLIGADA } };
     if (dealsDoCorpo(corpo).some(function (d) { return !dealEditavel(d); })) {
@@ -5272,6 +5341,21 @@ function processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId) {
   return saida;
 }
 
+// Visão da peça (F5a): só a linha ANOTACAO no HISTORICO_APP, sem PATCH no Ploomes.
+function processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId) {
+  var v = validarAcaoAnotacao(corpo);
+  if (!v.ok) return { status: v.status, body: { erro: v.erro } };
+  var r = processarAnotacaoPeca(v.acao, {
+    usuario: sessao.nome, email: sessao.email, agora: new Date(agora).toISOString(), gerarId: gerarId
+  });
+  var saida = respostaDeAcao(estado, r.versao, r.operacoes, r.historicos, { anotacaoId: r.anotacaoId });
+  saida.ploomes = null;
+  saida.interpretar = null;
+  saida.gravacao = null;
+  saida.historico = null;
+  return saida;
+}
+
 function processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId) {
   var v = validarAcaoProducaoBasica(corpo, DEALS_PRODUCAO_EDITAVEIS);
   if (!v.ok) return { status: v.status, body: { erro: v.erro } };
@@ -5322,6 +5406,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
     return processarAcaoProducao(estado, sessao, corpo, linhas, agora, gerarId);
   }
   if (!sessao) return { status: 401, body: { erro: 'Sessão expirada.' } };
+  if (corpo && corpo.tipo === TIPO_ANOTAR_PECA) return processarAcaoAnotacao(estado, sessao, corpo, agora, gerarId);
   if (corpo && TIPOS_PEDIDO.indexOf(corpo.tipo) >= 0) {
     return processarAcaoPedido(estado, sessao, corpo, linhas, agora, gerarId);
   }

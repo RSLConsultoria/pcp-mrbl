@@ -298,3 +298,47 @@ function finalizarPeca(leituras, respostas, agora, estado) {
   guardarPecaNoCache(estado, leituras.busca.chave, corpo, agora);
   return { status: 200, body: corpo };
 }
+
+// ---------- anotação (única escrita da Visão da peça) ----------
+var TIPO_ANOTAR_PECA = 'anotar_peca';
+var ACAO_ANOTACAO = 'ANOTACAO';
+var PECA_MAX_ANOTACOES_BOARD = 300;
+
+// Texto obrigatório, até 500 caracteres, sem linha em branco; quebras simples viram espaço.
+function validarAnotacaoPeca(corpo) {
+  corpo = corpo || {};
+  var os = texto(corpo.os);
+  var dealId = texto(corpo.dealId);
+  if (!/^[0-9A-Za-z.\/-]{1,20}$/.test(os)) return erroAcao(400, 'Informe a OS.');
+  if (!/^\d{1,20}$/.test(dealId)) return erroAcao(400, 'Informe o card do Ploomes.');
+  if (typeof corpo.texto !== 'string') return erroAcao(400, 'Escreva a anotação.');
+  var bruto = corpo.texto.replace(/\r\n?/g, '\n').trim();
+  if (/\n[ \t]*\n/.test(bruto)) return erroAcao(400, 'A anotação não pode ter linha em branco.');
+  var t = bruto.replace(/\n+/g, ' ').replace(/[ \t]+/g, ' ');
+  if (!t) return erroAcao(400, 'Escreva a anotação.');
+  if (t.length > 500) return erroAcao(400, 'Anotação com no máximo 500 caracteres.');
+  return { ok: true, acao: { os: os, dealId: dealId, texto: t } };
+}
+
+// Uma linha no HISTORICO_APP; o Enviar ao Ploomes junta no registro compilado do deal.
+function processarAnotacaoPeca(acao, ctx) {
+  var h = historicoProducao(ctx, acao.dealId, acao.os, ACAO_ANOTACAO, ctx.usuario + ' anotou: "' + acao.texto + '"');
+  return { ok: true, versao: ctx.agora, operacoes: [], historicos: [h], anotacaoId: h.id };
+}
+
+// Anotações de qualquer card (o deal da anotação pode não ser caixa nem produção):
+// o front cruza pela OS. Mais novas primeiro, até 300.
+function anotacoesDoBoard(historico) {
+  return (historico || []).filter(function (h) {
+    return h && semAcento(h.acao) === ACAO_ANOTACAO && texto(h.os) !== '';
+  }).sort(function (a, b) {
+    var x = texto(a.quando);
+    var y = texto(b.quando);
+    return x < y ? 1 : x > y ? -1 : 0;
+  }).slice(0, PECA_MAX_ANOTACOES_BOARD).map(function (h) {
+    return {
+      id: texto(h.id), quando: texto(h.quando), usuario: texto(h.usuario), texto: texto(h.texto),
+      ploomes: texto(h.ploomes_status).toUpperCase() || 'PENDENTE', dealId: texto(h.deal_id), os: texto(h.os)
+    };
+  });
+}
