@@ -20,7 +20,7 @@ Um chat que responde perguntas sobre os dados do app, abre telas e OS, e monta c
 ## 4. Servidor (n8n)
 - Webhook novo `pcp-assistente` (homolog `pcp-assistente-h`), na API. Corpo: `{ token, mensagens: [{ papel, texto | chamadas | resultado }] }`.
 - Confere a sessão como os outros webhooks (401 sem login).
-- Limite: 30 pedidos por hora por usuário (contagem em memória estática do workflow; acima disso 429 com "Muitas perguntas seguidas. Espere alguns minutos.").
+- Limite: 120 pedidos por hora (uma pergunta gasta de 2 a 6) por usuário (contagem em memória estática do workflow; acima disso 429 com "Muitas perguntas seguidas. Espere alguns minutos.").
 - Monta o pedido ao Groq: prompt de sistema fixo + lista de ferramentas (definida no `n8n/src`, espelhada no site) + até as últimas 20 mensagens, cortando textos longos (resultado de ferramenta com no máximo 6000 caracteres).
 - Devolve `{ texto }` ou `{ chamadas: [{ id, nome, argumentos }] }`. Valida que os nomes estão na lista e os argumentos são JSON; senão devolve erro tratado.
 - Nada é gravado na planilha (sem histórico de conversa no servidor). Falha do Groq → 502 com mensagem amigável.

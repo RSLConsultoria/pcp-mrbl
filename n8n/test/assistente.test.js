@@ -114,10 +114,10 @@ test('pedido do site: corpo inválido dá 400 sem contar no limite', () => {
   assert.equal((s.estado.assistente['pcp@exemplo.test'] || []).length, 1);
 });
 
-test('limite: 30 pedidos por hora por usuário; a 31ª dá 429 e a janela anda', () => {
+test('limite: 120 pedidos por hora por usuário; a 121ª dá 429 e a janela anda', () => {
   const s = sessao();
-  for (let i = 0; i < 30; i++) assert.equal(ctx.validarPedidoAssistente(s.estado, s.cab, pergunta(), AGORA + i * 1000).pronto, false, 'pedido ' + i);
-  assert.deepEqual(limpo(ctx.validarPedidoAssistente(s.estado, s.cab, pergunta(), AGORA + 31000)),
+  for (let i = 0; i < 120; i++) assert.equal(ctx.validarPedidoAssistente(s.estado, s.cab, pergunta(), AGORA + i * 1000).pronto, false, 'pedido ' + i);
+  assert.deepEqual(limpo(ctx.validarPedidoAssistente(s.estado, s.cab, pergunta(), AGORA + 121000)),
     { pronto: true, status: 429, body: { erro: 'Muitas perguntas seguidas. Espere alguns minutos.' } });
   // Uma hora depois do primeiro, abre uma vaga.
   assert.equal(ctx.validarPedidoAssistente(s.estado, s.cab, pergunta(), AGORA + 3600 * 1000 + 1).pronto, false);
@@ -127,7 +127,7 @@ test('limite é por usuário', () => {
   const a = sessao('a@exemplo.test');
   const b = sessao('b@exemplo.test');
   b.estado.sessoes = Object.assign(a.estado.sessoes, b.estado.sessoes);
-  for (let i = 0; i < 30; i++) ctx.validarPedidoAssistente(b.estado, a.cab, pergunta(), AGORA);
+  for (let i = 0; i < 120; i++) ctx.validarPedidoAssistente(b.estado, a.cab, pergunta(), AGORA);
   assert.equal(ctx.validarPedidoAssistente(b.estado, a.cab, pergunta(), AGORA).status, 429);
   assert.equal(ctx.validarPedidoAssistente(b.estado, b.cab, pergunta(), AGORA).pronto, false);
 });

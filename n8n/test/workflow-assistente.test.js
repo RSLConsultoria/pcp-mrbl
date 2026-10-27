@@ -86,7 +86,7 @@ test('pcp-assistente: o ramo não lê nem grava a planilha', () => {
   for (const n of alcancaveis) assert.doesNotMatch(no(w, n).type, /googleSheets|executeWorkflow/);
 });
 
-test('Validar Assistente: 401 sem sessão, pronto com o corpo do Groq, 429 depois de 30', () => {
+test('Validar Assistente: 401 sem sessão, pronto com o corpo do Groq, 429 depois de 120', () => {
   const estado = {};
   const base = contexto({});
   const U = [{ email: 'pcp@exemplo.test', nome: 'Pessoa PCP', perfil: 'PCP', senha_hash: base.gerarHash(crypto, 'senha-ficticia-123'), ativo: 'SIM' }];
@@ -101,7 +101,7 @@ test('Validar Assistente: 401 sem sessão, pronto com o corpo do Groq, 429 depoi
   assert.equal(ok.pronto, false);
   assert.equal(ok.corpo.model, 'openai/gpt-oss-120b');
   assert.equal(ok.corpo.messages[1].content, 'Faltas da OS 90001');
-  for (let i = 1; i < 30; i++) rodar({ authorization: 'Bearer ' + token });
+  for (let i = 1; i < 120; i++) rodar({ authorization: 'Bearer ' + token });
   assert.equal(rodar({ authorization: 'Bearer ' + token }).status, 429);
 });
 

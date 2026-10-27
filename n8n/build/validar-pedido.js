@@ -6092,7 +6092,7 @@ function processarAcao(estado, cabecalho, corpo, linhas, agora, gerarId) {
 // envia ou grava; a cobrança só sai do clique em "Confirmar e enviar" no site.
 
 var MODELO_GROQ_ASSISTENTE = 'openai/gpt-oss-120b';
-var ASSISTENTE_LIMITE_HORA = 30;
+var ASSISTENTE_LIMITE_HORA = 120;
 var ASSISTENTE_JANELA_MS = 3600 * 1000;
 var ASSISTENTE_MAX_MENSAGENS = 20;
 var ASSISTENTE_MAX_TEXTO = 2000;
