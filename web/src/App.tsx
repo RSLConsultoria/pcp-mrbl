@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Caixa, Sessao } from './api/tipos';
 import { lerSessao, limparSessao, salvarSessao } from './auth/sessao';
 import { AvisoProvider, useAviso } from './componentes/Aviso';
+import { FaixaInsights } from './componentes/FaixaInsights';
 import { FaixaOffline } from './componentes/FaixaOffline';
 import { Legenda, LegendaProducao } from './componentes/Legenda';
 import { Navbar } from './componentes/Navbar';
@@ -18,7 +19,7 @@ import { Login } from './telas/Login';
 import { NoPloomes } from './telas/NoPloomes';
 import { Pedidos, type JanelaPedidos } from './telas/Pedidos';
 import { Saidas } from './telas/Saidas';
-import { Producao } from './telas/Producao';
+import { Producao, type PedidoOficina } from './telas/Producao';
 import { Peca } from './telas/Peca';
 
 // Guia atual guardada no hash (#saidas, #pedidos) para o recarregar voltar nela.
@@ -51,6 +52,8 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   const [filtro, setFiltro] = useState<FiltroPedidos>('aberto');
   const [janela, setJanela] = useState<JanelaPedidos>(null);
   const [selecao, setSelecao] = useState<Set<string>>(() => new Set());
+  // Clique no cartão de oficina dos Insights: a produção abre filtrada por ela.
+  const [pedidoOficina, setPedidoOficina] = useState<PedidoOficina | null>(null);
   const hoje = new Date();
   const q = buscas[tela];
   const selecionados = board ? itensSelecionados(board, selecao).length : 0;
@@ -63,9 +66,16 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
     avisar(`${itens.length} ${itens.length > 1 ? 'itens selecionados' : 'item selecionado'} em Solicitações de faltas`);
   }, [irPara, avisar]);
 
+  const abrirOficina = useCallback((oficinaId: string) => {
+    setBuscas((b) => ({ ...b, producao: '' }));
+    setPedidoOficina({ oficinaId });
+    irPara('producao');
+  }, [irPara]);
+
   return (
     <div className="app">
       <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair} />
+      {board && <FaixaInsights board={board} agora={hoje} onOficina={abrirOficina} />}
       {/* A Visão da peça tem a própria busca (OS ou referência no Ploomes). */}
       {tela !== 'peca' && <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
         {tela === 'pedidos'
@@ -82,7 +92,8 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
           : tela === 'saidas' ? <Saidas board={board} q={q} hoje={hoje} onSelecionarParaPedido={selecionarParaPedido} />
           : tela === 'pedidos' ? <Pedidos board={board} q={q} filtro={filtro} janela={janela} selecao={selecao} executar={executar}
               onJanela={setJanela} onSelecao={setSelecao} />
-          : tela === 'producao' ? <Producao board={board} q={q} hoje={hoje} executar={executar} ehAdm={ehAdm} />
+          : tela === 'producao' ? <Producao board={board} q={q} hoje={hoje} executar={executar} ehAdm={ehAdm}
+              pedidoOficina={pedidoOficina} onPedidoOficinaAtendido={() => setPedidoOficina(null)} />
           : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} />}
       </main>
     </div>

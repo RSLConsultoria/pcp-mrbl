@@ -224,14 +224,30 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
   );
 }
 
-export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q: string; hoje: Date; executar: Executar; ehAdm: boolean }) {
-  const [oficinaId, setOficinaId] = useState('');
+// Pedido de abrir a produção filtrada por uma oficina (cartão "Oficinas com mais atraso" dos Insights).
+// Objeto novo a cada clique: vale também com a guia já aberta.
+export interface PedidoOficina { oficinaId: string }
+
+export function Producao({ board, q, hoje, executar, ehAdm, pedidoOficina = null, onPedidoOficinaAtendido }: {
+  board: Board; q: string; hoje: Date; executar: Executar; ehAdm: boolean;
+  pedidoOficina?: PedidoOficina | null; onPedidoOficinaAtendido?: () => void;
+}) {
+  const [oficinaId, setOficinaId] = useState(() => pedidoOficina?.oficinaId ?? '');
   const [soComFalta, setSoComFalta] = useState(false);
   const [situacao, setSituacao] = useState<SituacaoPrazo | ''>('');
   const [visao, setVisao] = useState<VisaoProducao>(lerVisao);
   const [agrupamento, setAgrupamento] = useState<AgrupamentoGantt>(lerAgrupamento);
   const [aberta, setAberta] = useState<string | null>(null);
   const [incluirPrevistas, setIncluirPrevistas] = useState(lerIncluirPrevistas);
+  // Só a oficina pedida: os outros filtros saem para nenhuma OS dela ficar escondida.
+  useLayoutEffect(() => {
+    if (!pedidoOficina) return;
+    setOficinaId(pedidoOficina.oficinaId);
+    setSoComFalta(false);
+    setSituacao('');
+    setAberta(null);
+    onPedidoOficinaAtendido?.();
+  }, [pedidoOficina, onPedidoOficinaAtendido]);
   const hojeIso = diaIso(hoje);
   const producao = board.producao ?? PRODUCAO_VAZIA;
   const filtradas = useMemo(() => filtrarProducoes(producao, { busca: q, oficinaId, soComFalta, situacao, hoje: hojeIso, incluirPrevistas }), [producao, q, oficinaId, soComFalta, situacao, hojeIso, incluirPrevistas]);
