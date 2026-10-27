@@ -5,6 +5,9 @@
 // ?atraso=4000 na URL da ação. MOCK_FALHA_GRAVACAO=1 (ou ?falha=gravacao) responde toda ação como a
 // API quando uma gravação na planilha falha no meio: 500 com o aviso (a falha vai para a aba ERROS_APP).
 // Insights do dia: OS 90012 vencida na OFICINA LUA, com cobrança sem resposta há 2 dias; as caixas paradas e o prazo da 90003 já acendem os outros cartões.
+// E-mails do PCP (F5c, dados fictícios do domínio @confeccao-exemplo.com.br): 90001 com previsão de item e quantidade,
+// 90004 com previsão da caixa, 90005 com chamado, 90003 com observação e uma já aceita na 90001; 90002 fica
+// fora da edição (decidir dá 403). decidir_email_pcp grava como o servidor (n8n/src/emailsPcp.js).
 // Visão da peça (pcp-peca): OS 90002 com dois cards, registros e troca desfeita; REF-COMUM lista 90002 e 90003; OS 90005 simula o Ploomes fora (502).
 // Para ver a recusa do Gerar pedido (409 "Item já está no PED-…"): marque o mesmo item em duas abas e gere nas duas.
 // Saídas com falta: 90003 sem pedido; 90004 em A pedir (PED-0005 em etapa que saiu do quadro conta como a primeira);
@@ -56,6 +59,15 @@ const caixa = (os, ciclo, tipo, peca, cliente, responsavel, itens, extra = {}) =
   responsavel, registradoEm: diaIso(-20), saiu: false, saiuComFalta: false, saiuEm: '', previsao: '', observacao: '',
   versao: '', historico: [], itens, ...extra
 });
+// E-mail do PCP fictício (linha da aba EMAILS_PCP como o board manda): minutosAtras = quando chegou.
+function emailPcp(id, minutosAtras, de, os, modelo, texto, o) {
+  const assunto = { CAIXA_SEPARADA: 'Caixa separada', POS_CORTE: 'Itens faltando pós corte', RECEBIDOS_SP: 'Itens recebidos SP' }[modelo];
+  return {
+    id, quando: new Date(Date.now() - minutosAtras * 60_000).toISOString(), de, assunto: `RE: ${assunto} - OS:${os} | Ref: REF-0${os - 90000}`,
+    os: String(os), modelo, texto, tipo: o.tipo, valor: o.valor, itens: o.itens, resumo: o.resumo, evidencia: o.evidencia,
+    confianca: 0.9, status: o.status ?? 'PENDENTE', decididoEm: o.decididoEm ?? ''
+  };
+}
 const hist = (dias, usuario, texto) => ({ quando: new Date(Date.now() - dias * 86_400_000).toISOString(), usuario, texto, criadoMs: 0 });
 
 const estado = {
@@ -169,7 +181,24 @@ const estado = {
       prevista: true, etapaOrdem: 13, etapaNome: '13. Estratégico 2', etapaInicio: '', inicioCosturaPrevisto: diaIso(9), fimCosturaPrevisto: diaIso(15), mensagens: [], sugestoes: [], historico: [] }
   ],
   // MOCK_SEM_HISTORICO=1 simula a PREVISAO_MEDIAS ainda vazia.
-  previsaoSemHistorico: !!process.env.MOCK_SEM_HISTORICO
+  previsaoSemHistorico: !!process.env.MOCK_SEM_HISTORICO,
+  // E-mails do PCP (F5c): respostas fictícias da equipe aos e-mails do Ploomes (aba EMAILS_PCP).
+  emailsPcp: [
+    emailPcp('EM-1', 40, 'Pessoa Compras', 90001, 'CAIXA_SEPARADA', `A tag de cuidados chega dia ${diaIso(5).slice(8, 10)}/${diaIso(5).slice(5, 7)}.`,
+      { tipo: 'PREVISAO', valor: diaIso(5), itens: ['a2'], resumo: 'Tag de cuidados chega em 5 dias.', evidencia: `chega dia ${diaIso(5).slice(8, 10)}/${diaIso(5).slice(5, 7)}` }),
+    emailPcp('EM-2', 90, 'Pessoa Almoxarifado', 90001, 'POS_CORTE', 'Item verificado, quantidade 4 cones de linha amora.',
+      { tipo: 'QUANTIDADE', valor: '4', itens: ['a1'], resumo: 'Conferiram 4 cones de linha.', evidencia: 'quantidade 4 cones' }),
+    emailPcp('EM-3', 30, 'Pessoa Compras', 90004, 'RECEBIDOS_SP', `O material todo chega em São Paulo dia ${diaIso(7).slice(8, 10)}/${diaIso(7).slice(5, 7)}.`,
+      { tipo: 'PREVISAO', valor: diaIso(7), itens: [], resumo: 'Material da caixa chega em 7 dias.', evidencia: `chega em São Paulo dia ${diaIso(7).slice(8, 10)}/${diaIso(7).slice(5, 7)}` }),
+    emailPcp('EM-4', 20, 'Pessoa Suporte', 90005, 'POS_CORTE', 'Chamado aberto #1234567 para a fita faltante.',
+      { tipo: 'CHAMADO', valor: '1234567', itens: [], resumo: 'Abriram chamado para a fita.', evidencia: 'Chamado aberto #1234567' }),
+    emailPcp('EM-5', 10, 'Pessoa Almoxarifado', 90003, 'CAIXA_SEPARADA', 'Podem conferir a metragem do viés antes de mandar?',
+      { tipo: 'OBSERVACAO', valor: '', itens: [], resumo: 'Pediram para conferir a metragem do viés.', evidencia: '' }),
+    emailPcp('EM-6', 26 * 60, 'Pessoa Compras', 90001, 'CAIXA_SEPARADA', 'Recebemos a etiqueta de composição.',
+      { tipo: 'OBSERVACAO', valor: '', itens: [], resumo: 'Etiqueta recebida.', evidencia: '', status: 'ACEITA', decididoEm: new Date(Date.now() - 86_400_000).toISOString() }),
+    emailPcp('EM-7', 15, 'Pessoa Compras', 90002, 'CAIXA_SEPARADA', 'O zíper sai amanhã.',
+      { tipo: 'OBSERVACAO', valor: '', itens: [], resumo: 'Zíper sai amanhã.', evidencia: '' })
+  ]
 };
 
 // ---------- utilidades ----------
@@ -282,6 +311,11 @@ function montarBoard() {
     dealsProducaoEditaveis: estado.dealsProducaoEditaveis,
     oficinas: estado.oficinas,
     previsaoSemHistorico: estado.previsaoSemHistorico,
+    // Como o servidor (emailsPcpBoard): pendentes e as decididas nos últimos 7 dias, mais novas primeiro.
+    emailsPcp: estado.emailsPcp
+      .filter((e) => e.status === 'PENDENTE' || (e.decididoEm && agora - Date.parse(e.decididoEm) <= 7 * 86_400_000))
+      .sort((a, b) => (a.quando < b.quando ? 1 : a.quando > b.quando ? -1 : 0))
+      .map(({ decididoEm, ...e }) => e),
     anotacoes: estado.anotacoes.map(({ criadoMs, ...a }) => ({ ...a, ploomes: criadoMs && agora - criadoMs < ENVIO_PLOOMES_MS ? 'PENDENTE' : 'ENVIADO' })),
     mensagensWhatsappSemAssociacao: estado.mensagensWhatsappSemAssociacao,
     producao: estado.producao.map((p) => ({
@@ -923,6 +957,51 @@ function anotarPeca(c, usuario) {
   return resposta(a.quando, [{ quando: a.quando, usuario, texto: a.texto, ploomes: 'PENDENTE', dealId: a.dealId }], { anotacaoId: a.id });
 }
 
+// Caixas da sugestão, como o servidor (dealsAlvoEmailPcp).
+function dealsAlvoEmail(e) {
+  const daOs = estado.caixas.filter((c) => c.os === e.os);
+  if (e.itens.length) return [...new Set(daOs.filter((c) => c.itens.some((i) => e.itens.includes(i.id))).map((c) => c.dealId))];
+  const comFalta = [...new Set(daOs.filter((c) => c.itens.some(aberto)).map((c) => c.dealId))];
+  return comFalta.length ? comFalta : [...new Set(daOs.map((c) => c.dealId))];
+}
+function decidirEmailPcp(c, usuario) {
+  if (!String(c.id ?? '').trim()) throw bad('Sugestão não informada.');
+  if (c.decisao !== 'ACEITAR' && c.decisao !== 'IGNORAR') throw bad('Decisão inválida.');
+  const e = estado.emailsPcp.find((x) => x.id === c.id);
+  if (!e) throw new Erro(404, 'Sugestão não encontrada.');
+  const destino = c.decisao === 'ACEITAR' ? 'ACEITA' : 'IGNORADA';
+  if (e.status === destino) return resposta(agoraIso(), [], { emailId: e.id });
+  if (e.status !== 'PENDENTE') throw new Erro(409, 'Esta sugestão já foi decidida.');
+  const alvos = dealsAlvoEmail(e);
+  if (!alvos.length && c.decisao === 'ACEITAR') throw new Erro(404, 'Nenhuma caixa desta OS no app.');
+  exigirEditavel(alvos.length ? alvos : ['sem-caixa']);
+  const historicos = [];
+  const agora = agoraIso();
+  acaoAtual = 'EMAIL_PCP_ACEITA';
+  if (c.decisao === 'ACEITAR') {
+    if (e.tipo === 'PREVISAO' && e.itens.length) {
+      for (const d of alvos) {
+        const its = caixaDe(d).itens.filter((i) => e.itens.includes(i.id));
+        its.forEach((i) => { i.previsao = e.valor; i.versao = agora; });
+        registrar(d, usuario, `${usuario} aceitou sugestão do e-mail: previsão ${ddmm(e.valor)} para ${its.map((i) => i.nome).join(', ')}`, historicos);
+      }
+    } else {
+      const item = e.itens.length ? estado.caixas.flatMap((x) => x.itens).find((i) => i.id === e.itens[0]) : null;
+      const sufixo = e.tipo === 'PREVISAO' ? `previsão ${ddmm(e.valor)} para a caixa`
+        : e.tipo === 'CHAMADO' ? `chamado #${e.valor}`
+        : e.tipo === 'QUANTIDADE' ? `quantidade conferida de ${item?.nome ?? 'item'}: ${e.valor} ${item?.un ?? ''}`.trim()
+        : e.resumo;
+      for (const d of alvos) {
+        if (e.tipo === 'PREVISAO') { caixaDe(d).previsao = e.valor; caixaDe(d).versao = agora; }
+        registrar(d, usuario, `${usuario} aceitou sugestão do e-mail: ${sufixo}`, historicos);
+      }
+    }
+  }
+  e.status = destino;
+  e.decididoEm = agora;
+  return resposta(agora, historicos, { emailId: e.id });
+}
+
 function processar(corpo, usuario) {
   acaoAtual = String(corpo?.tipo ?? '');
   switch (corpo?.tipo) {
@@ -943,6 +1022,7 @@ function processar(corpo, usuario) {
     case 'reenviar_whatsapp': return reenviarWhatsapp(corpo, usuario);
     case 'alterar_capacidade_oficina': return alterarCapacidade(corpo);
     case 'anotar_peca': return anotarPeca(corpo, usuario);
+    case 'decidir_email_pcp': return decidirEmailPcp(corpo, usuario);
     case 'salvar_etapas':
       if (PERFIL !== 'ADM') throw new Erro(403, 'Só administradores podem alterar as etapas do quadro.');
       return salvarEtapas(corpo);
