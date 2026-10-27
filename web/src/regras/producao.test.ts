@@ -185,6 +185,13 @@ describe('OS previstas (19/10)', () => {
     expect(indicadoresProducao([prod(), prevista], '2026-10-13')).toMatchObject({ os: 1, pecas: 120 });
     expect(indicadoresProducao([prod(), prevista], '2026-10-13').semCombinada).toBe(0);
   });
+  it('têm situação própria: não contam como "Sem prazo"', () => {
+    expect(situacaoPrazo(prevista, '2026-10-13')).toEqual({ situacao: 'PREVISTA', dias: null, texto: 'Prevista' });
+    const base = { busca: '', oficinaId: '', soComFalta: false, hoje: '2026-10-13', incluirPrevistas: true };
+    const semPrazo = prod({ dealId: 'd', dataCombinada: '', leadTime: '' });
+    expect(filtrarProducoes([semPrazo, prevista], { ...base, situacao: 'SEM_PRAZO' }).map((p) => p.dealId)).toEqual(['d']);
+    expect(filtrarProducoes([semPrazo, prevista], { ...base, situacao: 'PREVISTA' }).map((p) => p.dealId)).toEqual(['710015']);
+  });
   it('a janela do Gantt vai até o fim previsto', () => {
     expect(janelaGantt([prod({ inicioCostura: '2026-10-01', dataCombinada: '2026-10-20' }), prevista], '2026-10-13').fim).toBe('2026-12-20');
   });

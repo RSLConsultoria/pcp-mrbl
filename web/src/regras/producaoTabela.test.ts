@@ -24,12 +24,13 @@ it('formata datas em dd/mm/aaaa', () => {
 describe('previstas na tabela', () => {
   const prev = () => prod({ dealId: '710020', prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', inicioCosturaPrevisto: '2026-10-21', fimCosturaPrevisto: '2026-10-27', dataCombinada: '', leadTime: '2026-09-01', inicioCostura: '' });
 
-  it('prazo e situação da OS prevista mostram "—", ordenam como vazios e não casam filtro de situação', () => {
+  it('prazo da OS prevista mostra "—"; a situação é "Prevista", ordena como vazia e só casa o filtro Prevista', () => {
     const linhas = linhasTabela([prod({ dealId: 'r1', leadTime: '2026-09-01', dataCombinada: '' }), prev()], HOJE);
     const [real, prevista] = linhas;
     expect(real.valores.situacao.filtro).toBe('ATRASADA');
     expect(prevista.valores.prazo).toEqual({ exibir: '—', ordem: null });
-    expect(prevista.valores.situacao).toEqual({ exibir: '—', ordem: null, filtro: '' });
+    expect(prevista.valores.situacao).toEqual({ exibir: 'Prevista', ordem: null, filtro: 'PREVISTA' });
+    expect(filtrarLinhas(linhas, { situacao: 'PREVISTA' }).map((l) => l.item.dealId)).toEqual(['710020']);
     expect(filtrarLinhas(linhas, { situacao: 'ATRASADA' }).map((l) => l.item.dealId)).toEqual(['r1']);
     expect(ordenarLinhas(linhas, { coluna: 'situacao', direcao: 'desc' }).map((l) => l.item.dealId)).toEqual(['r1', '710020']);
   });

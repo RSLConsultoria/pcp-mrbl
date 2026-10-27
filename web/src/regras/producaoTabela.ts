@@ -55,7 +55,7 @@ const contagem = (n: number, sinal: string): ValorCelula => ({ exibir: n ? `${si
 export function linhasTabela(lista: Producao[], hoje: string): LinhaProducao[] {
   return lista.map((p) => {
     const situacao = situacaoPrazo(p, hoje);
-    // OS prevista ainda não tem prazo de entrega da Costura: Prazo e Situação ficam vazios.
+    // OS prevista ainda não tem prazo de entrega da Costura: Prazo fica vazio e a Situação é "Prevista".
     const vazio: ValorCelula = { exibir: '—', ordem: null };
     const pendente = p.sugestoes.some((s) => s.status === 'PENDENTE');
     return {
@@ -72,7 +72,7 @@ export function linhasTabela(lista: Producao[], hoje: string): LinhaProducao[] {
         combinada: data(p.dataCombinada),
         leadTime: data(p.leadTime),
         prazo: p.prevista ? vazio : data(prazoProducao(p).data),
-        situacao: p.prevista ? { ...vazio, filtro: '' } : { exibir: situacao.texto, ordem: situacao.dias, filtro: situacao.situacao },
+        situacao: p.prevista ? { exibir: situacao.texto, ordem: null, filtro: situacao.situacao } : { exibir: situacao.texto, ordem: situacao.dias, filtro: situacao.situacao },
         faltasCostura: contagem(p.faltasCostura.length, '🚫'),
         faltasAcabamento: contagem(p.faltasAcabamento.length, '⚠️'),
         sugestao: { exibir: pendente ? 'Sim' : '—', ordem: pendente ? 1 : 0 },

@@ -3,10 +3,11 @@ import type { Producao } from '../api/tipos';
 export type OrigemPrazo = 'COMBINADA' | 'LEAD_TIME' | 'SEM_PRAZO';
 export type StatusPrazoProducao = 'ATRASADO' | 'HOJE' | 'PROXIMO' | 'NO_PRAZO' | 'SEM_PRAZO';
 // Filtro geral "Situação do prazo": agrupa o status do Gantt (HOJE e PROXIMO viram "vence em breve").
-export type SituacaoPrazo = 'ATRASADA' | 'EM_BREVE' | 'NO_PRAZO' | 'SEM_PRAZO';
+// A OS prevista ainda não chegou na Costura: tem situação própria, não é "sem prazo".
+export type SituacaoPrazo = 'ATRASADA' | 'EM_BREVE' | 'NO_PRAZO' | 'SEM_PRAZO' | 'PREVISTA';
 export const SITUACOES_PRAZO: { valor: SituacaoPrazo; rotulo: string }[] = [
   { valor: 'ATRASADA', rotulo: 'Atrasada' }, { valor: 'EM_BREVE', rotulo: 'Vence em breve' },
-  { valor: 'NO_PRAZO', rotulo: 'No prazo' }, { valor: 'SEM_PRAZO', rotulo: 'Sem prazo' }
+  { valor: 'NO_PRAZO', rotulo: 'No prazo' }, { valor: 'SEM_PRAZO', rotulo: 'Sem prazo' }, { valor: 'PREVISTA', rotulo: 'Prevista' }
 ];
 // incluirPrevistas (19/10): sem ele, as OS previstas (etapas 12 a 16) ficam fora.
 export interface FiltrosProducao { busca: string; oficinaId: string; soComFalta: boolean; situacao?: SituacaoPrazo | ''; hoje?: string; incluirPrevistas?: boolean }
@@ -38,7 +39,8 @@ export function statusProducao(p: Pick<Producao, 'dataCombinada' | 'leadTime'>, 
   return { status, dias, ...prazo };
 }
 
-export function situacaoPrazo(p: Pick<Producao, 'dataCombinada' | 'leadTime'>, hoje: string): { situacao: SituacaoPrazo; dias: number | null; texto: string } {
+export function situacaoPrazo(p: Pick<Producao, 'dataCombinada' | 'leadTime' | 'prevista'>, hoje: string): { situacao: SituacaoPrazo; dias: number | null; texto: string } {
+  if (p.prevista) return { situacao: 'PREVISTA', dias: null, texto: 'Prevista' };
   const { status, dias } = statusProducao(p, hoje);
   if (status === 'SEM_PRAZO' || dias === null) return { situacao: 'SEM_PRAZO', dias: null, texto: 'Sem prazo' };
   const situacao: SituacaoPrazo = status === 'ATRASADO' ? 'ATRASADA' : status === 'NO_PRAZO' ? 'NO_PRAZO' : 'EM_BREVE';

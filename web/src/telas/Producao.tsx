@@ -151,9 +151,11 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           {editavel ? <button type="button" className="botao botao--signal" onClick={salvar}>Salvar combinado</button>
             : <p className="producao-vazio">{item.prevista ? 'OS ainda não chegou na Costura: só leitura.' : 'Edição liberada em breve para esta OS.'}</p>}
         </section>
-        <section className="producao-secao">
+        <section className="producao-secao" aria-label="Prazo">
           <h3>Prazo</h3>
-          <p>{prazo.data ? `${ddmm(prazo.data)} · ${prazo.origem === 'COMBINADA' ? 'data combinada' : 'lead time'}` : 'Sem prazo definido'}</p>
+          {/* A OS prevista ainda não tem prazo da Costura: mostra a previsão, não "sem prazo". */}
+          <p>{item.prevista ? (item.fimCosturaPrevisto ? `${ddmm(item.fimCosturaPrevisto)} · fim previsto da Costura` : 'Sem previsão a partir do Corte')
+            : prazo.data ? `${ddmm(prazo.data)} · ${prazo.origem === 'COMBINADA' ? 'data combinada' : 'lead time'}` : 'Sem prazo definido'}</p>
         </section>
         <section className="producao-secao">
           <h3>Faltas da costura <span>{item.faltasCostura.length}</span></h3>

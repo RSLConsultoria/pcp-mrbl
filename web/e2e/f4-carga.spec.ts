@@ -166,3 +166,17 @@ test('painel da OS prevista mostra a etapa e as datas previstas e não oferece m
   await expect(previsao).toContainText('03/11');
   await expect(painel).toContainText('A mensagem para a oficina fica disponível quando a OS chegar à Costura.');
 });
+
+test('OS prevista não entra em "Sem prazo" e o painel mostra a previsão', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('group', { name: 'Visão' }).getByRole('button', { name: 'Gantt' }).click();
+  await page.getByLabel('Incluir previstas').check();
+  await page.getByLabel('Situação do prazo').selectOption('SEM_PRAZO');
+  await expect(page.getByRole('button', { name: /OS 10015/ })).toHaveCount(0);
+  await page.getByLabel('Situação do prazo').selectOption('PREVISTA');
+  await expect(page.getByRole('button', { name: /OS 20001/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /OS 10015/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 10015' });
+  await expect(painel).not.toContainText('Sem prazo definido');
+  await expect(painel.getByRole('region', { name: 'Prazo' })).toContainText('03/11 · fim previsto da Costura');
+});
