@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { ApiError, perguntarAssistente } from '../api/client';
 import type { Board, MensagemAssistente } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
-import { conversar, EXEMPLOS_ASSISTENTE, executarFerramenta, osConhecidas, partesComOs, type CartaoCobranca as Cartao } from '../regras/assistente';
+import { cancelarCartao, conversar, EXEMPLOS_ASSISTENTE, executarFerramenta, osConhecidas, partesComOs, type CartaoCobranca as Cartao } from '../regras/assistente';
 import { diaIso } from '../regras/datas';
 import { hashDaPeca, type Tela } from '../regras/telas';
 import { CartaoCobranca } from './CartaoCobranca';
@@ -41,11 +41,13 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
   const atual = useRef({ board, mensagens });
   atual.current = { board, mensagens };
   const seq = useRef(0);
+  const ocupado = useRef(false); // trava síncrona: duplo clique não abre duas conversas
   const fim = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
   const conhecidas = osConhecidas(board);
 
-  useEffect(() => { fim.current?.scrollIntoView?.({ block: 'end' }); }, [itens, pensando]);
+  // Rola só quando entra item novo (editar ou marcar uma linha do cartão não pula para o fim).
+  useEffect(() => { fim.current?.scrollIntoView?.({ block: 'end' }); }, [itens.length, pensando]);
   useEffect(() => { if (aberto) campo.current?.focus(); }, [aberto]);
 
   const novoItem = (i: NovoItem) => {
@@ -55,7 +57,8 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
 
   const perguntar = async (texto: string) => {
     const t = texto.trim();
-    if (!t || pensando) return;
+    if (!t || ocupado.current) return;
+    ocupado.current = true;
     const historico: MensagemAssistente[] = [...atual.current.mensagens, { papel: 'usuario', texto: t }];
     setMensagens(historico);
     novoItem({ tipo: 'usuario', texto: t });
@@ -63,20 +66,28 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
     setPensando(true);
     const agora = new Date();
     const hoje = diaIso(agora);
+    // O cartão só aparece se a pergunta terminar: com erro no meio, nada fica confirmável.
+    const cartoes: Cartao[] = [];
     try {
       const r = await conversar(historico, (m) => perguntarAssistente(token, hoje, m), (chamada) => {
         const ex = executarFerramenta(atual.current.board, chamada, hoje, agora, `cartao-${++seq.current}`);
         if (ex.efeito?.tipo === 'abrir') onAbrirTela(ex.efeito.tela, ex.efeito.os);
-        if (ex.efeito?.tipo === 'cobranca') novoItem({ tipo: 'cobranca', cartao: ex.efeito.cartao });
+        if (ex.efeito?.tipo === 'cobranca') cartoes.push(ex.efeito.cartao);
         return ex.resultado;
       });
       setMensagens([...historico, ...r.novas]);
+      if (cartoes.length) {
+        // Um cartão aberto por vez: os anteriores ainda abertos viram só leitura (sem cobrança em dobro).
+        setItens((lista) => lista.map((i) => (i.tipo === 'cobranca' && i.cartao.estado === 'aberto' ? { ...i, cartao: cancelarCartao(i.cartao) } : i)));
+        for (const c of cartoes) novoItem({ tipo: 'cobranca', cartao: c });
+      }
       novoItem({ tipo: 'assistente', texto: r.texto });
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return aoExpirar();
       // A pergunta fica na conversa; o que veio no meio é descartado.
       novoItem({ tipo: 'erro', texto: e instanceof ApiError && e.status === 429 ? e.message : ERRO_PADRAO });
     } finally {
+      ocupado.current = false;
       setPensando(false);
     }
   };
@@ -104,7 +115,7 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
           {EXEMPLOS_ASSISTENTE.map((x) => <button key={x} type="button" disabled={pensando} onClick={() => void perguntar(x)}>{x}</button>)}
         </div>
         {itens.map((i) => i.tipo === 'cobranca'
-          ? <CartaoCobranca key={i.id} cartao={i.cartao} board={board} executar={executar} onMudar={(c) => mudarCartao(i.id, c)} />
+          ? <CartaoCobranca key={i.id} cartao={i.cartao} board={board} executar={executar} onMudar={(c) => mudarCartao(i.id, c)} onLinkOs={onLinkOs} />
           : <div key={i.id} className={`assistente__msg assistente__msg--${i.tipo}`} role={i.tipo === 'erro' ? 'alert' : undefined}>
             {i.tipo === 'assistente' ? <TextoComOs texto={i.texto} conhecidas={conhecidas} onLinkOs={onLinkOs} /> : i.texto}
           </div>)}

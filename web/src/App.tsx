@@ -66,10 +66,10 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
     if (window.matchMedia?.('(max-width: 720px)').matches) setAssistente(false);
   }, []);
   const abrirDoAssistente = useCallback((t: Tela, os: string) => {
+    // No celular o painel continua aberto: a resposta "Abri …" chega nele; fecha no X.
     if (t === 'peca' && os) window.location.hash = hashDaPeca(os);
     else irPara(t);
-    fecharNoCelular();
-  }, [irPara, fecharNoCelular]);
+  }, [irPara]);
   const hoje = new Date();
   const q = buscas[tela];
   const selecionados = board ? itensSelecionados(board, selecao).length : 0;
@@ -103,7 +103,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
     <div className={assistente ? 'moldura moldura--assistente' : 'moldura'}>
     <div className="app">
       <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair}
-        assistenteAberto={assistente} onAssistente={() => setAssistente((a) => !a)} />
+        assistenteAberto={assistente} onAssistente={board ? () => setAssistente((a) => !a) : undefined} />
       {board && <FaixaInsights board={board} agora={hoje} onOficina={abrirOficina} />}
       {board && <FaixaEmailsPcp board={board} onAbrir={abrirEmail} />}
       {/* A Visão da peça tem a própria busca (OS ou referência no Ploomes). */}

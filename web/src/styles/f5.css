@@ -203,6 +203,11 @@
 .cobranca-cartao__rodape .botao { height: 34px; font-size: 13px; }
 .cobranca-cartao__fim { margin: 0; font-size: 13px; font-weight: 700; color: var(--ok-text); }
 .cobranca-cartao--cancelado .cobranca-cartao__fim { color: var(--suave); }
+/* Com o painel aberto o conteúdo perde 380 px: em telas médias a navbar enxuga. */
+@media (max-width: 1440px) {
+  .moldura--assistente .navbar__direita .sync, .moldura--assistente .navbar__assistente span { display: none; }
+  .moldura--assistente .navbar__assistente { padding: 0 9px; }
+}
 @media (max-width: 720px) {
   .assistente { position: fixed; inset: 0; z-index: 60; width: 100%; flex-basis: auto; border-left: 0; box-shadow: none; }
   .navbar__assistente span { display: none; }

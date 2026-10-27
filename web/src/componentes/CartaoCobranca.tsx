@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Board } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import {
@@ -12,19 +12,25 @@ const ALVO: Record<Cartao['alvo'], string> = { atrasadas: 'OS atrasadas ou vence
 // Cartão de cobrança do Assistente (F5d). Nada sai daqui sem o clique em "Confirmar e enviar":
 // cada linha marcada vira uma enviar_whatsapp (mesma ação, chave e fila do Controle de produção).
 // Depois de confirmado ou cancelado, fica só leitura.
-export function CartaoCobranca({ cartao, board, executar, onMudar }: {
-  cartao: Cartao; board: Board; executar: Executar; onMudar: (c: Cartao) => void;
+export function CartaoCobranca({ cartao, board, executar, onMudar, onLinkOs }: {
+  cartao: Cartao; board: Board; executar: Executar; onMudar: (c: Cartao) => void; onLinkOs?: () => void;
 }) {
   const [erro, setErro] = useState('');
+  const [recusadas, setRecusadas] = useState(0);
+  const confirmado = useRef(false); // trava síncrona contra o duplo clique
   const aberto = cartao.estado === 'aberto';
   const n = linhasEnviaveis(cartao).length;
   const confirmar = () => {
+    if (confirmado.current) return;
     const e = erroCartao(cartao);
     if (e) return setErro(e);
     const acoes = acoesDoCartao(cartao, board);
     if (!acoes.length) return setErro('Nenhuma OS pode ser cobrada agora. Atualize a página e tente de novo.');
     setErro('');
-    for (const a of acoes) void executar(a, 'Cobrança colocada na fila do WhatsApp');
+    confirmado.current = true;
+    // A fila é otimista: o cartão mostra as N na hora; se o servidor recusar alguma, conta aqui.
+    void Promise.all(acoes.map((a) => executar(a, 'Cobrança colocada na fila do WhatsApp')))
+      .then((oks) => setRecusadas(oks.filter((ok) => !ok).length));
     onMudar(confirmarCartao(cartao, acoes.length));
   };
   return (
@@ -39,7 +45,7 @@ export function CartaoCobranca({ cartao, board, executar, onMudar }: {
             <div className="cobranca-cartao__marca">
               <input type="checkbox" checked={l.marcada} disabled={!aberto || l.travada} aria-label={`Cobrar a OS ${l.os}`}
                 onChange={() => onMudar(alternarLinha(cartao, l.dealId))} />
-              <span><LinkPeca os={l.os} className="cobranca-cartao__os" rotulo={`OS ${l.os}`} /> · {l.peca} · {l.oficina}</span>
+              <span><LinkPeca os={l.os} className="cobranca-cartao__os" rotulo={`OS ${l.os}`} onClick={onLinkOs} /> · {l.peca} · {l.oficina}</span>
             </div>
             <small className="cobranca-cartao__prazo">Prazo {l.prazo} · {l.situacao}</small>
             {l.travada
@@ -54,7 +60,9 @@ export function CartaoCobranca({ cartao, board, executar, onMudar }: {
         <button type="button" className="botao botao--signal" disabled={n === 0} onClick={confirmar}>Confirmar e enviar ({n})</button>
         <button type="button" className="botao botao--contorno" onClick={() => onMudar(cancelarCartao(cartao))}>Cancelar</button>
       </footer>
-        : <p className="cobranca-cartao__fim" role="status">{cartao.estado === 'confirmado' ? textoEnfileiradas(cartao.enfileiradas) : 'Cobrança cancelada. Nada foi enviado.'}</p>}
+        : <p className="cobranca-cartao__fim" role="status">{cartao.estado === 'confirmado'
+          ? textoEnfileiradas(cartao.enfileiradas - recusadas) + (recusadas ? ` · ${recusadas} ${recusadas === 1 ? 'recusada' : 'recusadas'} pelo servidor` : '')
+          : 'Cobrança cancelada. Nada foi enviado.'}</p>}
     </section>
   );
 }

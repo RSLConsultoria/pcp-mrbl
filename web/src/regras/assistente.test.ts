@@ -306,6 +306,17 @@ describe('conversar', () => {
     expect(r.novas.at(-1)).toEqual({ papel: 'assistente', texto: TEXTO_LIMITE_CHAMADAS });
   });
 
+  it('chamadas paralelas que passariam de 5 somando as anteriores param sem rodar', async () => {
+    const respostas: RespostaAssistente[] = [
+      { chamadas: [1, 2, 3].map((i) => ({ id: `a${i}`, nome: 'buscar_os', argumentos: {} })) },
+      { chamadas: [1, 2, 3].map((i) => ({ id: `b${i}`, nome: 'buscar_os', argumentos: {} })) }
+    ];
+    const executar = vi.fn(() => ({}));
+    const r = await conversar(pergunta, async () => respostas.shift()!, executar);
+    expect(executar).toHaveBeenCalledTimes(3);
+    expect(r.texto).toBe(TEXTO_LIMITE_CHAMADAS);
+  });
+
   it('erro do servidor sobe para a tela', async () => {
     const pedir = vi.fn(async (): Promise<RespostaAssistente> => { throw new Error('502'); });
     await expect(conversar(pergunta, pedir, () => ({}))).rejects.toThrow('502');
@@ -320,5 +331,6 @@ describe('links de OS', () => {
     ]);
     expect(partesComOs('Nada aqui.', conhecidas)).toEqual([{ texto: 'Nada aqui.' }]);
     expect(partesComOs('90004', conhecidas)).toEqual([{ os: '90004' }]);
+    expect(partesComOs('## Resumo\n**OS 90001** atrasada', conhecidas)).toEqual([{ texto: 'Resumo\nOS ' }, { os: '90001' }, { texto: ' atrasada' }]);
   });
 });

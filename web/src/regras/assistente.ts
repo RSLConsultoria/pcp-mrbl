@@ -274,8 +274,14 @@ export async function conversar(
 export const osConhecidas = (board: Pick<Board, 'caixas' | 'producao'>): Set<string> =>
   new Set([...board.caixas.map((c) => c.os), ...(board.producao ?? []).map((p) => p.os)]);
 
+// O modelo às vezes manda Markdown mesmo pedindo texto simples: negrito e cabeçalho saem.
+export function semMarkdown(texto: string): string {
+  return texto.replace(/\*\*|__/g, '').replace(/^#{1,6}\s+/gm, '');
+}
+
 // Números de 4 a 9 dígitos que são OS do board viram link (#peca/<OS>).
-export function partesComOs(texto: string, conhecidas: Set<string>): ({ texto: string } | { os: string })[] {
+export function partesComOs(bruto: string, conhecidas: Set<string>): ({ texto: string } | { os: string })[] {
+  const texto = semMarkdown(bruto);
   const partes: ({ texto: string } | { os: string })[] = [];
   let desde = 0;
   for (const m of texto.matchAll(/(?<!\d)\d{4,9}(?!\d)/g)) {
