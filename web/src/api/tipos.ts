@@ -325,3 +325,12 @@ export interface EmailPcp {
   confianca: number | null;
   status: 'PENDENTE' | 'ACEITA' | 'IGNORADA';
 }
+
+// Contrato do webhook pcp-assistente (n8n/src/assistente.js). A conversa vive só no navegador.
+export interface ChamadaAssistente { id: string; nome: string; argumentos: Record<string, unknown> }
+export type MensagemAssistente =
+  | { papel: 'usuario'; texto: string }
+  | { papel: 'assistente'; texto: string }
+  | { papel: 'assistente'; chamadas: ChamadaAssistente[] }
+  | { papel: 'ferramenta'; id: string; nome: string; resultado: string };
+export type RespostaAssistente = { texto: string } | { chamadas: ChamadaAssistente[] };

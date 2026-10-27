@@ -30,10 +30,11 @@ function textoPrazo(dias: number): string {
 }
 
 // 1. OS na Costura com o prazo vigente (combinada; senão lead time) vencido ou em até 3 dias.
-export function prazosEstourando(producao: Producao[] | undefined, hoje: string): LinhaPrazo[] {
+// dias: o Assistente (F5d) usa a mesma regra com outra folga.
+export function prazosEstourando(producao: Producao[] | undefined, hoje: string, dias = DIAS_PRAZO_ESTOURANDO): LinhaPrazo[] {
   return naCostura(producao)
     .map((p) => ({ p, dias: statusProducao(p, hoje).dias }))
-    .filter((x): x is { p: Producao; dias: number } => x.dias !== null && x.dias <= DIAS_PRAZO_ESTOURANDO)
+    .filter((x): x is { p: Producao; dias: number } => x.dias !== null && x.dias <= dias)
     .sort((a, b) => a.dias - b.dias || porOs(a.p.os, b.p.os))
     .map(({ p, dias }) => ({ dealId: p.dealId, os: p.os, peca: p.peca || p.referencia, oficina: p.oficina, dias, texto: textoPrazo(dias) }));
 }
@@ -44,11 +45,11 @@ export function rotuloTipoCaixa(tipo: string): string {
 }
 
 // 2. Caixa com falta aberta (algum item com resta > 0), que não saiu, registrada há 7 dias ou mais.
-export function caixasParadas(caixas: Caixa[], hoje: string): LinhaCaixaParada[] {
+export function caixasParadas(caixas: Caixa[], hoje: string, minimo = DIAS_CAIXA_PARADA): LinhaCaixaParada[] {
   return caixas
     .filter((c) => !c.saiu && /^\d{4}-\d{2}-\d{2}/.test(c.registradoEm))
     .map((c) => ({ c, dias: diasAte(c.registradoEm.slice(0, 10), hoje), abertos: c.itens.filter((i) => (i.resta ?? 0) > 0).length }))
-    .filter((x) => x.abertos > 0 && x.dias >= DIAS_CAIXA_PARADA)
+    .filter((x) => x.abertos > 0 && x.dias >= minimo)
     .map(({ c, dias, abertos }) => ({
       id: c.id, os: c.os, tipo: rotuloTipoCaixa(c.tipo), dias, itensAbertos: abertos,
       texto: `parada há ${nDias(dias)}`, itens: `${abertos} ${abertos === 1 ? 'item' : 'itens'} em aberto`
