@@ -8,9 +8,9 @@ import { corDoTipo, iniciais, nomeDoTipo } from '../regras/texto';
 // Itens visíveis na frente do card; o resto fica no painel.
 const ITENS_NO_CARD = 3;
 
-interface Props { caixa: Caixa; hoje: Date; selecionada: boolean; onAbrir: () => void }
+interface Props { caixa: Caixa; hoje: Date; selecionada: boolean; onAbrir: () => void; emailPcp?: boolean }
 
-export function CardCaixa({ caixa, hoje, selecionada, onAbrir }: Props) {
+export function CardCaixa({ caixa, hoje, selecionada, onAbrir, emailPcp = false }: Props) {
   const abertos = itensAbertos(caixa);
   const resolvidos = caixa.itens.filter((i) => i.status === 'RESOLVIDO').length;
   const dias = diasEntre(caixa.registradoEm, hoje);
@@ -27,6 +27,7 @@ export function CardCaixa({ caixa, hoje, selecionada, onAbrir }: Props) {
       </div>
       <div className="card__peca">{caixa.peca}</div>
       <div className="card__meta">{[caixa.cliente, nomeDoTipo(caixa.tipo)].filter(Boolean).join(' · ')}</div>
+      {emailPcp && <div className="card__selos"><span className="selo-email" title="Sugestão nova de um e-mail do PCP">e-mail do PCP</span></div>}
 
       {visiveis.length > 0 && (
         <ul className="card__itens">

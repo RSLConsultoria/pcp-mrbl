@@ -117,3 +117,39 @@
   .insights__acao { margin-left: auto; }
   .insights__cartoes { grid-template-columns: minmax(0, 1fr); padding: 0 16px 12px; }
 }
+
+/* F5c · E-mails do PCP: faixa azul abaixo dos Insights, bloco no painel da caixa e selo no card. */
+.emails-faixa { flex: none; min-width: 0; background: rgba(47, 85, 212, .07); border-bottom: 1px solid rgba(47, 85, 212, .22); }
+.emails-faixa--aberta { max-height: 40vh; overflow-y: auto; }
+.emails-faixa__alternar { width: 100%; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 24px; border: 0; background: transparent; cursor: pointer; text-align: left; font-family: var(--font-sans); color: var(--tipo-acabamento); }
+.emails-faixa__alternar:hover { background: rgba(47, 85, 212, .06); }
+.emails-faixa__alternar:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+.emails-faixa__ponto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tipo-acabamento); }
+.emails-faixa__resumo { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.emails-faixa__acao { flex: none; font-size: 12.5px; font-weight: 600; }
+.emails-faixa__lista { list-style: none; margin: 0; padding: 0 24px 10px; display: flex; flex-direction: column; gap: 4px; }
+.emails-faixa__item { width: 100%; display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 6px 10px; border: 1px solid rgba(47, 85, 212, .18); border-radius: 4px; background: #fff; color: var(--texto); text-align: left; cursor: pointer; font: inherit; }
+.emails-faixa__item:hover { border-color: var(--tipo-acabamento); }
+.emails-faixa__item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.emails-faixa__item strong { font-family: var(--font-mono); font-size: 12px; }
+.emails-faixa__item span { min-width: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.emails-faixa__item small { font-size: 11.5px; color: var(--suave); }
+.sugestao-email { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid rgba(47, 85, 212, .3); border-left: 3px solid var(--tipo-acabamento); border-radius: 5px; background: rgba(47, 85, 212, .06); }
+.sugestao-email__titulo { margin: 0; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--tipo-acabamento); }
+.sugestao-email__meta { margin: 0; font-size: 12px; color: var(--suave); }
+.sugestao-email__assunto { margin: 0; font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+.sugestao-email__trecho { margin: 0; padding: 6px 10px; border-left: 2px solid rgba(47, 85, 212, .35); background: #fff; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.sugestao-email__entendeu { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.sugestao-email__entendeu span { font-weight: 400; color: var(--suave); }
+.sugestao-email__botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.sugestao-email__botoes .botao { height: 32px; padding: 0 14px; font-size: 13px; }
+.selo-email { padding: 2px 8px; border-radius: 999px; background: rgba(47, 85, 212, .1); color: var(--tipo-acabamento); font-size: 11.5px; font-weight: 700; }
+.peca__sugestao { color: var(--tipo-acabamento); font-weight: 600; }
+.peca__selo--email-pendente { background: rgba(47, 85, 212, .1); color: var(--tipo-acabamento); }
+.peca__selo--email-aceita { background: var(--ok-bg); color: var(--ok-text); }
+.peca__selo--email-ignorada { background: var(--canvas); color: var(--suave); }
+@media (max-width: 720px) {
+  .emails-faixa__alternar { padding: 8px 16px; }
+  .emails-faixa__lista { padding: 0 16px 10px; }
+  .emails-faixa__item { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { Caixa } from '../api/tipos';
+import type { Caixa, EmailPcp } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { colunaDaCaixa, COLUNAS, itemAberto } from '../regras/colunas';
 import { ddmm, diasEntre, textoDias } from '../regras/datas';
@@ -9,6 +9,7 @@ import { CamposCaixa } from './painel/CamposCaixa';
 import { Historico } from './painel/Historico';
 import { ItemEditavel } from './painel/ItemEditavel';
 import { LinkPeca } from './LinkPeca';
+import { SugestoesEmail } from './painel/SugestoesEmail';
 
 const URL_PLOOMES = 'https://app10.ploomes.com/deal/';
 
@@ -19,9 +20,10 @@ interface Props {
   editavel: boolean;
   executar: Executar;
   onFechar: () => void;
+  sugestoesEmail?: { email: EmailPcp; entendeu: string }[]; // F5c: sugestões pendentes dos e-mails do PCP
 }
 
-export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFechar }: Props) {
+export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFechar, sugestoesEmail = [] }: Props) {
   useEffect(() => {
     const aoTecla = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onFechar();
@@ -50,6 +52,7 @@ export function PainelCaixa({ caixa, hoje, usuarios, editavel, executar, onFecha
       </div>
       <div className="painel__corpo">
         {!editavel && <p className="item__nota" role="note">{MSG_SOMENTE_LEITURA}</p>}
+        <SugestoesEmail sugestoes={sugestoesEmail} executar={executar} somenteLeitura={!editavel} />
         <dl className="leitura">
           <div><dt>Etapa</dt><dd>{coluna.nome}</dd></div>
           <div><dt>Registro</dt><dd>{caixa.registradoEm ? `${ddmm(caixa.registradoEm)} · ${textoDias(dias)}` : '—'}</dd></div>

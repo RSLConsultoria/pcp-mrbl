@@ -147,7 +147,7 @@ test('abas: caixas e faltas, oficina e prazos, WhatsApp e e-mails', async ({ pag
   await expect(d.getByRole('tabpanel')).toContainText('Entregamos dia 13.');
   await expect(d.getByRole('tabpanel').getByRole('button')).toHaveCount(0);
   await d.getByRole('tab', { name: 'E-mails do PCP' }).click();
-  await expect(d.getByRole('tabpanel')).toHaveText('Chega na próxima parte da F5.');
+  await expect(d.getByRole('tabpanel')).toContainText('Nenhum e-mail do PCP desta OS');
 });
 
 test('anotação aparece na hora e vai ao servidor com o card de Produção', async ({ page }) => {

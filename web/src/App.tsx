@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Caixa, Sessao } from './api/tipos';
+import type { Caixa, EmailPcp, Sessao } from './api/tipos';
 import { lerSessao, limparSessao, salvarSessao } from './auth/sessao';
 import { AvisoProvider, useAviso } from './componentes/Aviso';
+import { FaixaEmailsPcp } from './componentes/FaixaEmailsPcp';
 import { FaixaInsights } from './componentes/FaixaInsights';
 import { FaixaOffline } from './componentes/FaixaOffline';
 import { Legenda, LegendaProducao } from './componentes/Legenda';
@@ -14,7 +15,8 @@ import { useBoard } from './hooks/useBoard';
 import type { FiltroPedidos } from './regras/pedidos';
 import { chaveItem, itensSelecionados } from './regras/pedidosQuadro';
 import { itensParaPedido } from './regras/saidas';
-import { BUSCA_DA_TELA, hashDaTela, telaDoHash, type Tela } from './regras/telas';
+import { destinoDoEmail } from './regras/emailsPcp';
+import { BUSCA_DA_TELA, hashDaPeca, hashDaTela, telaDoHash, type Tela } from './regras/telas';
 import { Login } from './telas/Login';
 import { NoPloomes } from './telas/NoPloomes';
 import { Pedidos, type JanelaPedidos } from './telas/Pedidos';
@@ -54,6 +56,9 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   const [selecao, setSelecao] = useState<Set<string>>(() => new Set());
   // Clique no cartão de oficina dos Insights: a produção abre filtrada por ela.
   const [pedidoOficina, setPedidoOficina] = useState<PedidoOficina | null>(null);
+  // Clique numa sugestão da faixa dos e-mails do PCP: o No Ploomes abre a caixa.
+  const [caixaPedida, setCaixaPedida] = useState<string | null>(null);
+  const caixaAtendida = useCallback(() => setCaixaPedida(null), []);
   const hoje = new Date();
   const q = buscas[tela];
   const selecionados = board ? itensSelecionados(board, selecao).length : 0;
@@ -72,10 +77,22 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
     irPara('producao');
   }, [irPara]);
 
+  const abrirEmail = useCallback((e: EmailPcp) => {
+    if (!board) return;
+    const destino = destinoDoEmail(board, e);
+    if ('os' in destino) {
+      window.location.hash = hashDaPeca(destino.os);
+      return;
+    }
+    setCaixaPedida(destino.caixaId);
+    irPara('ploomes');
+  }, [board, irPara]);
+
   return (
     <div className="app">
       <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair} />
       {board && <FaixaInsights board={board} agora={hoje} onOficina={abrirOficina} />}
+      {board && <FaixaEmailsPcp board={board} onAbrir={abrirEmail} />}
       {/* A Visão da peça tem a própria busca (OS ou referência no Ploomes). */}
       {tela !== 'peca' && <Subnav q={q} onQ={(v) => setBuscas((b) => ({ ...b, [tela]: v }))} placeholder={BUSCA_DA_TELA[tela]}>
         {tela === 'pedidos'
@@ -94,7 +111,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
               onJanela={setJanela} onSelecao={setSelecao} />
           : tela === 'producao' ? <Producao board={board} q={q} hoje={hoje} executar={executar} ehAdm={ehAdm}
               pedidoOficina={pedidoOficina} onPedidoOficinaAtendido={() => setPedidoOficina(null)} />
-          : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} />}
+          : <NoPloomes board={board} q={q} hoje={hoje} executar={executar} caixaPedida={caixaPedida} onCaixaPedidaAtendida={caixaAtendida} />}
       </main>
     </div>
   );

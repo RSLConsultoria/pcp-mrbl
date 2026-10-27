@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Board } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { CardCaixa } from '../componentes/CardCaixa';
@@ -6,11 +6,20 @@ import { caixaEditavelNoApp } from '../regras/edicao';
 import { PainelCaixa } from '../componentes/PainelCaixa';
 import { caixaAtendeBusca } from '../regras/busca';
 import { colunaDaCaixa, COLUNAS, semPosSaida, visivelNoQuadro } from '../regras/colunas';
+import { dealsAlvoEmailPcp, emailsPendentes, emailsPendentesDaCaixa, textoSugestaoEmail } from '../regras/emailsPcp';
 
-interface Props { board: Board; q: string; hoje: Date; executar: Executar }
+// caixaPedida: a faixa dos e-mails do PCP pede para abrir esta caixa (id); a tela avisa quando abriu.
+interface Props { board: Board; q: string; hoje: Date; executar: Executar; caixaPedida?: string | null; onCaixaPedidaAtendida?: () => void }
 
-export function NoPloomes({ board, q, hoje, executar }: Props) {
+export function NoPloomes({ board, q, hoje, executar, caixaPedida, onCaixaPedidaAtendida }: Props) {
   const [selId, setSelId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!caixaPedida) return;
+    setSelId(caixaPedida);
+    onCaixaPedidaAtendida?.();
+  }, [caixaPedida, onCaixaPedidaAtendida]);
+  // Selo "e-mail do PCP": caixas com sugestão pendente.
+  const comEmail = useMemo(() => new Set(emailsPendentes(board).flatMap((e) => dealsAlvoEmailPcp(e, board.caixas))), [board]);
   // A demanda pós-saída não entra no No Ploomes: a caixa fica como estava antes dela.
   const caixas = useMemo(() => board.caixas.map(semPosSaida), [board.caixas]);
   const visiveis = caixas.filter((c) => visivelNoQuadro(c, hoje) && caixaAtendeBusca(c, q));
@@ -31,7 +40,7 @@ export function NoPloomes({ board, q, hoje, executar }: Props) {
                 </header>
                 <div className="coluna__cards">
                   {cs.map((c) => (
-                    <CardCaixa key={c.id} caixa={c} hoje={hoje} selecionada={c.id === selId}
+                    <CardCaixa key={c.id} caixa={c} hoje={hoje} selecionada={c.id === selId} emailPcp={comEmail.has(c.dealId)}
                       onAbrir={() => setSelId(c.id === selId ? null : c.id)} />
                   ))}
                   {cs.length === 0 && <div className="coluna__vazio">{q ? 'Nenhuma caixa desta etapa atende à busca.' : col.vazio}</div>}
@@ -43,7 +52,8 @@ export function NoPloomes({ board, q, hoje, executar }: Props) {
       </div>
       {sel && (
         <PainelCaixa key={sel.id} caixa={sel} hoje={hoje} usuarios={board.usuarios ?? []}
-          editavel={caixaEditavelNoApp(board, sel)} executar={executar} onFechar={fechar} />
+          editavel={caixaEditavelNoApp(board, sel)} executar={executar} onFechar={fechar}
+          sugestoesEmail={emailsPendentesDaCaixa(board, sel.dealId).map((email) => ({ email, entendeu: textoSugestaoEmail(email, board) }))} />
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { ConversaWhatsapp } from '../componentes/ConversaWhatsapp';
 import type { Executar } from '../hooks/useAcao';
 import { itemAberto } from '../regras/colunas';
 import { dataHora, ddmm, diaIso } from '../regras/datas';
+import { emailsDaOs, NOME_MODELO_EMAIL, ROTULO_STATUS_EMAIL, textoSugestaoEmail } from '../regras/emailsPcp';
 import {
   cardPrincipal, caixasDaOs, dealDaAnotacao, erroAnotacao, linhaDoTempo, MAX_ANOTACAO, podeAnotar, producaoDaOs, resumoSituacao,
   ROTULO_FONTE, urlCard, urlHub, type EventoPeca
@@ -176,7 +177,7 @@ function Dossie({ board, os, ploomes, aviso, hoje, executar }: PropsDossie) {
             {aba === 'caixas' && <CaixasEFaltas board={board} os={os} />}
             {aba === 'prazos' && <OficinaEPrazos producao={producao} />}
             {aba === 'whatsapp' && <ConversaWhatsapp mensagens={producao?.mensagens ?? []} />}
-            {aba === 'emails' && <p className="peca__vazio">Chega na próxima parte da F5.</p>}
+            {aba === 'emails' && <EmailsDaOs board={board} os={os} />}
           </div>
         </section>
       </div>
@@ -264,5 +265,23 @@ function OficinaEPrazos({ producao }: { producao: Producao | undefined }) {
         </li>)}</ol>}
       <p className="peca__nota">A oficina e a data combinada mudam no painel da OS em Controle de produção. <a href="#producao">Abrir Controle de produção</a></p>
     </>
+  );
+}
+
+// F5c · e-mails do PCP desta OS (as sugestões pendentes e as decididas nos últimos 7 dias).
+function EmailsDaOs({ board, os }: { board: Board; os: string }) {
+  const emails = emailsDaOs(board, os);
+  if (!emails.length) return <p className="peca__vazio">Nenhum e-mail do PCP desta OS (aparecem as sugestões pendentes e as decididas nos últimos 7 dias).</p>;
+  return (
+    <ol className="peca__eventos">{emails.map((e) => <li key={e.id} className="peca__evento peca__evento--email">
+      <span className="peca__quando">{dataHora(e.quando)}</span>
+      <span className={`peca__selo peca__selo--email-${e.status.toLowerCase()}`}>{ROTULO_STATUS_EMAIL[e.status]}</span>
+      <div>
+        <p><strong>{e.assunto}</strong></p>
+        <p>{e.texto}</p>
+        <p className="peca__sugestao">{textoSugestaoEmail(e, board)}</p>
+        <small>{[e.de, NOME_MODELO_EMAIL[e.modelo] ?? e.modelo].filter(Boolean).join(' · ')}</small>
+      </div>
+    </li>)}</ol>
   );
 }
