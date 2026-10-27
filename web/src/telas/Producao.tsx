@@ -15,6 +15,8 @@ const PRODUCAO_VAZIA: ProducaoItem[] = [];
 const msDia = (iso: string) => Date.parse(`${iso}T12:00:00Z`);
 const indiceDia = (iso: string, inicio: string) => Math.round((msDia(iso) - msDia(inicio)) / 86_400_000);
 
+const plural = (n: number, um: string, varios: string) => `${n.toLocaleString('pt-BR')} ${n === 1 ? um : varios}`;
+
 function diasEntre(inicio: string, quantidade: number): string[] {
   return Array.from({ length: quantidade }, (_, i) => new Date(msDia(inicio) + i * 86_400_000).toISOString().slice(0, 10));
 }
@@ -78,6 +80,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
   const [enfileirando, setEnfileirando] = useState(false);
   // OS prevista ainda não chegou na Costura: o servidor recusa escrita, então o painel é só leitura.
   const editavel = !item.prevista && (!board.dealsProducaoEditaveis?.length || board.dealsProducaoEditaveis.includes(item.dealId));
+  const motivoSoLeitura = item.prevista ? 'OS ainda não chegou na Costura: só leitura.' : 'Edição liberada em breve para esta OS.';
   const oficina = board.oficinas?.find((o) => o.ploomesId === item.oficinaId);
   const salvar = () => {
     const e = validarMudancaProducao(item, { oficinaId, dataCombinada, motivo });
@@ -105,7 +108,12 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
     setErroMensagem('');
     setEnfileirando(true);
     // Uma chave por clique: a fila guarda a ação com ela e o servidor não duplica a mensagem.
+    const digitado = mensagem;
     void executar({ tipo: 'enviar_whatsapp', dealId: item.dealId, versao: item.versao, modelo, texto, chave: chaveEnvioWhatsapp() }, 'Mensagem colocada na fila do WhatsApp')
+      .then((ok) => {
+        // Na fila: a caixa volta ao modelo (se a pessoa não começou outro texto enquanto isso).
+        if (ok) setMensagem((atual) => (atual === digitado ? modeloMensagemProducao(modelo, item, hojeIso) : atual));
+      })
       .finally(() => setEnfileirando(false));
   };
   const reenviarMensagem = (mensagemId: string, texto: string) => {
@@ -149,7 +157,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
           </div>
           {erro && <p className="campo__erro" role="alert">{erro}</p>}
           {editavel ? <button type="button" className="botao botao--signal" onClick={salvar}>Salvar combinado</button>
-            : <p className="producao-vazio">{item.prevista ? 'OS ainda não chegou na Costura: só leitura.' : 'Edição liberada em breve para esta OS.'}</p>}
+            : <p className="producao-vazio">{motivoSoLeitura}</p>}
         </section>
         <section className="producao-secao" aria-label="Prazo">
           <h3>Prazo</h3>
@@ -180,14 +188,16 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               <label>Mensagem<textarea rows={5} maxLength={1500} value={mensagem} disabled={!editavel} onChange={(e) => setMensagem(e.target.value)} /></label>
               <small>Será enviada para {oficina.grupoNome || oficina.nome}. O texto pode ser revisado antes de entrar na fila.</small>
               {erroMensagem && <p className="campo__erro" role="alert">{erroMensagem}</p>}
-              {editavel && <button type="button" className="botao botao--signal" disabled={enfileirando} onClick={enfileirarMensagem}>Colocar na fila</button>}
+              {editavel ? <button type="button" className="botao botao--signal" disabled={enfileirando} onClick={enfileirarMensagem}>Colocar na fila</button>
+                : <p className="producao-vazio">{motivoSoLeitura}</p>}
             </>}
         </section>
         <section className="producao-secao">
           <h3>Sugestões do intérprete <span>{item.sugestoes.filter((s) => s.status === 'PENDENTE').length}</span></h3>
           {item.sugestoes.length === 0 ? <p className="producao-vazio">Nenhuma sugestão para esta OS.</p>
-            : <ul className="producao-sugestoes">{item.sugestoes.map((s) => <li key={s.id} className={s.status === 'PENDENTE' ? 'producao-sugestao--pendente' : ''}>
-              <span>{s.tipo === 'NOVA_DATA_COMBINADA' ? `Nova data: ${ddmm(s.valor)}` : s.tipo.replaceAll('_', ' ').toLowerCase()}</span>
+            : <ul className="producao-sugestoes">{item.sugestoes.map((s) => <li key={s.id} className={s.status === 'PENDENTE' ? 'producao-sugestao--pendente' : 'producao-sugestao--decidida'}>
+              <span>{s.tipo === 'NOVA_DATA_COMBINADA' ? `Nova data: ${ddmm(s.valor)}` : s.tipo.replaceAll('_', ' ').toLowerCase()}
+                {s.status !== 'PENDENTE' && <em className="producao-sugestao__estado">{s.status === 'ACEITA' ? 'aceita' : 'ignorada'}</em>}</span>
               <strong>{s.resumo}</strong><small>{s.evidencia ? `“${s.evidencia}”` : ''}{s.confianca !== null ? ` · ${Math.round(s.confianca * 100)}%` : ''}</small>
               {s.status === 'PENDENTE' && editavel && <div className="producao-sugestao__acoes">
                 {s.tipo === 'NOVA_DATA_COMBINADA' && <label>Motivo da nova data <span className="obrigatorio">*</span><input value={motivoSugestao} maxLength={500} onChange={(e) => setMotivoSugestao(e.target.value)} /></label>}
@@ -206,7 +216,7 @@ function PainelProducao({ item, board, hojeIso, executar, onFechar }: { item: Pr
               {m.associacao === 'IA' && <small className="producao-selo producao-selo--ia" title={m.associacaoMotivo}>ligada pela IA</small>}
               {m.pergunta && <small className="producao-selo producao-selo--ia">pergunta da IA</small>}
               {m.associacao === 'IA' && editavel && <TrocarOs mensagemId={m.id} item={item} producao={board.producao ?? []} editaveis={board.dealsProducaoEditaveis} executar={executar} />}
-              {m.statusEnvio === 'PENDENTE' && !!m.envioTentativas && <small>Aguardando nova tentativa ({m.envioTentativas} de 5)</small>}
+              {m.statusEnvio === 'PENDENTE' && (m.envioTentativas ? <small>Aguardando nova tentativa ({m.envioTentativas} de 5)</small> : <small>Na fila de envio</small>)}
               {m.interpretacao === 'ERRO' && <small>Não foi possível interpretar esta mensagem.</small>}
               {m.statusEnvio === 'ERRO' && <small>Falha no envio.</small>}
               {m.statusEnvio === 'ERRO' && !m.reenviada && editavel && <button type="button" className="botao botao--contorno" onClick={() => reenviarMensagem(m.id, m.texto)}>Reenviar</button>}
@@ -311,8 +321,8 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
       </div>
     </div>
     <div className="producao-kpis">
-      <article><span>OS na Costura</span><strong>{indicadores.os}</strong><small>{indicadores.pecas} peças · {indicadores.oficinas} oficinas</small></article>
-      <article><span>Caixas com falta</span><strong>{indicadores.caixasComFalta}</strong><small>{indicadores.itensEmFalta} itens abertos</small></article>
+      <article><span>OS na Costura</span><strong>{indicadores.os}</strong><small>{plural(indicadores.pecas, 'peça', 'peças')} · {plural(indicadores.oficinas, 'oficina', 'oficinas')}</small></article>
+      <article><span>Caixas com falta</span><strong>{indicadores.caixasComFalta}</strong><small>{plural(indicadores.itensEmFalta, 'item aberto', 'itens abertos')}</small></article>
       <article className={indicadores.atrasadas ? 'producao-kpi--erro' : ''}><span>Passaram do prazo</span><strong>{indicadores.atrasadas}</strong><small>pedem acompanhamento</small></article>
       <article><span>Sem data combinada</span><strong>{indicadores.semCombinada}</strong><small>usam lead time ou sem prazo</small></article>
     </div>

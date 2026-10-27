@@ -514,3 +514,34 @@ test('Gantt: ao rolar, a linha encaixa logo abaixo do cabeçalho fixo, sem faixa
     expect(folga).toBeLessThan(1.5);
   }
 });
+
+test('usabilidade do painel: sugestão decidida, mensagem na fila, texto volta ao modelo e motivo da OS só leitura', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, acoes);
+  // Indicadores no singular quando é um só.
+  await expect(page.locator('.producao-kpis')).toContainText(/290 peças · 1 oficina(?!s)/);
+  await expect(page.locator('.producao-kpis')).toContainText('1 item aberto');
+
+  await page.getByRole('button', { name: /OS 90002/ }).first().click();
+  const painel = page.getByRole('complementary', { name: 'Detalhes da OS 90002' });
+  await painel.getByRole('button', { name: 'Ignorar' }).click();
+  const sugestao = painel.locator('.producao-sugestoes li').first();
+  await expect(sugestao).toContainText('ignorada');
+  await expect(sugestao).toHaveClass(/producao-sugestao--decidida/);
+  await expect(sugestao.getByRole('button')).toHaveCount(0);
+
+  const mensagem = painel.getByLabel('Mensagem');
+  const modelo = await mensagem.inputValue();
+  await mensagem.fill('Texto revisado para *COLETE TESTE*.');
+  await painel.getByRole('button', { name: 'Colocar na fila' }).click();
+  await expect(mensagem).toHaveValue(modelo);
+  const enviada = painel.locator('.producao-conversa > li').filter({ hasText: 'Texto revisado para *COLETE TESTE*.' });
+  await expect(enviada).toContainText('Na fila de envio');
+  await painel.getByRole('button', { name: 'Fechar painel' }).click();
+
+  // OS fora da lista de liberadas com grupo configurado: o bloco da mensagem diz o porquê.
+  await page.getByRole('button', { name: /OS 90004/ }).first().click();
+  const so = page.getByRole('complementary', { name: 'Detalhes da OS 90004' });
+  await expect(so.locator('.producao-envio')).toContainText('Edição liberada em breve para esta OS.');
+  await expect(so.locator('.producao-envio').getByRole('button', { name: 'Colocar na fila' })).toHaveCount(0);
+});
