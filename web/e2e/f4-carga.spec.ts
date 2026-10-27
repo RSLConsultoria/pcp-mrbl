@@ -180,3 +180,20 @@ test('OS prevista não entra em "Sem prazo" e o painel mostra a previsão', asyn
   await expect(painel).not.toContainText('Sem prazo definido');
   await expect(painel.getByRole('region', { name: 'Prazo' })).toContainText('03/11 · fim previsto da Costura');
 });
+
+test('Carga: Esc fecha a edição da capacidade sem salvar; capacidade 0 sem carga não fica vermelha', async ({ page }) => {
+  const acoes: Record<string, unknown>[] = [];
+  await entrar(page, { acoes });
+  await page.getByRole('group', { name: 'Visão' }).getByRole('button', { name: 'Carga' }).click();
+  await page.getByRole('button', { name: 'Editar capacidade de OFICINA BETA' }).click();
+  const campo = page.getByLabel('Capacidade de OFICINA BETA (peças por semana)');
+  await campo.fill('50');
+  await campo.press('Escape');
+  await expect(campo).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Editar capacidade de OFICINA BETA' })).toBeVisible();
+  expect(acoes).toEqual([]);
+  await page.getByRole('button', { name: 'Editar capacidade de OFICINA BETA' }).click();
+  await page.getByLabel('Capacidade de OFICINA BETA (peças por semana)').fill('0');
+  await page.getByRole('button', { name: 'Salvar' }).click();
+  await expect(celula(page, 'OFICINA BETA, semana 19/10: 0 / 0 peças')).not.toHaveClass(/carga__celula--vermelho/);
+});

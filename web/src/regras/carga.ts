@@ -63,7 +63,8 @@ export function intervaloCostura(p: Producao, hoje: string): { inicio: string; f
 // Até 80% verde, até 100% amarelo, acima vermelho. Sem capacidade: sem cor de alerta.
 export function corCarga(pecas: number, capacidade: number | null | undefined): CorCarga {
   if (capacidade === null || capacidade === undefined) return 'SEM_CAPACIDADE';
-  if (capacidade <= 0) return pecas > 0 ? 'VERMELHO' : 'VERDE';
+  // Capacidade 0: só alerta quando a carga aparece na célula (o texto arredonda as peças).
+  if (capacidade <= 0) return Math.round(pecas) > 0 ? 'VERMELHO' : 'VERDE';
   const r = pecas / capacidade;
   // Tolerância: somas fracionadas não podem passar do limite por erro de ponto flutuante.
   return r <= 0.8 + 1e-9 ? 'VERDE' : r <= 1 + 1e-9 ? 'AMARELO' : 'VERMELHO';

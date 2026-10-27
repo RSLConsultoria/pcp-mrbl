@@ -48,7 +48,8 @@ export function CargaProducao({ lista, oficinas, hojeIso, oficinaId, ehAdm, exec
         <tbody>
           {linhas.map((l) => <tr key={l.oficinaId}>
             <th scope="row">
-              {editando === l.oficinaId ? <form className="carga__capacidade" onSubmit={(e) => { e.preventDefault(); salvar(l.oficinaId); }}>
+              {editando === l.oficinaId ? <form className="carga__capacidade" onSubmit={(e) => { e.preventDefault(); salvar(l.oficinaId); }}
+                onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditando(null); } }}>
                 <label>Capacidade de {l.oficina} (peças por semana)
                   <input inputMode="numeric" value={valor} autoFocus onChange={(e) => setValor(e.target.value)} placeholder="Sem capacidade" />
                 </label>

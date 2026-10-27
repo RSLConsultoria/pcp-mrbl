@@ -53,6 +53,9 @@ describe('cor e texto da célula', () => {
     expect(corCarga(500, null)).toBe('SEM_CAPACIDADE');
     expect(corCarga(0, 0)).toBe('VERDE');
     expect(corCarga(1, 0)).toBe('VERMELHO');
+    // capacidade 0 com carga que aparece como "0 / 0" (sobra fracionada) não fica vermelha
+    expect(corCarga(0.4, 0)).toBe('VERDE');
+    expect(corCarga(0.6, 0)).toBe('VERMELHO');
   });
 
   it('soma fracionada que dá exatamente 80% e 100% não vira o limite seguinte por ponto flutuante', () => {
