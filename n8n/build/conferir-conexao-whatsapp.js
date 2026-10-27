@@ -4903,6 +4903,154 @@ function urlsDetalhesPeca(cards) {
   };
 }
 
+// Produção > PCP > o mais recente. É o card da trilha e o padrão da anotação no front.
+function cardPrincipalPeca(cards) {
+  var lista = ordenarCardsPeca(cards);
+  return lista.filter(function (c) { return c.funilId === FUNIL_PRODUCAO; })[0] ||
+    lista.filter(function (c) { return c.funilId === FUNIL_PCP; })[0] || lista[0] || null;
+}
+
+// Etapas de Deals@Stages (Ordination é 0-based).
+function etapasPorIdPeca(etapas) {
+  var mapa = {};
+  (etapas || []).forEach(function (e) {
+    if (!e || texto(e.Id) === '') return;
+    mapa[texto(e.Id)] = { id: texto(e.Id), nome: texto(e.Name), ordem: numeroOuNulo(e.Ordination), funilId: numeroOuNulo(e.PipelineId) };
+  });
+  return mapa;
+}
+
+var ORDEM_FONTE_PECA = { ETAPA: 0, PLOOMES: 1 };
+
+function ordemFontePeca(fonte) {
+  return ORDEM_FONTE_PECA[fonte] === undefined ? 2 : ORDEM_FONTE_PECA[fonte];
+}
+
+// Registros de interação (menos os criados pelo envio do app, que começam com
+// "[PCP · OS") e trocas de etapa. Cada linha do DealsStagesHistory é a passagem por
+// uma etapa: StageId = origem, NewStageId = destino, UpdateDate = hora da troca
+// (CreateDate é a entrada na origem). A linha da etapa atual (NewStageId nulo) não é
+// troca: fica de fora (a trilha mostra a atual). Undone = troca desfeita.
+// Mais novo primeiro; empate: Etapa, Ploomes.
+function eventosPloomesPeca(registros, trocas, etapas, cards) {
+  var porId = etapasPorIdPeca(etapas);
+  var funilDoDeal = {};
+  (cards || []).forEach(function (c) { funilDoDeal[texto(c.dealId)] = c.funil; });
+  var nomeEtapa = function (id) { return porId[texto(id)] ? porId[texto(id)].nome : 'Etapa ' + texto(id); };
+  var eventos = [];
+  (registros || []).forEach(function (r) {
+    var conteudo = texto(r && r.Content);
+    if (!conteudo || conteudo.indexOf(PECA_PREFIXO_APP) === 0) return;
+    eventos.push({
+      quando: texto(r.Date) || texto(r.CreateDate), fonte: 'PLOOMES', texto: conteudo.slice(0, 2000),
+      autor: texto(r.Creator && r.Creator.Name), dealId: texto(r.DealId)
+    });
+  });
+  (trocas || []).forEach(function (t) {
+    if (!t || texto(t.NewStageId) === '') return;
+    var funil = funilDoDeal[texto(t.DealId)];
+    var e = {
+      quando: texto(t.UpdateDate) || texto(t.CreateDate), fonte: 'ETAPA',
+      texto: (funil ? funil + ': ' : '') + nomeEtapa(t.StageId) + ' → ' + nomeEtapa(t.NewStageId),
+      autor: '', dealId: texto(t.DealId)
+    };
+    if (t.Undone === true) e.desfeita = true;
+    eventos.push(e);
+  });
+  return eventos.sort(function (a, b) {
+    return (msPeca(b.quando) - msPeca(a.quando)) || (ordemFontePeca(a.fonte) - ordemFontePeca(b.fonte));
+  }).slice(0, PECA_MAX_EVENTOS);
+}
+
+function trilhaPeca(cards, etapas) {
+  var p = cardPrincipalPeca(cards);
+  if (!p) return null;
+  var porId = etapasPorIdPeca(etapas);
+  var lista = Object.keys(porId).map(function (k) { return porId[k]; }).filter(function (e) {
+    return e.funilId === p.funilId;
+  }).sort(function (a, b) {
+    return (a.ordem === null ? 9999 : a.ordem) - (b.ordem === null ? 9999 : b.ordem);
+  }).map(function (e) { return { id: e.id, nome: e.nome, ordem: e.ordem }; });
+  return { funil: p.funil, dealId: p.dealId, etapas: lista, atualId: p.etapaId === null ? '' : String(p.etapaId) };
+}
+
+function pecaDoCache(estado, chave, agora) {
+  var c = estado && estado.pecas ? estado.pecas[chave] : null;
+  return c && agora - c.guardadoEm < PECA_CACHE_MS ? c.corpo : null;
+}
+
+// Só respostas 200 entram (erro do Ploomes e 404 não). No máximo 50 buscas.
+function guardarPecaNoCache(estado, chave, corpo, agora) {
+  if (!estado.pecas) estado.pecas = Object.create(null);
+  Object.keys(estado.pecas).forEach(function (k) {
+    if (agora - estado.pecas[k].guardadoEm >= PECA_CACHE_MS) delete estado.pecas[k];
+  });
+  var chaves = Object.keys(estado.pecas).sort(function (a, b) { return estado.pecas[a].guardadoEm - estado.pecas[b].guardadoEm; });
+  while (chaves.length >= PECA_MAX_CACHE) delete estado.pecas[chaves.shift()];
+  estado.pecas[chave] = { corpo: corpo, guardadoEm: agora };
+}
+
+// GET /pcp-peca?q=: sessão como o board; busca do cache (60 s) ou a URL dos cards.
+function validarPedidoPeca(estado, cabecalho, query, agora) {
+  if (!sessaoDoCabecalho(estado, cabecalho, agora)) return { pronto: true, status: 401, body: { erro: 'Sessão expirada.' } };
+  var busca = normalizarBuscaPeca(query && query.q);
+  if (!busca.ok) return { pronto: true, status: 400, body: { erro: busca.erro } };
+  var cache = pecaDoCache(estado, busca.chave, agora);
+  if (cache) return { pronto: true, status: 200, body: cache };
+  return { pronto: false, busca: busca, url: urlCardsPeca(busca) };
+}
+
+// Lista de OS (escolha na tela): pronta e no cache.
+function respostaCandidatosPeca(busca, candidatos, agora, estado) {
+  var corpo = { geradoEm: new Date(agora).toISOString(), os: '', candidatos: candidatos, cards: [], trilha: null, eventos: [] };
+  guardarPecaNoCache(estado, busca.chave, corpo, agora);
+  return { pronto: true, status: 200, body: corpo };
+}
+
+// Depois do "Buscar Cards da Peça". Saídas:
+// - pronta (lista de OS, 404 ou 502);
+// - { pronto: false, buscarReferencia: true, url }: número sem card com essa OS; o
+//   workflow lê de novo pela referência e fecha em prepararReferenciaPeca;
+// - { pronto: false, buscarReferencia: false, os, cards, urls }: segue para os detalhes.
+function prepararLeiturasPeca(busca, respostaCards, agora, estado) {
+  var r = resolverCardsPeca(busca, respostaCards);
+  if (!r.ok && r.status === 404 && busca.numerica) {
+    return { pronto: false, buscarReferencia: true, busca: busca, url: urlReferenciaPeca(busca) };
+  }
+  if (!r.ok) return { pronto: true, status: r.status, body: { erro: r.erro } };
+  if (r.candidatos) return respostaCandidatosPeca(busca, r.candidatos, agora, estado);
+  return { pronto: false, buscarReferencia: false, busca: busca, os: r.os, cards: r.cards, urls: urlsDetalhesPeca(r.cards) };
+}
+
+// Segunda leitura (número que não é OS): sempre fecha a resposta.
+function prepararReferenciaPeca(busca, resposta, agora, estado) {
+  var r = resolverCardsPeca({ ok: true, q: busca.q, chave: busca.chave, numerica: false }, resposta);
+  if (!r.ok) return { pronto: true, status: r.status, body: { erro: r.erro } };
+  return respostaCandidatosPeca(busca, r.candidatos, agora, estado);
+}
+
+function finalizarPeca(leituras, respostas, agora, estado) {
+  respostas = respostas || {};
+  if (!respostaPloomesPecaOk(respostas.registros) || !respostaPloomesPecaOk(respostas.trocas) || !respostaPloomesPecaOk(respostas.etapas)) {
+    return { status: 502, body: { erro: PECA_ERRO_PLOOMES } };
+  }
+  var etapas = respostas.etapas.body.value;
+  var porId = etapasPorIdPeca(etapas);
+  var cards = (leituras.cards || []).map(function (c) {
+    var e = porId[texto(c.etapaId)];
+    var x = Object.assign({}, c);
+    x.etapaOrdem = e ? e.ordem : null;
+    if (!x.etapa && e) x.etapa = e.nome;
+    return x;
+  });
+  var corpo = {
+    geradoEm: new Date(agora).toISOString(), os: leituras.os, cards: cards, trilha: trilhaPeca(cards, etapas),
+    eventos: eventosPloomesPeca(respostas.registros.body.value, respostas.trocas.body.value, etapas, cards)
+  };
+  guardarPecaNoCache(estado, leituras.busca.chave, corpo, agora);
+  return { status: 200, body: corpo };
+}
+
 // ----- src/api.js -----
 // ===== src/api.js =====
 // Regras dos dois webhooks do workflow "PCP MRBL - API". "estado" e o
