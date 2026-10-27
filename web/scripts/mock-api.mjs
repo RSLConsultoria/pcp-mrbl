@@ -1,4 +1,8 @@
-// Servidor local de conferência: imita pcp-login, pcp-board, pcp-peca e pcp-acao com dados fictícios.
+// Servidor local de conferência: imita pcp-login, pcp-board, pcp-peca, pcp-acao e pcp-assistente com dados fictícios.
+// Assistente (F5d): respostas prontas por palavra-chave, sem Groq ("atrasadas", "faltas da OS 90001", "caixas paradas",
+// "pedidos abertos", "sem resposta", "abrir produção", "cobrar as atrasadas", "cobrar a OFICINA SOL", "erro", "limite").
+// OFICINA MAR (com grupo) tem a 90013 (venceu ontem) e a 90014 (vence em 2 dias): "Cobrar as atrasadas" tem linhas
+// enviáveis e travadas (90003 sem oficina, 90012 com a OFICINA LUA sem grupo).
 // Uso: node scripts/mock-api.mjs   (porta 8787, ou MOCK_PORT)
 // MOCK_ATRASO_MS=4000 segura cada resposta da pcp-acao (imita o servidor lento: a tela tem de
 // mostrar a mudança na hora e o "Salvando…" até a resposta). O mesmo vale por pedido com
@@ -125,11 +129,12 @@ const estado = {
   ],
   // caixa 90002 fica de fora para mostrar a visão somente leitura
   dealsEditaveis: ['700001', '700003', '700004', '700005', '700006', '700007', '700008'],
-  dealsProducaoEditaveis: ['700002', '700003', '700005', '700011'],
+  dealsProducaoEditaveis: ['700002', '700003', '700005', '700011', '700013', '700014'],
   anotacoes: [{ id: 'ANOT-0', quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), usuario: 'Renata', texto: 'Renata anotou: "Cliente confirmou a cor do viés."', dealId: '700002', os: '90002', criadoMs: 0 }],
   oficinas: [
     { ploomesId: 'OF-01', nome: 'OFICINA SOL', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA SOL', capacidadeSemana: 300 },
-    { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null }
+    { ploomesId: 'OF-02', nome: 'OFICINA LUA', grupoConfigurado: false, grupoNome: '', capacidadeSemana: null },
+    { ploomesId: 'OF-03', nome: 'OFICINA MAR', grupoConfigurado: true, grupoNome: 'PRODUCAO · OFICINA MAR', capacidadeSemana: null }
   ],
   mensagensWhatsappSemAssociacao: [{
     id: 'MSG-SEM-1', quando: new Date(Date.now() - 900_000).toISOString(), participanteNome: 'Pessoa da oficina',
@@ -174,6 +179,9 @@ const estado = {
         { id: 'MSG-L-1', quando: new Date(Date.now() - 3 * 86_400_000).toISOString(), participanteNome: 'Pessoa da oficina', direcao: 'RECEBIDA', texto: 'Estamos finalizando.', associacao: 'CITACAO', statusEnvio: '', tipoConteudo: 'TEXTO' },
         { id: 'MSG-L-2', quando: new Date(Date.now() - 2 * 86_400_000).toISOString(), participanteNome: 'PCP Teste', direcao: 'ENVIADA', texto: 'Olá. A entrega de *PECA TESTE L*, 60 peças, estava prevista. Qual a nova data de entrega?', associacao: 'MANUAL', statusEnvio: 'ENVIADA', tipoConteudo: 'TEXTO' }
       ], sugestoes: [], historico: [] },
+    // Assistente (F5d): duas OS da OFICINA MAR (com grupo) para a cobrança das atrasadas.
+    { dealId: '700013', os: '90013', oficinaId: 'OF-03', oficina: 'OFICINA MAR', inicioCostura: diaIso(-9), dataCombinada: diaIso(-1), leadTime: diaIso(2), pecas: 70, valorCorte: 6300, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE M', referencia: 'REF-13', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
+    { dealId: '700014', os: '90014', oficinaId: 'OF-03', oficina: 'OFICINA MAR', inicioCostura: diaIso(-5), dataCombinada: diaIso(2), leadTime: diaIso(4), pecas: 40, valorCorte: 3600, cliente: 'CLIENTE ALFA', peca: 'PECA TESTE N', referencia: 'REF-14', versao: 'v1', mensagens: [], sugestoes: [], historico: [] },
     // OS previstas (19/10): ainda nas etapas 12 a 16; a Costura projetada vem do servidor.
     { dealId: '700009', os: '90009', oficinaId: 'OF-01', oficina: 'OFICINA SOL', inicioCostura: '', dataCombinada: '', leadTime: '', pecas: 200, valorCorte: null, cliente: 'CLIENTE GAMA', peca: 'PECA TESTE I', referencia: 'REF-09', versao: 'v1',
       prevista: true, etapaOrdem: 15, etapaNome: '15. Preparação 1', etapaInicio: diaIso(-1), inicioCosturaPrevisto: diaIso(5), fimCosturaPrevisto: diaIso(12), mensagens: [], sugestoes: [], historico: [] },
@@ -1033,6 +1041,66 @@ function processar(corpo, usuario) {
 // ---------- HTTP ----------
 // MOCK_PERFIL=OPERADOR simula um usuário sem acesso às etapas do quadro.
 const PERFIL = (process.env.MOCK_PERFIL ?? 'ADM').toUpperCase();
+// ---------- Assistente (F5d): respostas prontas por palavra-chave, sem Groq ----------
+// As ferramentas rodam no site (como com o Groq); aqui só se escolhe qual chamar e se
+// resume o resultado que o site devolveu.
+let seqChamada = 0;
+const chaveAssistente = (v) => semAcento(String(v ?? "")).toLowerCase();
+const chamadaAssistente = (nome, argumentos) => ({ chamadas: [{ id: `mock-${++seqChamada}`, nome, argumentos }] });
+const CABECALHO_ASSISTENTE = {
+  listar_atrasadas: 'OS com prazo estourando', buscar_os: 'OS encontradas', caixas_paradas: 'Caixas paradas',
+  pedidos_abertos: 'Pedidos abertos', sem_resposta: 'Cobranças sem resposta'
+};
+const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+function textoDoResultado(nome, r) {
+  if (r.erro) return r.erro;
+  if (nome === 'abrir_tela') return r.texto;
+  if (nome === 'preparar_cobranca') {
+    if (r.mensagens) return `Preparei ${plural(r.mensagens, 'cobrança', 'cobranças')}${r.travadas ? ` (${plural(r.travadas, 'OS travada', 'OS travadas')})` : ''}. Nada foi enviado: confira o cartão e clique em Confirmar e enviar.`;
+    return r.travadas ? 'Todas as OS desse alvo estão travadas: veja o motivo no cartão.' : r.aviso;
+  }
+  const linhas = r.linhas ?? [];
+  if (!linhas.length) return r.aviso || 'Não achei nada.';
+  const item = (l) => nome === 'faltas_da_os' ? `${l.nome}: falta ${l.falta} ${l.un}${l.previsao ? `, previsão ${l.previsao}` : ''}`
+    : nome === 'pedidos_abertos' ? `${l.pedido} · ${l.etapa} · ${l.quem || 'sem fornecedor'} · OS ${l.os}`
+    : nome === 'caixas_paradas' ? `OS ${l.os} · ${l.caixa} · parada há ${l.dias} dias`
+    : `OS ${l.os} · ${l.peca} · ${l.oficina || 'sem oficina'}${l.situacao ? ` · ${l.situacao}` : ''}`;
+  const cab = nome === 'faltas_da_os' ? `Faltas em aberto da OS ${r.os}` : CABECALHO_ASSISTENTE[nome];
+  return `${cab}:\n${linhas.map((l) => `- ${item(l)}`).join('\n')}${r.total ? `\n(mostrando ${linhas.length} de ${r.total})` : ''}`;
+}
+function respostaAssistente(corpo) {
+  const ms = Array.isArray(corpo?.mensagens) ? corpo.mensagens : [];
+  const ultima = ms.at(-1);
+  if (!ultima || ultima.papel === 'assistente') throw bad('Pedido inválido.');
+  if (ultima.papel === 'ferramenta') {
+    const fim = [];
+    for (let i = ms.length - 1; i >= 0 && ms[i].papel === 'ferramenta'; i--) fim.unshift(ms[i]);
+    const ler = (m) => { try { return JSON.parse(m.resultado); } catch { return {}; } };
+    return { texto: fim.map((m) => textoDoResultado(m.nome, ler(m))).join('\n\n') };
+  }
+  const t = chaveAssistente(ultima.texto);
+  const numero = (t.match(/\d{4,9}/) ?? [])[0];
+  if (t.includes('erro')) throw new Erro(502, 'Não consegui responder agora. Tente de novo.');
+  if (t.includes('limite')) throw new Erro(429, 'Muitas perguntas seguidas. Espere alguns minutos.');
+  if (t.includes('cobr')) {
+    const oficinas = estado.oficinas.filter((o) => t.includes(chaveAssistente(o.nome))).map((o) => o.nome);
+    if (oficinas.length) return chamadaAssistente('preparar_cobranca', { alvo: 'oficinas', oficinas });
+    return chamadaAssistente('preparar_cobranca', { alvo: t.includes('todas') ? 'todas' : 'atrasadas' });
+  }
+  if (/(^|\s)abr/.test(t)) {
+    const tela = t.includes('produc') ? 'producao' : t.includes('saida') ? 'saidas' : t.includes('solicita') ? 'solicitacoes'
+      : t.includes('peca') || numero ? 'peca' : 'no-ploomes';
+    return chamadaAssistente('abrir_tela', tela === 'peca' && numero ? { tela, os: numero } : { tela });
+  }
+  if (t.includes('falta') && numero) return chamadaAssistente('faltas_da_os', { os: numero });
+  if (t.includes('atrasad')) return chamadaAssistente('listar_atrasadas', {});
+  if (t.includes('parad')) return chamadaAssistente('caixas_paradas', {});
+  if (t.includes('pedido')) return chamadaAssistente('pedidos_abertos', numero ? { os: numero } : {});
+  if (t.includes('resposta')) return chamadaAssistente('sem_resposta', {});
+  if (numero) return chamadaAssistente('buscar_os', { texto: numero });
+  return { texto: 'No simulador eu entendo: "atrasadas", "faltas da OS 90001", "caixas paradas", "pedidos abertos", "sem resposta", "abrir produção", "cobrar as atrasadas", "cobrar a OFICINA SOL", "erro" e "limite".' };
+}
+
 function cors(req, res) {
   const o = req.headers.origin ?? '';
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o)) res.setHeader('Access-Control-Allow-Origin', o);
@@ -1060,6 +1128,14 @@ const servidor = http.createServer(async (req, res) => {
     }
     if (rota === '/pcp-board' && req.method === 'GET') return enviar(res, 200, montarBoard());
     if (rota === '/pcp-peca' && req.method === 'GET') return enviar(res, 200, pecaMock(new URLSearchParams(busca).get('q')));
+    if (rota === '/pcp-assistente' && req.method === 'POST') {
+      if (!/^Bearer \S+$/.test(req.headers.authorization ?? '')) return enviar(res, 401, { erro: 'Sessão expirada.' });
+      const corpo = await lerCorpo(req);
+      await esperar(300); // dá para ver o "pensando…"
+      const r = respostaAssistente(corpo);
+      console.log(`[assistente] ${'texto' in r ? 'texto' : r.chamadas.map((c) => c.nome).join(', ')}`);
+      return enviar(res, 200, r);
+    }
     if (rota === '/pcp-acao' && req.method === 'POST') {
       const corpo = await lerCorpo(req);
       const atraso = Number(new URLSearchParams(busca).get('atraso')) || ATRASO_MS;
@@ -1079,4 +1155,4 @@ const servidor = http.createServer(async (req, res) => {
     enviar(res, 500, { erro: 'Erro interno do mock.' });
   }
 });
-servidor.listen(PORTA, () => console.log(`Mock da API em http://localhost:${PORTA} (pcp-login, pcp-board, pcp-peca, pcp-acao)`));
+servidor.listen(PORTA, () => console.log(`Mock da API em http://localhost:${PORTA} (pcp-login, pcp-board, pcp-peca, pcp-acao, pcp-assistente)`));

@@ -162,7 +162,7 @@
 .navbar__assistente:hover { background: rgba(255, 255, 255, .08); }
 .navbar__assistente[aria-expanded='true'] { background: var(--signal); border-color: var(--signal); color: var(--ink); }
 .navbar__assistente:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.assistente { flex: 0 0 380px; width: 380px; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: #fff; border-left: 1px solid var(--borda); box-shadow: -8px 0 24px rgba(18, 26, 58, .08); }
+.assistente { box-sizing: border-box; flex: 0 0 380px; width: 380px; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: #fff; border-left: 1px solid var(--borda); box-shadow: -8px 0 24px rgba(18, 26, 58, .08); }
 .assistente[hidden] { display: none; }
 .assistente__cabecalho { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--borda); }
 .assistente__titulo { display: flex; align-items: center; gap: 8px; color: var(--navy); }
