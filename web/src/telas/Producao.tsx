@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Board, MensagemWhatsappSemAssociacao, Producao as ProducaoItem } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
 import { useRascunhoDoBoard } from '../hooks/useValorDoBoard';
@@ -9,6 +9,8 @@ import { lerAgrupamento, lerIncluirPrevistas, lerVisao, salvarAgrupamento, salva
 import { agruparPorOficina, chaveEnvioWhatsapp, filtrarProducoes, SITUACOES_PRAZO, type SituacaoPrazo, indicadoresProducao, intervaloBarraProducao, janelaGantt, modeloMensagemProducao, opcoesAssociacaoMensagem, ordenarPorEntrega, prazoProducao, resumoFaltasAviamentos, statusProducao, textoBarraProducao, tituloBarraPrevista, tituloBarraProducao, validarMudancaProducao, type ModeloMensagemProducao } from '../regras/producao';
 
 const LARGURA_DIA = 28;
+// Dias antes de hoje que ficam à vista quando o Gantt abre posicionado em hoje (spec F4 §7).
+const DIAS_ANTES_DE_HOJE = 3;
 const PRODUCAO_VAZIA: ProducaoItem[] = [];
 const msDia = (iso: string) => Date.parse(`${iso}T12:00:00Z`);
 const indiceDia = (iso: string, inicio: string) => Math.round((msDia(iso) - msDia(inicio)) / 86_400_000);
@@ -240,6 +242,16 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
   const trocarVisao = (v: VisaoProducao) => { setVisao(v); salvarVisao(v); };
   const trocarAgrupamento = (a: AgrupamentoGantt) => { setAgrupamento(a); salvarAgrupamento(a); };
   const trocarPrevistas = (v: boolean) => { setIncluirPrevistas(v); salvarIncluirPrevistas(v); };
+  // Ao abrir (ou voltar para) o Gantt, a rolagem horizontal começa em hoje, com alguns dias
+  // antes à vista. Só nessa hora: recarga e filtros não mexem na rolagem de quem já rolou.
+  const rolagemGantt = useRef<HTMLDivElement>(null);
+  const indiceHojeRef = useRef(indiceHoje);
+  indiceHojeRef.current = indiceHoje;
+  useLayoutEffect(() => {
+    const el = rolagemGantt.current;
+    if (visao !== 'GANTT' || !el) return;
+    el.scrollLeft = Math.max(0, (indiceHojeRef.current - DIAS_ANTES_DE_HOJE) * LARGURA_DIA);
+  }, [visao]);
   const selecionada = producao.find((p) => p.dealId === aberta) ?? null;
   const semAssociacao = board.mensagensWhatsappSemAssociacao ?? [];
 
@@ -309,7 +321,7 @@ export function Producao({ board, q, hoje, executar, ehAdm }: { board: Board; q:
     </details>}
     {(visao === 'CARGA' || incluirPrevistas) && board.previsaoSemHistorico && <p className="producao-aviso" role="status">Previsão sem histórico: as OS previstas usam duração de 1 dia por etapa e fila zero até o cálculo diário das médias.</p>}
     {visao === 'CARGA' ? <CargaProducao lista={paraCarga} oficinas={board.oficinas ?? []} hojeIso={hojeIso} oficinaId={oficinaId} ehAdm={ehAdm} executar={executar} onAbrir={setAberta} />
-      : visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} incluirPrevistas={incluirPrevistas} onAbrir={setAberta} /> : <div className="gantt__rolagem">
+      : visao === 'TABELA' ? <TabelaProducao lista={ordemGantt} hojeIso={hojeIso} incluirPrevistas={incluirPrevistas} onAbrir={setAberta} /> : <div className="gantt__rolagem" ref={rolagemGantt}>
       <div className="gantt" style={{ width: 260 + janela.dias * LARGURA_DIA }}>
         <div className="gantt__topo">
         <div className="gantt__cabecalho gantt__fixo"><strong>{agrupamento === 'ENTREGA' ? 'OS por entrega' : 'Oficina / OS'}</strong><span>{ddmm(janela.inicio)} — {ddmm(janela.fim)}</span></div>

@@ -473,3 +473,26 @@ test('pendente perguntada à oficina aparece com a etiqueta', async ({ page }) =
   await page.getByText('2 mensagens aguardando associação').click();
   await expect(page.getByText('perguntado à oficina')).toBeVisible();
 });
+
+test('Gantt abre posicionado em hoje, com alguns dias antes à vista', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await entrar(page);
+  const rolagem = page.locator('.gantt__rolagem');
+  const confere = async () => {
+    const area = (await rolagem.boundingBox())!;
+    const fixo = (await page.locator('.gantt__cabecalho').boundingBox())!;
+    const hoje = (await page.locator('.gantt__dia--hoje').boundingBox())!;
+    // Hoje à vista, logo depois da coluna fixa (com até uma semana antes), não no fim da régua.
+    expect(hoje.x).toBeGreaterThanOrEqual(fixo.x + fixo.width - 1);
+    expect(hoje.x + hoje.width).toBeLessThanOrEqual(area.x + area.width);
+    expect(hoje.x).toBeLessThanOrEqual(fixo.x + fixo.width + 7 * 28);
+    expect(hoje.x).toBeGreaterThanOrEqual(fixo.x + fixo.width + 28);
+  };
+  await expect(page.locator('.gantt__dia--hoje')).toBeVisible();
+  await confere();
+  // Trocar de visão e voltar ao Gantt reposiciona em hoje.
+  await page.getByRole('button', { name: 'Tabela' }).click();
+  await page.getByRole('button', { name: 'Gantt' }).click();
+  await expect(page.locator('.gantt__dia--hoje')).toBeVisible();
+  await confere();
+});
