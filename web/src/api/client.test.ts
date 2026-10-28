@@ -192,5 +192,12 @@ describe('client', () => {
     }
     vi.stubGlobal('fetch', vi.fn(() => resposta(429, { erro: 'Muitas perguntas seguidas. Espere alguns minutos.' })));
     await expect(perguntarAssistente('t', '2026-10-27', [])).rejects.toMatchObject({ status: 429, message: 'Muitas perguntas seguidas. Espere alguns minutos.' });
+    const limite = await perguntarAssistente('t', '2026-10-27', []).catch((e: ApiError) => e);
+    expect((limite as ApiError).tentarEmSegundos).toBeUndefined();
+  });
+
+  it('perguntarAssistente: 429 do Groq traz o tempo para tentar de novo', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => resposta(429, { erro: 'Muita procura agora. Tentando de novo…', tentarEmSegundos: 4 })));
+    await expect(perguntarAssistente('t', '2026-10-27', [])).rejects.toMatchObject({ status: 429, tentarEmSegundos: 4 });
   });
 });

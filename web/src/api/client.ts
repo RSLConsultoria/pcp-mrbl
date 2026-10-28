@@ -2,10 +2,13 @@ import type { Acao, Board, ChamadaAssistente, MensagemAssistente, RespostaAcao, 
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, mensagem: string) {
+  // Só no 429 do Groq (assistente): segundos para tentar de novo sozinho.
+  tentarEmSegundos?: number;
+  constructor(status: number, mensagem: string, tentarEmSegundos?: number) {
     super(mensagem);
     this.name = 'ApiError';
     this.status = status;
+    if (tentarEmSegundos !== undefined) this.tentarEmSegundos = tentarEmSegundos;
   }
 }
 
@@ -29,8 +32,11 @@ async function pedir<T>(url: string, init: RequestInit, tempo = TEMPO_LIMITE_MS)
   } catch {
     throw new ApiError(0, 'Sem conexão com o servidor.');
   }
-  const corpo = (await r.json().catch(() => undefined)) as { erro?: string } | null | undefined;
-  if (!r.ok) throw new ApiError(r.status, corpo?.erro || `Erro ${r.status}`);
+  const corpo = (await r.json().catch(() => undefined)) as { erro?: string; tentarEmSegundos?: unknown } | null | undefined;
+  if (!r.ok) {
+    const n = corpo?.tentarEmSegundos;
+    throw new ApiError(r.status, corpo?.erro || `Erro ${r.status}`, typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : undefined);
+  }
   if (corpo === null || corpo === undefined || typeof corpo !== 'object') {
     throw new ApiError(r.status, 'Resposta inválida do servidor.');
   }

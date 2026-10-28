@@ -321,6 +321,37 @@ describe('conversar', () => {
     const pedir = vi.fn(async (): Promise<RespostaAssistente> => { throw new Error('502'); });
     await expect(conversar(pergunta, pedir, () => ({}))).rejects.toThrow('502');
   });
+
+  const ocupado = (s: number) => Object.assign(new Error('Muita procura agora. Tentando de novo…'), { status: 429, tentarEmSegundos: s });
+
+  it('Groq ocupado (429 com tentarEmSegundos): avisa, espera N s e tenta de novo, até 2 vezes', async () => {
+    const respostas: (RespostaAssistente | Error)[] = [ocupado(4), ocupado(2), { texto: 'Pronto.' }];
+    const pedir = vi.fn(async (): Promise<RespostaAssistente> => {
+      const r = respostas.shift()!;
+      if (r instanceof Error) throw r;
+      return r;
+    });
+    const esperas: number[] = [];
+    const avisos: number[] = [];
+    const r = await conversar(pergunta, pedir, () => ({}), {
+      esperar: async (ms) => { esperas.push(ms); }, aoAguardar: (s) => avisos.push(s)
+    });
+    expect(r.texto).toBe('Pronto.');
+    expect(pedir).toHaveBeenCalledTimes(3);
+    expect(esperas).toEqual([4000, 2000]);
+    expect(avisos).toEqual([4, 0, 2, 0]);
+  });
+
+  it('Groq ocupado 3 vezes seguidas: o erro sobe; 429 do limite por usuário não repete', async () => {
+    const pedir = vi.fn(async (): Promise<RespostaAssistente> => { throw ocupado(1); });
+    const esperar = vi.fn(async () => {});
+    await expect(conversar(pergunta, pedir, () => ({}), { esperar })).rejects.toMatchObject({ tentarEmSegundos: 1 });
+    expect(pedir).toHaveBeenCalledTimes(3);
+    expect(esperar).toHaveBeenCalledTimes(2);
+    const usuario = vi.fn(async (): Promise<RespostaAssistente> => { throw Object.assign(new Error('Muitas perguntas seguidas.'), { status: 429 }); });
+    await expect(conversar(pergunta, usuario, () => ({}), { esperar })).rejects.toThrow('Muitas perguntas seguidas.');
+    expect(usuario).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('links de OS', () => {

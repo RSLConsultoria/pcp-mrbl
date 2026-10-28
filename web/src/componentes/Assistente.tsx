@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { ApiError, perguntarAssistente } from '../api/client';
 import type { Board, MensagemAssistente } from '../api/tipos';
 import type { Executar } from '../hooks/useAcao';
-import { cancelarCartao, conversar, EXEMPLOS_ASSISTENTE, executarFerramenta, osConhecidas, partesComOs, type CartaoCobranca as Cartao } from '../regras/assistente';
+import { cancelarCartao, conversar, EXEMPLOS_ASSISTENTE, executarFerramenta, osConhecidas, partesComOs, segundosParaTentar, TEXTO_GROQ_OCUPADO, type CartaoCobranca as Cartao } from '../regras/assistente';
 import { diaIso } from '../regras/datas';
 import { hashDaPeca, type Tela } from '../regras/telas';
 import { CartaoCobranca } from './CartaoCobranca';
@@ -38,6 +38,7 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
   const [itens, setItens] = useState<Item[]>([]);
   const [rascunho, setRascunho] = useState('');
   const [pensando, setPensando] = useState(false);
+  const [aguardando, setAguardando] = useState(0); // segundos da espera do Groq ocupado
   const atual = useRef({ board, mensagens });
   atual.current = { board, mensagens };
   const seq = useRef(0);
@@ -74,7 +75,7 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
         if (ex.efeito?.tipo === 'abrir') onAbrirTela(ex.efeito.tela, ex.efeito.os);
         if (ex.efeito?.tipo === 'cobranca') cartoes.push(ex.efeito.cartao);
         return ex.resultado;
-      });
+      }, { aoAguardar: setAguardando });
       setMensagens([...historico, ...r.novas]);
       if (cartoes.length) {
         // Um cartão aberto por vez: os anteriores ainda abertos viram só leitura (sem cobrança em dobro).
@@ -85,10 +86,12 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return aoExpirar();
       // A pergunta fica na conversa; o que veio no meio é descartado.
-      novoItem({ tipo: 'erro', texto: e instanceof ApiError && e.status === 429 ? e.message : ERRO_PADRAO });
+      const texto = segundosParaTentar(e) !== null ? TEXTO_GROQ_OCUPADO : e instanceof ApiError && e.status === 429 ? e.message : ERRO_PADRAO;
+      novoItem({ tipo: 'erro', texto });
     } finally {
       ocupado.current = false;
       setPensando(false);
+      setAguardando(0);
     }
   };
 
@@ -119,7 +122,7 @@ export function Assistente({ board, token, aberto, executar, aoExpirar, onFechar
           : <div key={i.id} className={`assistente__msg assistente__msg--${i.tipo}`} role={i.tipo === 'erro' ? 'alert' : undefined}>
             {i.tipo === 'assistente' ? <TextoComOs texto={i.texto} conhecidas={conhecidas} onLinkOs={onLinkOs} /> : i.texto}
           </div>)}
-        {pensando && <p className="assistente__pensando">pensando…</p>}
+        {pensando && <p className="assistente__pensando">{aguardando > 0 ? `aguardando… muita procura agora, tento de novo em ${aguardando} s` : 'pensando…'}</p>}
         <div ref={fim} />
       </div>
       <form className="assistente__entrada" onSubmit={aoEnviar}>

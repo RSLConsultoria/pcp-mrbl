@@ -242,18 +242,52 @@ export function executarFerramenta(board: Board, chamada: ChamadaAssistente, hoj
   }
 }
 
+export const MAX_NOVAS_TENTATIVAS = 2;
+export const TEXTO_GROQ_OCUPADO = 'Muita procura agora. Tente de novo em instantes.';
+
+// Groq ocupado (429 com tentarEmSegundos): o servidor diz quanto esperar. O 429 do limite
+// por usuário não traz o tempo e não se repete sozinho.
+export function segundosParaTentar(e: unknown): number | null {
+  const x = e as { status?: unknown; tentarEmSegundos?: unknown } | null;
+  const n = x && x.status === 429 ? x.tentarEmSegundos : undefined;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export interface OpcoesConversa {
+  esperar?: (ms: number) => Promise<void>;
+  aoAguardar?: (segundos: number) => void; // a tela mostra "aguardando…"; 0 = tentando de novo
+}
+
+const esperarPadrao = (ms: number) => new Promise<void>((ok) => setTimeout(ok, ms));
+
 // Uma pergunta: pede ao servidor, roda as ferramentas pedidas e devolve até ter texto. No
-// máximo 5 chamadas por pergunta: se o modelo pedir mais, para com um aviso. Erro do servidor
-// sobe para quem chamou (a tela mostra o aviso e descarta o que veio no meio).
+// máximo 5 chamadas por pergunta: se o modelo pedir mais, para com um aviso. Groq ocupado:
+// espera o tempo pedido e tenta de novo, até 2 vezes por pedido. Outro erro do servidor sobe
+// para quem chamou (a tela mostra o aviso e descarta o que veio no meio).
 export async function conversar(
   historico: MensagemAssistente[],
   pedir: (mensagens: MensagemAssistente[]) => Promise<RespostaAssistente>,
-  executar: (c: ChamadaAssistente) => Resultado
+  executar: (c: ChamadaAssistente) => Resultado,
+  opcoes: OpcoesConversa = {}
 ): Promise<{ novas: MensagemAssistente[]; texto: string }> {
+  const esperar = opcoes.esperar ?? esperarPadrao;
+  const pedirComEspera = async (mensagens: MensagemAssistente[]): Promise<RespostaAssistente> => {
+    for (let tentativa = 0; ; tentativa++) {
+      try {
+        return await pedir(mensagens);
+      } catch (e) {
+        const s = segundosParaTentar(e);
+        if (s === null || tentativa >= MAX_NOVAS_TENTATIVAS) throw e;
+        opcoes.aoAguardar?.(s);
+        await esperar(s * 1000);
+        opcoes.aoAguardar?.(0);
+      }
+    }
+  };
   const novas: MensagemAssistente[] = [];
   let usadas = 0;
   for (;;) {
-    const r = await pedir([...historico, ...novas]);
+    const r = await pedirComEspera([...historico, ...novas]);
     if ('texto' in r) {
       novas.push({ papel: 'assistente', texto: r.texto });
       return { novas, texto: r.texto };
