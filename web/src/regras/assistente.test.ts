@@ -386,3 +386,18 @@ describe('resposta sem repetição', () => {
   });
 });
 
+describe('links de OS: formatos do modelo', () => {
+  const conhecidas = new Set(['12345', '90001']);
+  it('começo de linha, dois-pontos, negrito, crase e caracteres invisíveis', () => {
+    expect(partesComOs('Faltas da OS 12345:\n- ZIPER', conhecidas)).toEqual([{ texto: 'Faltas da OS ' }, { os: '12345' }, { texto: ':\n- ZIPER' }]);
+    expect(partesComOs('12345: duas caixas', conhecidas)).toEqual([{ os: '12345' }, { texto: ': duas caixas' }]);
+    expect(partesComOs('Faltas da OS **12345**:', conhecidas)).toEqual([{ texto: 'Faltas da OS ' }, { os: '12345' }, { texto: ':' }]);
+    expect(partesComOs('OS `12345`', conhecidas)).toEqual([{ texto: 'OS ' }, { os: '12345' }]);
+    expect(partesComOs('OS\u00a01\u200b2345.', conhecidas)).toEqual([{ texto: 'OS\u00a0' }, { os: '12345' }, { texto: '.' }]);
+  });
+  it('número com separador de milhar (ponto ou espaço fino) que é OS conhecida', () => {
+    expect(partesComOs('Faltas da OS 12.345:', conhecidas)).toEqual([{ texto: 'Faltas da OS ' }, { os: '12345' }, { texto: ':' }]);
+    expect(partesComOs('OS 12\u202f345 e 90\u00a0001', conhecidas)).toEqual([{ texto: 'OS ' }, { os: '12345' }, { texto: ' e ' }, { os: '90001' }]);
+    expect(partesComOs('Total 1.500 peças; 12 345 não', conhecidas)).toEqual([{ texto: 'Total 1.500 peças; 12 345 não' }]);
+  });
+});

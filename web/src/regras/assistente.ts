@@ -343,20 +343,27 @@ export function semRepeticao(texto: string): string {
 export const osConhecidas = (board: Pick<Board, 'caixas' | 'producao'>): Set<string> =>
   new Set([...board.caixas.map((c) => c.os), ...(board.producao ?? []).map((p) => p.os)]);
 
-// O modelo às vezes manda Markdown mesmo pedindo texto simples: negrito e cabeçalho saem.
+// O modelo às vezes manda Markdown mesmo pedindo texto simples: negrito, crase e cabeçalho
+// saem. Caracteres invisíveis (espaço de largura zero, hífen suave) também: no meio de um
+// número, impediam o link da OS.
 export function semMarkdown(texto: string): string {
-  return texto.replace(/\*\*|__/g, '').replace(/^#{1,6}\s+/gm, '');
+  return texto.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, '').replace(/\*\*|__|`/g, '').replace(/^#{1,6}\s+/gm, '');
 }
 
-// Números de 4 a 9 dígitos que são OS do board viram link (#peca/<OS>).
+// Número com separador de milhar (ponto, espaço sem quebra ou espaço fino: "12.345",
+// "12 345") ou de 4 a 9 dígitos seguidos.
+const RE_NUMERO_OS = /(?<![\d.,])\d{1,3}(?:[.\u00A0\u202F\u2009]\d{3})+(?!\d|[.,]\d)|(?<!\d)\d{4,9}(?!\d)/g;
+
+// Números que são OS do board viram link (#peca/<OS>), também quando o modelo separa o milhar.
 export function partesComOs(bruto: string, conhecidas: Set<string>): ({ texto: string } | { os: string })[] {
   const texto = semMarkdown(bruto);
   const partes: ({ texto: string } | { os: string })[] = [];
   let desde = 0;
-  for (const m of texto.matchAll(/(?<!\d)\d{4,9}(?!\d)/g)) {
-    if (!conhecidas.has(m[0])) continue;
+  for (const m of texto.matchAll(RE_NUMERO_OS)) {
+    const os = m[0].replace(/\D/g, '');
+    if (!conhecidas.has(os)) continue;
     if (m.index > desde) partes.push({ texto: texto.slice(desde, m.index) });
-    partes.push({ os: m[0] });
+    partes.push({ os });
     desde = m.index + m[0].length;
   }
   if (desde < texto.length) partes.push({ texto: texto.slice(desde) });
