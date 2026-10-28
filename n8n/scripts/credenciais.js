@@ -7,7 +7,7 @@
 const ID_CREDENCIAL_GROQ = 'njh1FO6l7bYhWhIL';
 // - GMAIL: a credencial "Gmail PCP (só leitura)", OAuth2 genérica (oAuth2Api) com o escopo
 //   https://www.googleapis.com/auth/gmail.readonly, usada pelo Ler E-mails do PCP (F5c).
-const ID_CREDENCIAL_GMAIL = 'CONFIGURAR_CREDENCIAL_GMAIL';
+const ID_CREDENCIAL_GMAIL = '29o0KlF6g0TvoUFV';
 
 function idCredencialValido(id) {
   if (typeof id !== 'string') return false;

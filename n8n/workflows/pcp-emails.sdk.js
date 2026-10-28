@@ -58,7 +58,7 @@ const buscarEmails = node({
       queryParameters: { parameters: [{ name: 'q', value: expr('{{ $json.q }}') }, { name: 'maxResults', value: '50' }] },
       options: { timeout: 30000 }
     },
-    credentials: { oAuth2Api: { id: 'CONFIGURAR_CREDENCIAL_GMAIL', name: 'Gmail PCP (só leitura)' } },
+    credentials: { oAuth2Api: { id: '29o0KlF6g0TvoUFV', name: 'Gmail PCP (só leitura)' } },
     position: [660,0]
   },
   output: [{ messages: [{ id: 'G-ficticio', threadId: 'T-ficticio' }], resultSizeEstimate: 1 }]
@@ -108,7 +108,7 @@ const lerEmail = node({
       queryParameters: { parameters: [{ name: 'format', value: 'full' }] },
       options: { timeout: 30000 }
     },
-    credentials: { oAuth2Api: { id: 'CONFIGURAR_CREDENCIAL_GMAIL', name: 'Gmail PCP (só leitura)' } },
+    credentials: { oAuth2Api: { id: '29o0KlF6g0TvoUFV', name: 'Gmail PCP (só leitura)' } },
     position: [1320,-160]
   },
   output: [{ id: 'G-ficticio', threadId: 'T-ficticio', payload: { mimeType: 'text/plain', headers: [{ name: 'Subject', value: 'RE: Caixa separada - OS:90001' }], body: { data: 'Q2hlZ2EgZGlhIDMwLzEwLg' } } }]
