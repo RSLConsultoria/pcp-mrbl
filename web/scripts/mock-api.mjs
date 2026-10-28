@@ -995,13 +995,17 @@ function decidirEmailPcp(c, usuario) {
       }
     } else {
       const item = e.itens.length ? estado.caixas.flatMap((x) => x.itens).find((i) => i.id === e.itens[0]) : null;
+      // Uma linha por caixa, com o nome dela (igual a n8n/src/emailsPcp.js).
+      const nomeCaixa = (d) => ({ COSTURA: 'Costura', ACABAMENTO: 'Acabamento' })[caixaDe(d).tipo] ?? '';
       const sufixo = e.tipo === 'PREVISAO' ? `previsão ${ddmm(e.valor)} para a caixa`
         : e.tipo === 'CHAMADO' ? `chamado #${e.valor}`
         : e.tipo === 'QUANTIDADE' ? `quantidade conferida de ${item?.nome ?? 'item'}: ${e.valor} ${item?.un ?? ''}`.trim()
         : e.resumo;
       for (const d of alvos) {
         if (e.tipo === 'PREVISAO') { caixaDe(d).previsao = e.valor; caixaDe(d).versao = agora; }
-        registrar(d, usuario, `${usuario} aceitou sugestão do e-mail: ${sufixo}`, historicos);
+        const nome = e.tipo === 'PREVISAO' || alvos.length > 1 ? nomeCaixa(d) : '';
+        const texto = !nome ? sufixo : e.tipo === 'PREVISAO' ? `${sufixo} ${nome}` : `${sufixo} (caixa ${nome})`;
+        registrar(d, usuario, `${usuario} aceitou sugestão do e-mail: ${texto}`, historicos);
       }
     }
   }

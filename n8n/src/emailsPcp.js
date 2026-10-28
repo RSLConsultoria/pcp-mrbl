@@ -556,6 +556,16 @@ function textoAceiteEmailPcp(usuario, sufixo) {
   return usuario + ' aceitou sugestão do e-mail: ' + sufixo;
 }
 
+// Nome da caixa no histórico: o aceite grava uma linha por caixa (cada caixa é um card no
+// Ploomes, com o próprio registro compilado); com o nome, a Visão da peça, que junta as
+// caixas da OS, não mostra duas linhas iguais.
+var NOMES_CAIXA_EMAIL_PCP = { COSTURA: 'Costura', ACABAMENTO: 'Acabamento', PREPARACAO: 'Preparação' };
+function nomeCaixaEmailPcp(caixas, dealId) {
+  var c = (caixas || []).filter(function (x) { return x && texto(x.dealId) === dealId; })[0];
+  var tipo = c ? texto(c.tipo) : '';
+  return NOMES_CAIXA_EMAIL_PCP[tipo] || (tipo ? tipo.charAt(0) + tipo.slice(1).toLowerCase() : '');
+}
+
 // corpo: { id, decisao: 'ACEITAR' | 'IGNORAR', versao? } (versao é aceita e não conferida: a
 // idempotência vem do status da linha). linhas: { faltantes, ganhas, caixasPcp, emailsPcp }.
 // ctx: { usuario, email, agora (ISO), gerarId, editavel(dealId), todosEditaveis }.
@@ -619,7 +629,8 @@ function decidirEmailPcp(corpo, linhas, ctx) {
         var r = aplicarAcao({ tipo: 'previsao_caixa', dealId: d, valor: data, versao: cpRow ? texto(cpRow.atualizado_em) : '' },
           cpRow, Object.assign({ responsavelAtual: responsavelAtual }, ctxAcao));
         if (r.ok) operacoes = operacoes.concat(r.operacoes);
-        registrar(d, 'previsão ' + dataCurta(data) + ' para a caixa');
+        var nome = nomeCaixaEmailPcp(caixas, d);
+        registrar(d, 'previsão ' + dataCurta(data) + ' para a caixa' + (nome ? ' ' + nome : ''));
       });
     }
   } else if (aceitar) {
@@ -631,7 +642,10 @@ function decidirEmailPcp(corpo, linhas, ctx) {
       sufixo = 'quantidade conferida de ' + (rowQtd ? texto(rowQtd.descricao_item) : 'item') + ': ' +
         (qtd === null || isNaN(qtd) ? texto(linha.valor) : formatarQtd(qtd)) + (rowQtd && texto(rowQtd.unidade) ? ' ' + texto(rowQtd.unidade) : '');
     }
-    alvos.forEach(function (d) { registrar(d, sufixo); });
+    alvos.forEach(function (d) {
+      var nome = alvos.length > 1 ? nomeCaixaEmailPcp(caixas, d) : '';
+      registrar(d, sufixo + (nome ? ' (caixa ' + nome + ')' : ''));
+    });
   }
   operacoes.push({ aba: ABA_EMAILS_PCP, operacao: 'update', chave: 'id', linha: { id: texto(linha.id), status: destino, decidido_em: ctx.agora, decidido_por: ctx.usuario } });
   return { ok: true, idempotente: false, versao: ctx.agora, operacoes: operacoes, historicos: historicos, emailId: texto(linha.id) };

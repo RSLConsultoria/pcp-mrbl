@@ -94,8 +94,8 @@ test('aceitar PREVISAO sem item: previsão geral de cada caixa da OS com falta',
     marca('ACEITA')
   ]);
   assert.deepEqual(r.historicos.map((h) => [h.deal_id, h.texto]), [
-    ['700001', 'Pessoa PCP aceitou sugestão do e-mail: previsão 30/10 para a caixa'],
-    ['700011', 'Pessoa PCP aceitou sugestão do e-mail: previsão 30/10 para a caixa']
+    ['700001', 'Pessoa PCP aceitou sugestão do e-mail: previsão 30/10 para a caixa Costura'],
+    ['700011', 'Pessoa PCP aceitou sugestão do e-mail: previsão 30/10 para a caixa Acabamento']
   ]);
 });
 
@@ -103,8 +103,8 @@ test('aceitar QUANTIDADE, CHAMADO e OBSERVACAO: só anotação no histórico da 
   const { ctx, estado, cab } = contexto();
   const casos = [
     [email({ tipo: 'QUANTIDADE', valor: '38', itens: 'F-1' }), [['700001', 'Pessoa PCP aceitou sugestão do e-mail: quantidade conferida de ZIPER METAL 18CM: 38 UN']]],
-    [email({ tipo: 'CHAMADO', valor: '1234567', itens: '' }), [['700001', 'Pessoa PCP aceitou sugestão do e-mail: chamado #1234567'], ['700011', 'Pessoa PCP aceitou sugestão do e-mail: chamado #1234567']]],
-    [email({ tipo: 'OBSERVACAO', valor: '', itens: '', resumo: 'Pediram para conferir a quantidade' }), [['700001', 'Pessoa PCP aceitou sugestão do e-mail: Pediram para conferir a quantidade'], ['700011', 'Pessoa PCP aceitou sugestão do e-mail: Pediram para conferir a quantidade']]]
+    [email({ tipo: 'CHAMADO', valor: '1234567', itens: '' }), [['700001', 'Pessoa PCP aceitou sugestão do e-mail: chamado #1234567 (caixa Costura)'], ['700011', 'Pessoa PCP aceitou sugestão do e-mail: chamado #1234567 (caixa Acabamento)']]],
+    [email({ tipo: 'OBSERVACAO', valor: '', itens: '', resumo: 'Pediram para conferir a quantidade' }), [['700001', 'Pessoa PCP aceitou sugestão do e-mail: Pediram para conferir a quantidade (caixa Costura)'], ['700011', 'Pessoa PCP aceitou sugestão do e-mail: Pediram para conferir a quantidade (caixa Acabamento)']]]
   ];
   for (const [e, esperado] of casos) {
     const r = limpo(ctx.processarAcao(estado, cab, corpo(), linhas([e]), T0, () => 'H'));
