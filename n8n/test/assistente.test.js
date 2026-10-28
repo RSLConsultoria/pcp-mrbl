@@ -67,7 +67,7 @@ test('mensagens para o Groq: chamadas, resultados e cortes de texto', () => {
   assert.equal(longa[0].content.length, 2000);
 });
 
-test('mensagens para o Groq: só as últimas 20, começando numa do usuário', () => {
+test('mensagens para o Groq: só as últimas 12, começando numa do usuário', () => {
   const lista = [];
   for (let i = 0; i < 8; i++) {
     lista.push({ papel: 'usuario', texto: 'P' + i });
@@ -76,10 +76,63 @@ test('mensagens para o Groq: só as últimas 20, começando numa do usuário', (
   }
   lista.push({ papel: 'usuario', texto: 'Última' });
   const m = limpo(ctx.mensagensGroqAssistente(lista));
-  assert.ok(m.length <= 20);
+  assert.ok(m.length <= 12);
   assert.equal(m[0].role, 'user');
   assert.equal(m[m.length - 1].content, 'Última');
-  assert.equal(m[0].content, 'P2');
+  assert.equal(m[0].content, 'P5');
+});
+
+test('mensagens para o Groq: a pergunta atual fica inteira mesmo passando de 12', () => {
+  const lista = [{ papel: 'usuario', texto: 'Antiga' }, { papel: 'assistente', texto: 'Resposta antiga' }, { papel: 'usuario', texto: 'Atual' }];
+  for (let i = 0; i < 7; i++) {
+    lista.push({ papel: 'assistente', chamadas: [{ id: 'c' + i, nome: 'buscar_os', argumentos: { texto: String(i) } }] });
+    lista.push({ papel: 'ferramenta', id: 'c' + i, nome: 'buscar_os', resultado: '{}' });
+  }
+  const m = limpo(ctx.mensagensGroqAssistente(lista));
+  assert.equal(m.length, 15);
+  assert.equal(m[0].content, 'Atual');
+});
+
+test('mensagens para o Groq: resultados e respostas de perguntas anteriores vão cortados (800); os da atual inteiros (até 6000)', () => {
+  const m = limpo(ctx.mensagensGroqAssistente([
+    { papel: 'usuario', texto: 'Antes' },
+    { papel: 'assistente', chamadas: [{ id: 'c1', nome: 'buscar_os', argumentos: {} }] },
+    { papel: 'ferramenta', id: 'c1', nome: 'buscar_os', resultado: 'r'.repeat(7000) },
+    { papel: 'assistente', texto: 'a'.repeat(1900) },
+    { papel: 'usuario', texto: 'Agora' },
+    { papel: 'assistente', chamadas: [{ id: 'c2', nome: 'buscar_os', argumentos: {} }] },
+    { papel: 'ferramenta', id: 'c2', nome: 'buscar_os', resultado: 's'.repeat(7000) }
+  ]));
+  assert.equal(m[2].content.length, 800);
+  assert.equal(m[3].content.length, 800);
+  assert.equal(m[6].content.length, 6000);
+});
+
+test('tamanho do pedido ao Groq: enxuto, mesmo com conversa longa', () => {
+  const base = JSON.stringify(ctx.pedidoGroqAssistente([{ papel: 'usuario', texto: 'Oi' }], '2026-10-28'));
+  assert.ok(base.length <= 3500, 'prompt + ferramentas: ' + base.length);
+  const lista = [];
+  for (let i = 0; i < 4; i++) {
+    lista.push({ papel: 'usuario', texto: 'Pergunta ' + i });
+    lista.push({ papel: 'assistente', chamadas: [{ id: 'c' + i, nome: 'faltas_da_os', argumentos: { os: '9000' + i } }] });
+    lista.push({ papel: 'ferramenta', id: 'c' + i, nome: 'faltas_da_os', resultado: 'r'.repeat(7000) });
+    lista.push({ papel: 'assistente', texto: 'a'.repeat(1500) });
+  }
+  lista.push({ papel: 'usuario', texto: 'Atual' });
+  lista.push({ papel: 'assistente', chamadas: [{ id: 'cx', nome: 'faltas_da_os', argumentos: { os: '90009' } }] });
+  lista.push({ papel: 'ferramenta', id: 'cx', nome: 'faltas_da_os', resultado: 'r'.repeat(7000) });
+  const corpo = JSON.stringify(ctx.pedidoGroqAssistente(lista, '2026-10-28'));
+  // ~4 caracteres por token: cabe com folga em 8.000 tokens por minuto.
+  assert.ok(corpo.length <= 14000, 'pedido com histórico: ' + corpo.length);
+});
+
+test('prompt: listas de até 10 itens com o total, sem repetir nem "(continua)"; resposta com folga de tokens', () => {
+  const p = ctx.pedidoGroqAssistente([{ papel: 'usuario', texto: 'Oi' }], '2026-10-28');
+  assert.match(p.messages[0].content, /no máximo 10 itens/);
+  assert.match(p.messages[0].content, /total/);
+  assert.match(p.messages[0].content, /nunca repita/i);
+  assert.match(p.messages[0].content, /\(continua\)/);
+  assert.ok(p.max_completion_tokens >= 1500);
 });
 
 test('pedido do site: sessão pelo cabeçalho ou pelo token do corpo; sem sessão 401', () => {

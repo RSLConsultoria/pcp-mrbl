@@ -7,9 +7,12 @@
 var MODELO_GROQ_ASSISTENTE = 'openai/gpt-oss-120b';
 var ASSISTENTE_LIMITE_HORA = 120;
 var ASSISTENTE_JANELA_MS = 3600 * 1000;
-var ASSISTENTE_MAX_MENSAGENS = 20;
+// Groq gratuito: 8.000 tokens por minuto. A conversa vai enxuta: só as últimas 12 mensagens
+// (a pergunta atual sempre inteira) e o que é de perguntas anteriores vai cortado.
+var ASSISTENTE_MAX_MENSAGENS = 12;
 var ASSISTENTE_MAX_TEXTO = 2000;
 var ASSISTENTE_MAX_RESULTADO = 6000;
+var ASSISTENTE_MAX_ANTIGO = 800;
 var ASSISTENTE_MAX_RESPOSTA = 4000;
 var ASSISTENTE_MAX_CHAMADAS = 5;
 var ASSISTENTE_MAX_ID = 64;
@@ -28,36 +31,38 @@ function ferramentaAssistente(nome, descricao, propriedades, obrigatorios) {
 }
 
 // Espelhadas em web/src/regras/assistente.ts (o teste do site confere os nomes).
+// Descrições curtas: vão em todo pedido ao Groq.
 var FERRAMENTAS_ASSISTENTE = [
-  ferramentaAssistente('buscar_os', 'Procura OS pelo número, peça, cliente ou oficina (ignora acentos). Devolve até 30 OS.',
-    { texto: { type: 'string', description: 'Número da OS, nome da peça, cliente ou oficina.' } }, ['texto']),
-  ferramentaAssistente('listar_atrasadas', 'Lista as OS na Costura com prazo vencido ou vencendo em até dias_ate_vencer dias (padrão 3), a mais atrasada primeiro.',
-    { oficina: { type: 'string', description: 'Filtra por oficina (opcional).' },
-      dias_ate_vencer: { type: 'integer', description: 'Inclui as que vencem em até N dias (padrão 3).' } }),
-  ferramentaAssistente('faltas_da_os', 'Caixas da OS com itens em falta em aberto: quanto falta, previsão e pedido.',
+  ferramentaAssistente('buscar_os', 'Busca OS por número, peça, cliente ou oficina.',
+    { texto: { type: 'string', description: 'OS, peça, cliente ou oficina.' } }, ['texto']),
+  ferramentaAssistente('listar_atrasadas', 'OS na Costura com prazo vencido ou vencendo em até dias_ate_vencer dias, a mais atrasada primeiro.',
+    { oficina: { type: 'string', description: 'Filtro opcional.' },
+      dias_ate_vencer: { type: 'integer', description: 'Padrão 3.' } }),
+  ferramentaAssistente('faltas_da_os', 'Itens em falta em aberto da OS: quanto falta, previsão e pedido.',
     { os: { type: 'string', description: 'Número da OS.' } }, ['os']),
-  ferramentaAssistente('caixas_paradas', 'Caixas com falta em aberto, que não saíram, registradas há dias ou mais (padrão 7).',
-    { dias: { type: 'integer', description: 'Dias parada (padrão 7).' } }),
-  ferramentaAssistente('pedidos_abertos', 'Pedidos de compra que ainda não chegaram à última etapa, com etapa, fornecedor e previsão.',
-    { os: { type: 'string', description: 'Filtra pela OS (opcional).' },
-      fornecedor: { type: 'string', description: 'Filtra pelo fornecedor ou cliente (opcional).' } }),
-  ferramentaAssistente('sem_resposta', 'OS cuja última mensagem no WhatsApp é uma cobrança enviada há mais de 24 h, sem resposta da oficina.', {}),
-  ferramentaAssistente('abrir_tela', 'Abre uma tela do app para a pessoa. Para a Visão da peça de uma OS, use tela "peca" com a OS.',
+  ferramentaAssistente('caixas_paradas', 'Caixas com falta em aberto, que não saíram, paradas há dias ou mais.',
+    { dias: { type: 'integer', description: 'Padrão 7.' } }),
+  ferramentaAssistente('pedidos_abertos', 'Pedidos de compra não concluídos: etapa, fornecedor e previsão.',
+    { os: { type: 'string', description: 'Filtro opcional.' },
+      fornecedor: { type: 'string', description: 'Fornecedor ou cliente (opcional).' } }),
+  ferramentaAssistente('sem_resposta', 'OS com cobrança no WhatsApp sem resposta da oficina há mais de 24 h.', {}),
+  ferramentaAssistente('abrir_tela', 'Abre uma tela do app. Visão da peça: tela peca com a OS.',
     { tela: { type: 'string', enum: ['no-ploomes', 'saidas', 'solicitacoes', 'producao', 'peca'] },
-      os: { type: 'string', description: 'OS (só para a tela peca).' } }, ['tela']),
-  ferramentaAssistente('preparar_cobranca', 'Prepara cobranças de prazo no WhatsApp para as oficinas e mostra um cartão para a pessoa conferir. Não envia nada: o envio só acontece quando a pessoa clica em Confirmar e enviar.',
-    { alvo: { type: 'string', enum: ['atrasadas', 'todas', 'oficinas'], description: 'atrasadas = vencidas e vencendo em até 3 dias; todas = todas as OS na Costura; oficinas = todas as OS das oficinas informadas.' },
-      oficinas: { type: 'array', items: { type: 'string' }, description: 'Nomes das oficinas (obrigatório no alvo oficinas; nos outros, filtra).' } }, ['alvo'])
+      os: { type: 'string', description: 'Só para peca.' } }, ['tela']),
+  ferramentaAssistente('preparar_cobranca', 'Monta um cartão de cobrança de prazo no WhatsApp para a pessoa conferir. Não envia nada: só o clique em Confirmar e enviar envia.',
+    { alvo: { type: 'string', enum: ['atrasadas', 'todas', 'oficinas'], description: 'atrasadas = vencidas ou vencendo em 3 dias; todas = todas na Costura; oficinas = as das oficinas informadas.' },
+      oficinas: { type: 'array', items: { type: 'string' }, description: 'Obrigatório no alvo oficinas; nos outros, filtra.' } }, ['alvo'])
 ];
 
 var NOMES_FERRAMENTAS_ASSISTENTE = FERRAMENTAS_ASSISTENTE.map(function (f) { return f.function.name; });
 
 var INSTRUCOES_ASSISTENTE = [
-  'Você é o assistente do PCP da MRBL, uma confecção. Responda sempre em português do Brasil, em texto simples (sem Markdown, sem negrito e sem tabelas), com respostas curtas.',
-  'Use só os dados que vierem das ferramentas. Se não achar, diga que não achou. Nunca invente OS, datas, quantidades ou nomes.',
-  'Cite as OS pelo número (por exemplo "OS 12345").',
-  'Para cobrar oficinas, use sempre a ferramenta preparar_cobranca e avise que nada é enviado até a pessoa clicar em Confirmar e enviar no cartão.',
-  'Você não grava baixa, previsão, observação nem pedido: para isso, abra a tela certa com abrir_tela.',
+  'Você é o assistente do PCP da MRBL, uma confecção. Responda em português do Brasil, em texto simples (sem Markdown, negrito ou tabelas) e curto.',
+  'Use só dados das ferramentas; se não achar, diga. Nunca invente OS, datas, quantidades ou nomes.',
+  'Cite as OS pelo número (ex.: "OS 12345").',
+  'Listas: no máximo 10 itens; se houver mais, diga o total e ofereça mostrar o resto. Escreva cada item uma vez: nunca repita a lista nem trechos da resposta, e não termine com "(continua)".',
+  'Para cobrar oficinas, use preparar_cobranca e avise que nada é enviado até a pessoa clicar em Confirmar e enviar no cartão.',
+  'Você não grava baixa, previsão, observação nem pedido: abra a tela certa com abrir_tela.',
   'No máximo 5 chamadas de ferramenta por pergunta.'
 ].join(' ');
 
@@ -74,8 +79,9 @@ function idChamadaValido(id) {
   return typeof id === 'string' && id.trim() !== '' && id.length <= ASSISTENTE_MAX_ID;
 }
 
-// Mensagem do site -> mensagem do Groq; null quando não serve.
-function mensagemGroqAssistente(m) {
+// Mensagem do site -> mensagem do Groq; null quando não serve. antiga = de uma pergunta
+// anterior: resultado de ferramenta e resposta vão cortados bem mais curto.
+function mensagemGroqAssistente(m, antiga) {
   if (!objetoSimples(m)) return null;
   if (m.papel === 'usuario') {
     var tu = cortarTextoAssistente(m.texto, ASSISTENTE_MAX_TEXTO).trim();
@@ -94,31 +100,39 @@ function mensagemGroqAssistente(m) {
       }
       return { role: 'assistant', content: '', tool_calls: chamadas };
     }
-    var ta = cortarTextoAssistente(m.texto, ASSISTENTE_MAX_TEXTO).trim();
+    var ta = cortarTextoAssistente(m.texto, antiga ? ASSISTENTE_MAX_ANTIGO : ASSISTENTE_MAX_TEXTO).trim();
     return ta ? { role: 'assistant', content: ta } : null;
   }
   if (m.papel === 'ferramenta') {
     if (!idChamadaValido(m.id) || NOMES_FERRAMENTAS_ASSISTENTE.indexOf(m.nome) < 0) return null;
     if (m.resultado === undefined || m.resultado === null) return null;
     var r = typeof m.resultado === 'string' ? m.resultado : JSON.stringify(m.resultado);
-    return { role: 'tool', tool_call_id: m.id, name: m.nome, content: cortarTextoAssistente(r, ASSISTENTE_MAX_RESULTADO) };
+    return { role: 'tool', tool_call_id: m.id, name: m.nome, content: cortarTextoAssistente(r, antiga ? ASSISTENTE_MAX_ANTIGO : ASSISTENTE_MAX_RESULTADO) };
   }
   return null;
 }
 
-// Conversa inteira -> mensagens do Groq; null se alguma não serve. Só as últimas 20,
-// começando numa pergunta (a resposta de uma ferramenta sem a chamada derruba o pedido).
+// Conversa inteira -> mensagens do Groq; null se alguma não serve. A pergunta atual (da
+// última do usuário em diante) vai inteira; antes dela, só o que couber nas 12, começando
+// numa pergunta (a resposta de uma ferramenta sem a chamada derruba o pedido).
 function mensagensGroqAssistente(mensagens) {
   if (!Array.isArray(mensagens) || !mensagens.length) return null;
+  var atual = -1;
+  for (var k = mensagens.length - 1; k >= 0; k--) {
+    if (objetoSimples(mensagens[k]) && mensagens[k].papel === 'usuario') { atual = k; break; }
+  }
+  if (atual < 0) return null;
   var lista = [];
   for (var i = 0; i < mensagens.length; i++) {
-    var g = mensagemGroqAssistente(mensagens[i]);
+    var g = mensagemGroqAssistente(mensagens[i], i < atual);
     if (!g) return null;
     lista.push(g);
   }
-  lista = lista.slice(-ASSISTENTE_MAX_MENSAGENS);
-  while (lista.length && lista[0].role !== 'user') lista.shift();
-  return lista.length ? lista : null;
+  var daAtual = lista.slice(atual);
+  var vagas = ASSISTENTE_MAX_MENSAGENS - daAtual.length;
+  var anteriores = vagas > 0 ? lista.slice(0, atual).slice(-vagas) : [];
+  while (anteriores.length && anteriores[0].role !== 'user') anteriores.shift();
+  return anteriores.concat(daAtual);
 }
 
 function pedidoGroqAssistente(mensagens, hoje) {
@@ -126,7 +140,7 @@ function pedidoGroqAssistente(mensagens, hoje) {
     model: MODELO_GROQ_ASSISTENTE,
     temperature: 0.2,
     reasoning_effort: 'low',
-    max_completion_tokens: 1200,
+    max_completion_tokens: 1600,
     tool_choice: 'auto',
     tools: FERRAMENTAS_ASSISTENTE,
     messages: [{ role: 'system', content: INSTRUCOES_ASSISTENTE + ' Hoje é ' + hoje + ' (São Paulo).' }]
