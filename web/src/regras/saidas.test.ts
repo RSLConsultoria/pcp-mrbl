@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Board, EtapaPedido, ItemPedido, Pedido } from '../api/tipos';
 import {
   chaveDaSaida, colunaDoPedido, colunasSaida, diasDesdeSaida, itensParaPedido, nomeColunaSaida, parteEntregue, partesDaSaida, rotuloDaSaida,
-  saidasNaTela, seloSaidaVermelho, textoPedidoDoItem, textoPedidosDaParte, textoSaiu
+  saidasNaTela, seloSaidaVermelho, situacaoDoItemNaParte, textoPedidoDoItem, textoPedidosDaParte, textoSaiu
 } from './saidas';
 import { caixa, item } from './teste-util';
 
@@ -70,6 +70,20 @@ describe('partesDaSaida', () => {
     expect(partesDaSaida(c, [], etapas).map((p) => [p.coluna, p.itens.map((x) => [x.item.id, x.pedidoIds])])).toEqual([
       ['etapa:a', [['p', ['PED-0009']]]], ['etapa:fim', [['r', []]]]
     ]);
+  });
+  it('item resolvido sem pedido: na etapa final aparece como resolvido, sem "0 UN" nem "sem pedido"', () => {
+    const c = saiu({ itens: [item({ id: 'r', status: 'RESOLVIDO', resta: 0, baixada: 0 }), item({ id: 'z', status: 'ABERTO', resta: 0, baixada: 0 }),
+      item({ id: 'b', status: 'RESOLVIDO', resta: 0, baixada: 52 })] });
+    const [parte] = partesDaSaida(c, [], etapas);
+    expect(parte.coluna).toBe('etapa:fim');
+    expect(parte.itens.map((x) => [x.item.id, x.qtd])).toEqual([['r', null], ['z', null], ['b', 52]]);
+    expect(parte.itens.map(situacaoDoItemNaParte)).toEqual([
+      { texto: 'resolvido', tipo: 'resolvido' }, { texto: 'resolvido', tipo: 'resolvido' }, { texto: 'resolvido', tipo: 'resolvido' }
+    ]);
+  });
+  it('situação do item na parte: pedidos, sem pedido (aberto) ou resolvido', () => {
+    expect(situacaoDoItemNaParte({ item: item({ id: 'a' }), pedidoIds: ['PED-0001'], qtd: 5 })).toEqual({ texto: 'PED-0001', tipo: 'pedido' });
+    expect(situacaoDoItemNaParte({ item: item({ id: 'a', resta: 5 }), pedidoIds: [], qtd: 5 })).toEqual({ texto: 'sem pedido', tipo: 'sem_pedido' });
   });
   it('item de mesmo id em pedido de outra caixa não entra', () => {
     const c = saiu({ itens: [item({ id: 'b', resta: 5 })] });

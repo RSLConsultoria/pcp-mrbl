@@ -24,6 +24,7 @@
 .card__item-linha { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .card__pedido { font-size: 12px; font-weight: 600; color: var(--navy); }
 .card__pedido--sem { color: var(--falta); font-weight: 500; }
+.card__pedido--ok { color: var(--ok-text); font-weight: 600; }
 .card__item-meta { flex: none; color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .selo-origem { flex: none; padding: 2px 9px; border-radius: 999px; background: var(--navy-tint); color: var(--navy); font-size: 11.5px; font-weight: 700; }
 .selo-origem--cliente { background: var(--signal-tint); color: var(--signal-lo); }

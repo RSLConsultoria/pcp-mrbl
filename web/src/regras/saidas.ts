@@ -13,7 +13,7 @@ export type ColunaSaidaId = 'sem_pedido' | `etapa:${string}`;
 export interface ColunaSaida { id: ColunaSaidaId; nome: string; cor: string; vazio: string }
 
 // Item numa parte: os pedidos dele naquela coluna e a quantidade (a soma nesses pedidos; em
-// Sem pedido, o que resta; item fechado sem pedido, o que foi baixado).
+// Sem pedido, o que resta; item fechado sem pedido, o que foi baixado, ou null sem baixa).
 export interface ItemDaParte { item: Item; pedidoIds: string[]; qtd: number | null }
 
 export interface ParteSaida { coluna: ColunaSaidaId; indice: number; total: number; itens: ItemDaParte[] }
@@ -90,7 +90,7 @@ export function partesDaSaida(c: Caixa, pedidos: Pedido[], etapas: EtapaPedido[]
     }
     for (const [col, g] of cols) adicionar(col, g);
     if (itemAberto(i) && pedidosDoItem(i).length === 0) adicionar('sem_pedido', { item: i, pedidoIds: [], qtd: i.resta });
-    else if (!itemAberto(i) && cols.size === 0 && o.length > 0) adicionar(idColunaEtapa(o[o.length - 1].id), { item: i, pedidoIds: [], qtd: i.baixada });
+    else if (!itemAberto(i) && cols.size === 0 && o.length > 0) adicionar(idColunaEtapa(o[o.length - 1].id), { item: i, pedidoIds: [], qtd: i.baixada > 0 ? i.baixada : null });
   }
   const presentes = ordem.filter((k) => porColuna.has(k));
   return presentes.map((coluna, k) => ({ coluna, indice: k + 1, total: presentes.length, itens: porColuna.get(coluna)! }));
@@ -150,6 +150,13 @@ export const rotuloDaSaida = (x: SaidaNaTela): string =>
 
 export function textoPedidosDaParte(x: Pick<ItemDaParte, 'pedidoIds'>): string {
   return x.pedidoIds.length > 0 ? x.pedidoIds.map(rotuloDoPedido).join(', ') : 'sem pedido';
+}
+
+// Rótulo do item no card e no painel: os pedidos dele nesta coluna; sem pedido, "sem pedido"
+// (vermelho) se ainda falta, ou "resolvido" (verde) se não falta mais.
+export function situacaoDoItemNaParte(x: ItemDaParte): { texto: string; tipo: 'pedido' | 'sem_pedido' | 'resolvido' } {
+  if (x.pedidoIds.length > 0) return { texto: textoPedidosDaParte(x), tipo: 'pedido' };
+  return itemAberto(x.item) ? { texto: 'sem pedido', tipo: 'sem_pedido' } : { texto: 'resolvido', tipo: 'resolvido' };
 }
 
 export function diasDesdeSaida(c: Pick<Caixa, 'saiuEm'>, hoje: Date): number | null {
