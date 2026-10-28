@@ -16,6 +16,10 @@ var ASSISTENTE_MAX_ID = 64;
 var ERRO_ASSISTENTE = 'Não consegui responder agora. Tente de novo.';
 var ERRO_ASSISTENTE_LIMITE = 'Muitas perguntas seguidas. Espere alguns minutos.';
 var ERRO_ASSISTENTE_PEDIDO = 'Pedido inválido.';
+// Limite do Groq (tokens por minuto do plano gratuito): o site espera e tenta de novo sozinho.
+var ERRO_ASSISTENTE_GROQ_OCUPADO = 'Muita procura agora. Tentando de novo…';
+var ASSISTENTE_ESPERA_PADRAO = 5;
+var ASSISTENTE_ESPERA_MAX = 20;
 
 function ferramentaAssistente(nome, descricao, propriedades, obrigatorios) {
   var parametros = { type: 'object', properties: propriedades || {} };
@@ -168,11 +172,26 @@ function erroGroqAssistente() {
   return { status: 502, body: { erro: ERRO_ASSISTENTE } };
 }
 
+// Segundos do header retry-after (qualquer caixa), arredondados para cima, de 1 a 20.
+function esperaGroqAssistente(headers) {
+  var bruto;
+  if (objetoSimples(headers)) {
+    Object.keys(headers).forEach(function (k) { if (k.toLowerCase() === 'retry-after') bruto = headers[k]; });
+  }
+  var n = Number(bruto);
+  if (bruto === undefined || bruto === null || bruto === '' || !isFinite(n)) return ASSISTENTE_ESPERA_PADRAO;
+  return Math.min(ASSISTENTE_ESPERA_MAX, Math.max(1, Math.ceil(n)));
+}
+
 // Resposta do HTTP Request (resposta completa, sem erro) ou o corpo direto ->
-// { status: 200, body: { texto } | { chamadas } } ou 502 amigável.
+// { status: 200, body: { texto } | { chamadas } }, 429 do Groq com o tempo para tentar de
+// novo (diferente do 429 do limite por usuário, que não traz tentarEmSegundos) ou 502 amigável.
 function respostaGroqAssistente(resposta) {
   if (!objetoSimples(resposta)) return erroGroqAssistente();
   var corpo = resposta;
+  if (Number(resposta.statusCode) === 429) {
+    return { status: 429, body: { erro: ERRO_ASSISTENTE_GROQ_OCUPADO, tentarEmSegundos: esperaGroqAssistente(resposta.headers) } };
+  }
   if (resposta.statusCode !== undefined || resposta.body !== undefined) {
     if (Number(resposta.statusCode) !== 200) return erroGroqAssistente();
     corpo = resposta.body;

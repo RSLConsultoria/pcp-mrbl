@@ -166,7 +166,7 @@ test('resposta do Groq: nome desconhecido, JSON inválido, vazio ou falha → 50
     groq({ tool_calls: [{ id: 'c', function: { name: 'buscar_os', arguments: '[1,2]' } }] }),
     groq({ tool_calls: [{ id: '', function: { name: 'buscar_os', arguments: '{}' } }] }),
     groq({ content: '   ' }),
-    groq({ content: 'oi' }, 429),
+    groq({ content: 'oi' }, 503),
     { statusCode: 500, body: {} },
     { error: { message: 'timeout' } },
     {}, null
@@ -176,4 +176,17 @@ test('resposta do Groq: nome desconhecido, JSON inválido, vazio ou falha → 50
 
 test('resposta do Groq: texto longo é cortado', () => {
   assert.equal(ctx.respostaGroqAssistente(groq({ content: 'a'.repeat(9000) })).body.texto.length, 4000);
+});
+
+test('resposta do Groq: 429 (limite de tokens do Groq) vira 429 próprio com o tempo para tentar de novo', () => {
+  const limite = (headers, code) => ({ statusCode: 429, headers, body: { error: { message: 'Rate limit reached', type: 'tokens', code: code || 'rate_limit_exceeded' } } });
+  const esperado = (n) => ({ status: 429, body: { erro: 'Muita procura agora. Tentando de novo…', tentarEmSegundos: n } });
+  assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'retry-after': '4' }))), esperado(4));
+  assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'Retry-After': '2.3' }))), esperado(3));
+  assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'retry-after': '0' }))), esperado(1));
+  assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'retry-after': '90' }))), esperado(20));
+  assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({}))), esperado(5));
+  assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite(undefined))), esperado(5));
+  // Distinto do limite por usuário (sem tentarEmSegundos: o site não repete sozinho).
+  assert.equal(ctx.ERRO_ASSISTENTE_LIMITE, 'Muitas perguntas seguidas. Espere alguns minutos.');
 });
