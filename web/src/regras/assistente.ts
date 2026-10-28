@@ -289,8 +289,9 @@ export async function conversar(
   for (;;) {
     const r = await pedirComEspera([...historico, ...novas]);
     if ('texto' in r) {
-      novas.push({ papel: 'assistente', texto: r.texto });
-      return { novas, texto: r.texto };
+      const texto = semRepeticao(r.texto);
+      novas.push({ papel: 'assistente', texto });
+      return { novas, texto };
     }
     if (usadas + r.chamadas.length > MAX_CHAMADAS_POR_PERGUNTA) {
       novas.push({ papel: 'assistente', texto: TEXTO_LIMITE_CHAMADAS });
@@ -302,6 +303,40 @@ export async function conversar(
       novas.push({ papel: 'ferramenta', id: c.id, nome: c.nome, resultado: JSON.stringify(executar(c)) });
     }
   }
+}
+
+// ---------- resposta sem repetição ----------
+// O modelo às vezes escreve a mesma lista duas vezes. Conservador: só tira o que se repete
+// logo em seguida (blocos de parágrafos, ou de 2 linhas ou mais dentro de um parágrafo),
+// comparando sem diferença de espaços nem de maiúsculas.
+const chaveRepeticao = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+
+function semBlocosRepetidos<T>(partes: T[], minimo: number, chave: (x: T) => string): T[] {
+  const r = [...partes];
+  for (let i = 0; i < r.length; i++) {
+    for (let k = Math.floor((r.length - i) / 2); k >= minimo; k--) {
+      let igual = true;
+      for (let j = 0; j < k && igual; j++) {
+        const a = chave(r[i + j]);
+        igual = a !== '' && a === chave(r[i + k + j]);
+      }
+      if (igual) {
+        r.splice(i + k, k);
+        k = Math.floor((r.length - i) / 2) + 1; // confere de novo a partir do mesmo ponto
+      }
+    }
+  }
+  return r;
+}
+
+export function semRepeticao(texto: string): string {
+  const pedacos = texto.split(/(\n[ \t]*\n\s*)/);
+  const blocos: { sep: string; texto: string }[] = [];
+  for (let i = 0; i < pedacos.length; i += 2) {
+    const linhas = semBlocosRepetidos(pedacos[i].split('\n'), 2, chaveRepeticao);
+    blocos.push({ sep: i ? pedacos[i - 1] : '', texto: linhas.join('\n') });
+  }
+  return semBlocosRepetidos(blocos, 1, (b) => chaveRepeticao(b.texto)).map((b, i) => (i ? b.sep : '') + b.texto).join('');
 }
 
 // ---------- links de OS ----------

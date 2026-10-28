@@ -5,7 +5,7 @@ import { caixa, item } from './teste-util';
 import {
   abrirTela, acoesDoCartao, alternarLinha, buscarOs, cancelarCartao, caixasParadasFerramenta, confirmarCartao, conversar,
   editarTextoLinha, erroCartao, executarFerramenta, faltasDaOs, listarAtrasadas, MAX_LINHAS, montarCartaoCobranca, NOMES_FERRAMENTAS,
-  osConhecidas, partesComOs, pedidosAbertos, resumoCobranca, semResposta, TEXTO_LIMITE_CHAMADAS, textoEnfileiradas, type CartaoCobranca
+  osConhecidas, partesComOs, pedidosAbertos, resumoCobranca, semRepeticao, semResposta, TEXTO_LIMITE_CHAMADAS, textoEnfileiradas, type CartaoCobranca
 } from './assistente';
 
 const HOJE = '2026-10-27';
@@ -365,3 +365,24 @@ describe('links de OS', () => {
     expect(partesComOs('## Resumo\n**OS 90001** atrasada', conhecidas)).toEqual([{ texto: 'Resumo\nOS ' }, { os: '90001' }, { texto: ' atrasada' }]);
   });
 });
+
+describe('resposta sem repetição', () => {
+  const lista = 'Faltas da OS 90001:\n- ZIPER: falta 4 UN\n- LINHA: falta 2 UN';
+  it('tira parágrafos e blocos de linhas repetidos em seguida', () => {
+    expect(semRepeticao(`${lista}\n\n${lista}`)).toBe(lista);
+    expect(semRepeticao(`${lista}\n${lista}`)).toBe(lista);
+    expect(semRepeticao('Resumo.\n\nFaltas:\n\n- A\n- B\n\nFaltas:\n\n- A\n- B\n\nQuer o resto?')).toBe('Resumo.\n\nFaltas:\n\n- A\n- B\n\nQuer o resto?');
+    expect(semRepeticao('Oi.\n\n  oi.  \n\nTchau.')).toBe('Oi.\n\nTchau.');
+  });
+  it('conservador: linha única repetida dentro do parágrafo, repetição não seguida e texto sem repetição ficam como estão', () => {
+    expect(semRepeticao('- 4 UN\n- 4 UN')).toBe('- 4 UN\n- 4 UN');
+    expect(semRepeticao('A\n\nB\n\nA')).toBe('A\n\nB\n\nA');
+    expect(semRepeticao('Uma linha.\n\n\nOutra.')).toBe('Uma linha.\n\n\nOutra.');
+  });
+  it('conversar devolve e guarda o texto sem a repetição', async () => {
+    const r = await conversar([{ papel: 'usuario', texto: 'Faltas' }], async () => ({ texto: `${lista}\n\n${lista}` }), () => ({}));
+    expect(r.texto).toBe(lista);
+    expect(r.novas).toEqual([{ papel: 'assistente', texto: lista }]);
+  });
+});
+
