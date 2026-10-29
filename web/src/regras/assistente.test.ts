@@ -5,7 +5,7 @@ import { caixa, item } from './teste-util';
 import {
   abrirTela, acoesDoCartao, alternarLinha, buscarOs, cancelarCartao, caixasParadasFerramenta, confirmarCartao, conversar,
   editarTextoLinha, erroCartao, executarFerramenta, faltasDaOs, listarAtrasadas, MAX_LINHAS, montarCartaoCobranca, NOMES_FERRAMENTAS,
-  osConhecidas, partesComOs, pedidosAbertos, resumoCobranca, semRepeticao, semResposta, TEXTO_LIMITE_CHAMADAS, textoEnfileiradas, type CartaoCobranca
+  osConhecidas, partesComOs, pedidosAbertos, resumoCobranca, semContinua, semRepeticao, semResposta, TEXTO_LIMITE_CHAMADAS, textoEnfileiradas, type CartaoCobranca
 } from './assistente';
 
 const HOJE = '2026-10-27';
@@ -383,6 +383,26 @@ describe('resposta sem repetição', () => {
     const r = await conversar([{ papel: 'usuario', texto: 'Faltas' }], async () => ({ texto: `${lista}\n\n${lista}` }), () => ({}));
     expect(r.texto).toBe(lista);
     expect(r.novas).toEqual([{ papel: 'assistente', texto: lista }]);
+  });
+});
+
+describe('resposta sem "(continua)"', () => {
+  it('tira o "(continua)" solto no fim ou numa linha sozinha', () => {
+    expect(semContinua('- A\n- B\n(continua)')).toBe('- A\n- B');
+    expect(semContinua('- A\n- B (continua...)')).toBe('- A\n- B');
+    expect(semContinua('- A\n- B\n\n( Continua… )  \n')).toBe('- A\n- B');
+    expect(semContinua('Faltas:\n(continua.)\n- A\n- B')).toBe('Faltas:\n- A\n- B');
+    expect(semContinua('- A (continua)\n\n(continua...)')).toBe('- A');
+  });
+  it('conservador: "continua" dentro da frase fica', () => {
+    expect(semContinua('A OS 90001 continua parada.')).toBe('A OS 90001 continua parada.');
+    expect(semContinua('O pedido (continua aberto) segue.')).toBe('O pedido (continua aberto) segue.');
+    expect(semContinua('Tudo certo.')).toBe('Tudo certo.');
+  });
+  it('conversar devolve e guarda o texto sem o "(continua)"', async () => {
+    const r = await conversar([{ papel: 'usuario', texto: 'Faltas' }], async () => ({ texto: '- A\n- B\n(continua)' }), () => ({}));
+    expect(r.texto).toBe('- A\n- B');
+    expect(r.novas).toEqual([{ papel: 'assistente', texto: '- A\n- B' }]);
   });
 });
 

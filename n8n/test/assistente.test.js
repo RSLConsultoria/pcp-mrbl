@@ -132,6 +132,9 @@ test('prompt: listas de até 10 itens com o total, sem repetir nem "(continua)";
   assert.match(p.messages[0].content, /total/);
   assert.match(p.messages[0].content, /nunca repita/i);
   assert.match(p.messages[0].content, /\(continua\)/);
+  // Reforço (29/10): regra própria, com as variações, e onde a resposta deve terminar.
+  assert.match(p.messages[0].content, /Nunca escreva "\(continua\)" ou parecido/);
+  assert.match(p.messages[0].content, /termine no último item ou na oferta do resto/);
   assert.ok(p.max_completion_tokens >= 1500);
 });
 

@@ -289,7 +289,7 @@ export async function conversar(
   for (;;) {
     const r = await pedirComEspera([...historico, ...novas]);
     if ('texto' in r) {
-      const texto = semRepeticao(r.texto);
+      const texto = semContinua(semRepeticao(r.texto));
       novas.push({ papel: 'assistente', texto });
       return { novas, texto };
     }
@@ -337,6 +337,20 @@ export function semRepeticao(texto: string): string {
     blocos.push({ sep: i ? pedacos[i - 1] : '', texto: linhas.join('\n') });
   }
   return semBlocosRepetidos(blocos, 1, (b) => chaveRepeticao(b.texto)).map((b, i) => (i ? b.sep : '') + b.texto).join('');
+}
+
+// ---------- resposta sem "(continua)" ----------
+// O modelo às vezes fecha a lista com "(continua)" (ou "(continua...)"), como se fosse mandar
+// o resto. Sai quando está sozinho numa linha ou solto no fim da resposta; "continua" dentro
+// da frase fica.
+const CONTINUA = String.raw`\(\s*continua\s*(?:\.{1,3}|…)?\s*\)`;
+const RE_LINHA_CONTINUA = new RegExp(String.raw`^[ \t]*${CONTINUA}[ \t]*$`, 'i');
+const RE_FIM_CONTINUA = new RegExp(String.raw`[ \t]*${CONTINUA}\s*$`, 'i');
+
+export function semContinua(texto: string): string {
+  let r = texto.split('\n').filter((l) => !RE_LINHA_CONTINUA.test(l)).join('\n').replace(/\s+$/, '');
+  while (RE_FIM_CONTINUA.test(r)) r = r.replace(RE_FIM_CONTINUA, '').replace(/\s+$/, '');
+  return r || texto.trim();
 }
 
 // ---------- links de OS ----------
