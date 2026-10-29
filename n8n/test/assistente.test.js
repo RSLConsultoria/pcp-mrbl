@@ -233,7 +233,7 @@ test('resposta do Groq: texto longo é cortado', () => {
 
 test('resposta do Groq: 429 (limite de tokens do Groq) vira 429 próprio com o tempo para tentar de novo', () => {
   const limite = (headers, code) => ({ statusCode: 429, headers, body: { error: { message: 'Rate limit reached', type: 'tokens', code: code || 'rate_limit_exceeded' } } });
-  const esperado = (n) => ({ status: 429, body: { erro: 'Muita procura agora. Tentando de novo…', tentarEmSegundos: n } });
+  const esperado = (n) => ({ status: 429, body: { erro: 'Muita procura agora. Tentando de novo…', tentarEmSegundos: n }, limiteGroq: true });
   assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'retry-after': '4' }))), esperado(4));
   assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'Retry-After': '2.3' }))), esperado(3));
   assert.deepEqual(limpo(ctx.respostaGroqAssistente(limite({ 'retry-after': '0' }))), esperado(1));

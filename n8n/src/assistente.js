@@ -200,7 +200,23 @@ function esperaGroqAssistente(headers) {
 // Resposta do HTTP Request (resposta completa, sem erro) ou o corpo direto ->
 // { status: 200, body: { texto } | { chamadas } }, 429 do Groq com o tempo para tentar de
 // novo (diferente do 429 do limite por usuário, que não traz tentarEmSegundos) ou 502 amigável.
+// Recusa por limite do Groq (429 ou rate_limit_exceeded) leva limiteGroq: true, fora do corpo
+// que vai ao site, para o aviso GROQ_LIMITE no ERROS_APP depois da resposta.
 function respostaGroqAssistente(resposta) {
+  var r = respostaGroqAssistenteSemAviso(resposta);
+  if (limiteGroqNaResposta(resposta)) r.limiteGroq = true;
+  return r;
+}
+
+// Aviso GROQ_LIMITE do Assistente (item que foi ao Responder Assistente): só na recusa por
+// limite do Groq e no máximo 1 por minuto. null = não grava nada.
+function avisoLimiteGroqAssistente(estado, item, agora) {
+  if (!objetoSimples(item) || item.limiteGroq !== true) return null;
+  if (!podeAvisarLimiteGroq(estado, 'assistente', agora)) return null;
+  return linhaLimiteGroq('assistente', MODELO_GROQ_ASSISTENTE, agora, 1);
+}
+
+function respostaGroqAssistenteSemAviso(resposta) {
   if (!objetoSimples(resposta)) return erroGroqAssistente();
   var corpo = resposta;
   if (Number(resposta.statusCode) === 429) {

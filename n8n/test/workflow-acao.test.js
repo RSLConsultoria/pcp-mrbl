@@ -291,7 +291,7 @@ test('pcp-api.sdk.js: HTTP da planilha com credencial googleApi; retry 3x / 3 s 
   // (workflow-peca.test.js e workflow-assistente.test.js).
   const PECA_PLOOMES = ['Buscar Cards da Peça', 'Buscar Cards por Referência', 'Buscar Registros da Peça', 'Buscar Trocas de Etapa', 'Buscar Etapas do Funil', 'Chamar Groq (Assistente)'];
   const google = blocos(sdk).filter((b) => /type: 'n8n-nodes-base\.(httpRequest|googleSheets)'/.test(b.txt) && !PECA_PLOOMES.includes(b.nome));
-  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Alteracao Ploomes', 'Gravar Anexo', 'Gravar Erro', 'Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS']);
+  assert.deepEqual(google.map((b) => b.nome).sort(), ['Gravar Alteracao Ploomes', 'Gravar Anexo', 'Gravar Erro', 'Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS', 'Registrar Aviso Limite Groq']);
   const COM_RETRY = ['Gravar Lote', 'Ler Planilha', 'Ler Planilha Acao', 'Ler USUARIOS'];
   google.forEach((b) => {
     assert.equal(/retryOnFail: true,\s+maxTries: 3,\s+waitBetweenTries: 3000,/.test(b.txt), COM_RETRY.includes(b.nome), b.nome);

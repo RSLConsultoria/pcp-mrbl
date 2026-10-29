@@ -60,7 +60,8 @@ linha(1100, 0, ['Peça', 'Validar Peça', 'Peça Pronta?', 'Buscar Cards da Peç
   'Montar Peça', 'Responder Peça']);
 linha(1300, 7 * DX, ['Buscar Cards por Referência', 'Preparar Referência da Peça']);
 // Assistente (F5d): POST pcp-assistente confere sessão e limite e repassa a conversa ao Groq.
-linha(1500, 0, ['Assistente', 'Validar Assistente', 'Assistente Pronto?', 'Chamar Groq (Assistente)', 'Montar Resposta do Assistente', 'Responder Assistente']);
+linha(1500, 0, ['Assistente', 'Validar Assistente', 'Assistente Pronto?', 'Chamar Groq (Assistente)', 'Montar Resposta do Assistente', 'Responder Assistente',
+  'Montar Aviso Limite Groq', 'Registrar Aviso Limite Groq']);
 
 const POS_ENVIO = {};
 posAtual = POS_ENVIO;
@@ -374,6 +375,11 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   chamarGroqAssistente(),
   code('montarRespostaAssistente', 'Montar Resposta do Assistente', 'montar-resposta-assistente'),
   responder('responderAssistente', 'Responder Assistente'),
+  // Depois da resposta ao site: recusa por limite do Groq vira uma linha GROQ_LIMITE no
+  // ERROS_APP (no máximo 1 por minuto). Append sem retry; falha não muda nada.
+  code('montarAvisoLimiteGroq', 'Montar Aviso Limite Groq', 'montar-aviso-limite-groq-assistente'),
+  httpGoogle('registrarAvisoLimiteGroq', 'Registrar Aviso Limite Groq', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", ''),
   webhook('acaoWebhook', 'Acao', 'POST', 'pcp-acao' + sufixo),
   code('preValidarAcao', 'Pre Validar Acao', 'pre-validar-acao'),
   'const preOk = ' + condicao('Pre OK?', '{{ $json.ok }}', 'boolean', 'true', "''").replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
@@ -436,6 +442,9 @@ export default workflow('${id}', '${nomeWf}', {
   .to(assistentePronto
     .onTrue(responderAssistente)
     .onFalse(chamarGroq.to(montarRespostaAssistente).to(responderAssistente)))
+  .add(responderAssistente)
+  .to(montarAvisoLimiteGroq)
+  .to(registrarAvisoLimiteGroq)
   .add(acaoWebhook)
   .to(preValidarAcao)
   .to(preOk
@@ -1094,7 +1103,8 @@ const POS_EMAILS = {};
   ['Tem E-mails?', 5, 0], ['Ler E-mail', 6, -160], ['Ler Planilha E-mails', 7, 0],
   ['Selecionar E-mails', 8, 0], ['Gravar Reservas', 9, 0], ['Montar Pedidos de Interpretação', 10, 0], ['Interpretar E-mail', 11, 0],
   ['Reler E-mails', 12, 0], ['Finalizar E-mails', 13, 0], ['Gravar Interpretações', 14, 0],
-  ['Montar Erro E-mails', 11, 260], ['Registrar Erro E-mails', 12, 260]]
+  ['Montar Erro E-mails', 11, 260], ['Registrar Erro E-mails', 12, 260],
+  ['Montar Aviso Limite Groq', 12, 520], ['Registrar Aviso Limite Groq', 13, 520]]
   .forEach(([n, c, y]) => { POS_EMAILS[n] = [c * DX, y]; });
 posAtual = POS_EMAILS;
 RETRY = RETRY_API;
@@ -1149,6 +1159,10 @@ const lerEmailsPcp = IMPORT + [
   // batchUpdate idempotente: pode repetir.
   httpGoogle('gravarInterpretacoes', 'Gravar Interpretações', 'POST', "expr('{{ $json.url }}')", true, ERRO_SAIDA),
   code('montarErroEmails', 'Montar Erro E-mails', 'montar-erro-emails-pcp'),
+  // Recusas por limite do Groq na rodada: uma linha GROQ_LIMITE no ERROS_APP (append sem retry).
+  code('montarAvisoLimiteGroqEmails', 'Montar Aviso Limite Groq', 'montar-aviso-limite-groq-emails-pcp'),
+  httpGoogle('registrarAvisoLimiteGroqEmails', 'Registrar Aviso Limite Groq', 'POST', "expr('{{ $json.url }}')", true,
+    "onError: 'continueRegularOutput',\n    ", ''),
   httpGoogle('registrarErroEmails', 'Registrar Erro E-mails', 'POST', "expr('{{ $json.url }}')", true,
     "onError: 'continueRegularOutput',\n    ", '')
 ].join('\n\n') + `
@@ -1174,7 +1188,8 @@ export default workflow('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PC
   .add(montarPedidosEmails).to(interpretarEmail)
   .to(relerEmails.onError(montarErroEmails.to(registrarErroEmails)))
   .add(relerEmails).to(finalizarEmails.onError(montarErroEmails.to(registrarErroEmails)))
-  .add(finalizarEmails).to(gravarInterpretacoes.onError(montarErroEmails.to(registrarErroEmails)));
+  .add(finalizarEmails).to(gravarInterpretacoes.onError(montarErroEmails.to(registrarErroEmails)))
+  .add(interpretarEmail).to(montarAvisoLimiteGroqEmails).to(registrarAvisoLimiteGroqEmails);
 `;
 
 // Subworkflow do intérprete dos e-mails (molde do intérprete do WhatsApp): recebe o

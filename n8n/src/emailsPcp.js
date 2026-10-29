@@ -485,6 +485,14 @@ function concluirEmailsPcp(pedidos, respostas, linhas) {
   return operacoes;
 }
 
+// Aviso GROQ_LIMITE da rodada: conta as respostas do Interpretar E-mail recusadas por limite
+// do Groq e devolve uma linha só (null sem recusa). Não olha o texto do e-mail.
+function avisoLimiteGroqEmailsPcp(respostas, agora) {
+  var recusas = (respostas || []).filter(limiteGroqNaResposta).length;
+  if (!recusas) return null;
+  return linhaLimiteGroq('emails_pcp', MODELO_GROQ_EMAIL_PCP, agora, recusas);
+}
+
 // ----- Board -----
 var DIAS_DECIDIDOS_EMAIL_PCP = 7;
 var DIAS_PENDENTE_EMAIL_PCP = 30;

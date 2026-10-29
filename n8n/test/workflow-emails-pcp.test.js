@@ -51,7 +51,9 @@ test('Ler E-mails do PCP: agendado a cada 10 min, Config com o marcador do domí
   assert.deepEqual(no(w, 'Config').parameters.assignments.assignments, [{ id: 'dominio', name: 'dominio', value: 'CONFIGURAR_DOMINIO', type: 'string' }]);
   const cadeia = ['A cada 10 minutos', 'Config', 'Montar Busca', 'Buscar E-mails', 'Separar E-mails', 'Tem E-mails?', 'Ler E-mail', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas',
     'Montar Pedidos de Interpretação', 'Interpretar E-mail', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações'];
-  for (let i = 0; i < cadeia.length - 1; i++) assert.deepEqual(destinos(w, cadeia[i]), [cadeia[i + 1]], cadeia[i]);
+  // Interpretar E-mail também alimenta o aviso de limite do Groq (groq-limite.test.js).
+  const seguintes = (n) => destinos(w, n).filter((d) => d !== 'Montar Aviso Limite Groq');
+  for (let i = 0; i < cadeia.length - 1; i++) assert.deepEqual(seguintes(cadeia[i]), [cadeia[i + 1]], cadeia[i]);
   // Sem e-mail novo (falso) segue direto para a planilha: as linhas ERRO ainda voltam ao intérprete.
   assert.deepEqual(destinos(w, 'Tem E-mails?', 1), ['Ler Planilha E-mails']);
   for (const n of ['Buscar E-mails', 'Ler E-mail', 'Ler Planilha E-mails', 'Selecionar E-mails', 'Gravar Reservas', 'Montar Pedidos de Interpretação', 'Reler E-mails', 'Finalizar E-mails', 'Gravar Interpretações']) {

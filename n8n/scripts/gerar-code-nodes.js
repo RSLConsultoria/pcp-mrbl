@@ -58,7 +58,9 @@ const NODES = {
   'montar-pedido-groq-email-pcp': 'Montar Pedido Groq',
   'devolver-interpretacao-email-pcp': 'Devolver Interpretação',
   'validar-assistente': 'Validar Assistente',
-  'montar-resposta-assistente': 'Montar Resposta do Assistente'
+  'montar-resposta-assistente': 'Montar Resposta do Assistente',
+  'montar-aviso-limite-groq-assistente': 'Montar Aviso Limite Groq',
+  'montar-aviso-limite-groq-emails-pcp': 'Montar Aviso Limite Groq (E-mails)'
 };
 
 const corpo = ARQUIVOS

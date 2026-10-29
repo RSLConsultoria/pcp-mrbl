@@ -4547,6 +4547,47 @@ function requisicaoErroApp(linha, docId) {
   };
 }
 
+// ----- Aviso de limite do Groq (cota gratuita, contada por modelo) -----
+// Uma linha resumida no ERROS_APP (append, como as outras): [quando, '', 'GROQ_LIMITE', '',
+// origem, '', 'modelo X; N recusa(s) por limite']. Nunca leva texto da conversa, do e-mail
+// nem dados de quem perguntou.
+var TIPO_ERRO_GROQ_LIMITE = 'GROQ_LIMITE';
+var INTERVALO_AVISO_GROQ_LIMITE_MS = 60 * 1000;
+var RE_LIMITE_GROQ = /rate_limit_exceeded|rate limit|too many requests|\b429\b/i;
+
+function linhaLimiteGroq(origem, modelo, agora, recusas) {
+  var quando = '';
+  try { quando = new Date(typeof agora === 'number' ? agora : Date.now()).toISOString(); } catch (e) { quando = ''; }
+  var n = Math.max(1, Math.floor(Number(recusas)) || 1);
+  return [quando, '', TIPO_ERRO_GROQ_LIMITE, '', texto(origem), '',
+    'modelo ' + texto(modelo) + '; ' + n + (n === 1 ? ' recusa' : ' recusas') + ' por limite'];
+}
+
+// No máximo 1 aviso por minuto por origem, guardado no static data do workflow. true = pode.
+function podeAvisarLimiteGroq(estado, origem, agora) {
+  if (!estado || typeof estado !== 'object') return false;
+  if (!estado.avisoLimiteGroq || typeof estado.avisoLimiteGroq !== 'object') estado.avisoLimiteGroq = {};
+  var ultimo = Number(estado.avisoLimiteGroq[origem]);
+  if (isFinite(ultimo) && agora - ultimo < INTERVALO_AVISO_GROQ_LIMITE_MS) return false;
+  estado.avisoLimiteGroq[origem] = agora;
+  return true;
+}
+
+// Resposta completa do HTTP Request (statusCode/body) ou item de erro ({ error }) do Groq
+// ou do subworkflow: true quando foi recusa por limite. Só olha o status e o erro, nunca o conteúdo.
+function limiteGroqNaResposta(r) {
+  if (!r || typeof r !== 'object') return false;
+  if (Number(r.statusCode) === 429) return true;
+  var corpo = r.body && typeof r.body === 'object' ? r.body : r;
+  var erroCorpo = corpo.error;
+  if (erroCorpo && typeof erroCorpo === 'object' && texto(erroCorpo.code) === 'rate_limit_exceeded') return true;
+  var erro = r.error;
+  var bruto = '';
+  if (typeof erro === 'string') bruto = erro;
+  else if (erro && typeof erro === 'object') bruto = [texto(erro.message), texto(erro.description), texto(erro.httpCode), texto(erro.code)].join(' ');
+  return RE_LIMITE_GROQ.test(bruto);
+}
+
 function valorGravado(v) {
   return v === undefined || v === null ? '' : v;
 }
@@ -5633,6 +5674,14 @@ function concluirEmailsPcp(pedidos, respostas, linhas) {
   return operacoes;
 }
 
+// Aviso GROQ_LIMITE da rodada: conta as respostas do Interpretar E-mail recusadas por limite
+// do Groq e devolve uma linha só (null sem recusa). Não olha o texto do e-mail.
+function avisoLimiteGroqEmailsPcp(respostas, agora) {
+  var recusas = (respostas || []).filter(limiteGroqNaResposta).length;
+  if (!recusas) return null;
+  return linhaLimiteGroq('emails_pcp', MODELO_GROQ_EMAIL_PCP, agora, recusas);
+}
+
 // ----- Board -----
 var DIAS_DECIDIDOS_EMAIL_PCP = 7;
 var DIAS_PENDENTE_EMAIL_PCP = 30;
@@ -6390,7 +6439,23 @@ function esperaGroqAssistente(headers) {
 // Resposta do HTTP Request (resposta completa, sem erro) ou o corpo direto ->
 // { status: 200, body: { texto } | { chamadas } }, 429 do Groq com o tempo para tentar de
 // novo (diferente do 429 do limite por usuário, que não traz tentarEmSegundos) ou 502 amigável.
+// Recusa por limite do Groq (429 ou rate_limit_exceeded) leva limiteGroq: true, fora do corpo
+// que vai ao site, para o aviso GROQ_LIMITE no ERROS_APP depois da resposta.
 function respostaGroqAssistente(resposta) {
+  var r = respostaGroqAssistenteSemAviso(resposta);
+  if (limiteGroqNaResposta(resposta)) r.limiteGroq = true;
+  return r;
+}
+
+// Aviso GROQ_LIMITE do Assistente (item que foi ao Responder Assistente): só na recusa por
+// limite do Groq e no máximo 1 por minuto. null = não grava nada.
+function avisoLimiteGroqAssistente(estado, item, agora) {
+  if (!objetoSimples(item) || item.limiteGroq !== true) return null;
+  if (!podeAvisarLimiteGroq(estado, 'assistente', agora)) return null;
+  return linhaLimiteGroq('assistente', MODELO_GROQ_ASSISTENTE, agora, 1);
+}
+
+function respostaGroqAssistenteSemAviso(resposta) {
   if (!objetoSimples(resposta)) return erroGroqAssistente();
   var corpo = resposta;
   if (Number(resposta.statusCode) === 429) {

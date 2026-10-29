@@ -72,7 +72,7 @@ test('credencial do Groq: marcador CONFIGURAR_* ou id real; vazio nunca', () => 
   for (const ruim of ['', ' ', 'CONFIGURAR_', null, 'id com espaço']) assert.equal(idCredencialValido(ruim), false, String(ruim));
 });
 
-test('pcp-assistente: o ramo não lê nem grava a planilha', () => {
+test('pcp-assistente: o ramo não lê a planilha; só o aviso de limite do Groq faz append no ERROS_APP', () => {
   const w = workflow('pcp-api.sdk.js');
   const alcancaveis = new Set();
   const fila = ['Assistente'];
@@ -82,8 +82,11 @@ test('pcp-assistente: o ramo não lê nem grava a planilha', () => {
     alcancaveis.add(n);
     for (const saida of (w.connections[n] || {}).main || []) for (const c of saida || []) fila.push(c.node);
   }
-  assert.deepEqual([...alcancaveis].sort(), [...RAMO].sort());
+  const AVISO = ['Montar Aviso Limite Groq', 'Registrar Aviso Limite Groq'];
+  assert.deepEqual([...alcancaveis].sort(), [...RAMO, ...AVISO].sort());
   for (const n of alcancaveis) assert.doesNotMatch(no(w, n).type, /googleSheets|executeWorkflow/);
+  // A única gravação: a URL vem do Montar Aviso (append no ERROS_APP, testado em groq-limite.test.js).
+  assert.equal(no(w, 'Registrar Aviso Limite Groq').parameters.url, '={{ $json.url }}');
 });
 
 test('Validar Assistente: 401 sem sessão, pronto com o corpo do Groq, 429 depois de 120', () => {
