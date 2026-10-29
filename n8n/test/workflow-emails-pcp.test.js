@@ -139,7 +139,7 @@ test('Intérprete E-mail do PCP (Groq): recebe o contexto, chama o Groq e devolv
   assert.equal(groq.credentials.groqApi.id, ID_CREDENCIAL_GROQ);
   const [pedido] = rodarAdaptador('montar-pedido-groq-email-pcp', { emailId: 'G1', texto: 'Chega dia 30/10.', itensAbertos: [] });
   assert.equal(pedido.json.emailId, 'G1');
-  assert.equal(pedido.json.corpo.model, 'openai/gpt-oss-120b');
+  assert.equal(pedido.json.corpo.model, 'openai/gpt-oss-20b');
   const [volta] = rodarAdaptador('devolver-interpretacao-email-pcp', { choices: [{ message: { content: '{"tipo":"OBSERVACAO"}' } }] },
     { 'Montar Pedido Groq': [pedido.json] });
   assert.deepEqual(volta.json, { emailId: 'G1', interpretacao: { tipo: 'OBSERVACAO' } });

@@ -15,7 +15,7 @@ Transformar essas respostas em **sugestões** no app, que só gravam depois do *
 - Cada mensagem é tratada uma vez: id do Gmail na aba nova **EMAILS_PCP** (append; nunca apaga nem ordena).
 - **OS** = número depois de "OS:" no assunto. Sem OS → ignora.
 - **Limpeza** (função pura): corta o histórico citado (linhas a partir de "De:", "From:", "Em … escreveu:", "-----Original", "Enviado:") e a assinatura (a partir de "Atenciosamente", "Att", "--"); máximo 1500 caracteres.
-- **Intérprete** (subworkflow novo no Groq, como o do WhatsApp): recebe o texto limpo, o assunto e os itens em aberto das caixas da OS (do board); devolve JSON validado pelo código:
+- **Intérprete** (subworkflow novo no Groq, como o do WhatsApp; modelo `openai/gpt-oss-20b` desde 29/10: o Groq é gratuito e as cotas são por modelo, então o `120b` fica para o Assistente): recebe o texto limpo, o assunto e os itens em aberto das caixas da OS (do board); devolve JSON validado pelo código:
   - `PREVISAO` (data + itens citados, quando houver),
   - `QUANTIDADE` (item + quantidade conferida),
   - `CHAMADO` (número),

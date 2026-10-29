@@ -5230,7 +5230,7 @@ function limparTextoEmailPcp(valor) {
 var TIPOS_EMAIL_PCP = { PREVISAO: 1, QUANTIDADE: 1, CHAMADO: 1, OBSERVACAO: 1 };
 var LIMITE_ITENS_INTERPRETE_EMAIL_PCP = 30;
 var CONFIANCA_MINIMA_EMAIL_PCP = 0.7;
-var MODELO_GROQ_EMAIL_PCP = 'openai/gpt-oss-120b';
+var MODELO_GROQ_EMAIL_PCP = 'openai/gpt-oss-20b';
 var LIMITE_CONTEXTO_GROQ_EMAIL_PCP = 12000;
 
 var INSTRUCOES_INTERPRETE_EMAIL_PCP = 'Interprete a resposta da equipe a um e-mail do PCP sobre a caixa de materiais de uma OS. ' +

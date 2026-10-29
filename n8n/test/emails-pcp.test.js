@@ -101,8 +101,9 @@ test('entrada do intérprete: texto limpo, assunto, OS e itens em aberto; nunca 
 
 test('pedido ao Groq: modelo, JSON e o contexto como mensagem do usuário', () => {
   const corpo = limpo(ctx.pedidoGroqEmailPcp({ emailId: 'G1', texto: 'x'.repeat(20000), instrucoes: 'i', schema: {} }));
-  assert.equal(corpo.model, 'openai/gpt-oss-120b');
+  assert.equal(corpo.model, 'openai/gpt-oss-20b');
   assert.equal(corpo.temperature, 0);
+  assert.equal(corpo.reasoning_effort, 'low');
   assert.deepEqual(corpo.response_format, { type: 'json_object' });
   assert.equal(corpo.messages[0].role, 'system');
   assert.match(corpo.messages[0].content, /PREVISAO/);
