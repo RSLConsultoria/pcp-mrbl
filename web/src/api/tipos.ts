@@ -23,7 +23,8 @@ export interface Item {
   pedidoIds: string[]; // todos os pedidos abertos com o item (o original e as partes dele)
 }
 
-export type StatusPloomes = 'PENDENTE' | 'ENVIADO' | 'ERRO';
+// COPIADO_QA: pendência copiada da original para a planilha QA (não sobe ao Ploomes).
+export type StatusPloomes = 'PENDENTE' | 'ENVIADO' | 'ERRO' | 'COPIADO_QA';
 
 export interface EntradaHistorico {
   id?: string; // linha do HISTORICO_APP (API nova): evita evento repetido na Visão da peça

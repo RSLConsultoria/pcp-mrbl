@@ -291,7 +291,7 @@ const precisaLer = `const precisaLer = ifElse({
 // (service account; precisa de "Set up for use in HTTP Request node" com o
 // escopo spreadsheets). Leitura: GET fixo. Gravacao: POST com url/corpo do item.
 const CRED_GOOGLE_HTTP = "credentials: { googleApi: { id: '72hvCT9jkADwOOo1', name: 'Google Sheets - MRBL' } },";
-const httpGoogle = (varName, nome, metodo, urlCodigo, comCorpo, extra, retry) => `const ${varName} = node({
+const httpGoogle = (varName, nome, metodo, urlCodigo, comCorpo, extra, retry, timeout) => `const ${varName} = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.2,
   config: {
@@ -301,7 +301,7 @@ const httpGoogle = (varName, nome, metodo, urlCodigo, comCorpo, extra, retry) =>
       url: ${urlCodigo},
       authentication: 'predefinedCredentialType',
       nodeCredentialType: 'googleApi',
-      ${comCorpo ? "sendBody: true,\n      specifyBody: 'json',\n      jsonBody: expr('{{ JSON.stringify($json.body) }}'),\n      " : ''}options: { timeout: 30000 }
+      ${comCorpo ? "sendBody: true,\n      specifyBody: 'json',\n      jsonBody: expr('{{ JSON.stringify($json.body) }}'),\n      " : ''}options: { timeout: ${timeout || 30000} }
     },
     ${CRED_GOOGLE_HTTP}
     position: ${posicao(nome)}
@@ -1320,11 +1320,11 @@ const gerarRecargaQa = () => {
   config: { name: 'Executar', parameters: {}, position: ${posicao('Executar')} },
   output: [{}]
 });`,
-    httpGoogle('lerOriginal', 'Ler Original', 'GET', JSON.stringify(lote.urlLeitura(PLANILHA_ORIGINAL_ID, lote.ABAS_RECARGA_QA)), false),
+    httpGoogle('lerOriginal', 'Ler Original', 'GET', JSON.stringify(lote.urlLeitura(PLANILHA_ORIGINAL_ID, lote.ABAS_RECARGA_QA)), false, '', undefined, 300000),
     code('montarLimpezaQa', 'Montar Limpeza', 'montar-limpeza-qa'),
     httpGoogle('limparQa', 'Limpar QA', 'POST', "expr('{{ $json.url }}')", true),
     code('montarRecargaQa', 'Montar Recarga', 'montar-recarga-qa'),
-    httpGoogle('gravarQa', 'Gravar QA', 'POST', "expr('{{ $json.url }}')", true)
+    httpGoogle('gravarQa', 'Gravar QA', 'POST', "expr('{{ $json.url }}')", true, '', undefined, 300000)
   ].join('\n\n') + `
 
 export default workflow('pcp-mrbl-recarregar-qa', 'Utilitário - Recarregar QA (manual)', {

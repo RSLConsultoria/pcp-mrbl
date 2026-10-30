@@ -187,6 +187,16 @@ function respostaOriginal() {
           ['h3', '30/10/2026 10:02', 700002, 'Bia', 'ERRO', '']] };
       }
       if (aba === 'FORNECEDORES') return { range: "'FORNECEDORES'!A1:Z1000" };
+      if (aba === 'WHATSAPP_MENSAGENS') {
+        return { range: "'WHATSAPP_MENSAGENS'!A1:E5", values: [['id', 'status_envio', 'erro', 'interpretacao_status', 'texto'],
+          ['m1', 'PENDENTE', '', '', 'Bom dia'],
+          ['m2', 'ENVIANDO', 'tentativa', '', 'Oi'],
+          ['m3', 'ENVIADA', '', 'PENDENTE', 'Chega sexta'],
+          ['m4', '', '', 'OK', 'ok']] };
+      }
+      if (aba === 'EMAILS_PCP') {
+        return { range: "'EMAILS_PCP'!A1:C4", values: [['id', 'status', 'tentativas'], ['e1', 'ERRO', 1], ['e2', 'PENDENTE', 1], ['e3', 'ERRO', 3]] };
+      }
       return { range: "'" + aba + "'!A1:B2", values: [['id', 'valor'], [aba + '-1', true]] };
     })
   };
@@ -197,7 +207,8 @@ test('recarga: lista de abas do app, limpeza e gravação só na QA', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(c.ABAS_RECARGA_QA)), ABAS_RECARGA);
   const limpar = c.requisicaoLimpezaQa(respostaOriginal());
   assert.equal(limpar.url, 'https://sheets.googleapis.com/v4/spreadsheets/' + PLANILHA_QA_ID + '/values:batchClear');
-  assert.deepEqual(JSON.parse(JSON.stringify(limpar.body.ranges)), ABAS_RECARGA.map((a) => "'" + a + "'"));
+  // A QA_CONTROLE também é limpa: se a gravação falhar, a faixa não mostra uma carga que não existe.
+  assert.deepEqual(JSON.parse(JSON.stringify(limpar.body.ranges)), ABAS_RECARGA.map((a) => "'" + a + "'").concat(["'QA_CONTROLE'!A1:B2"]));
 
   const agora = Date.parse('2026-10-30T13:05:00.000Z');
   const gravar = JSON.parse(JSON.stringify(c.requisicaoRecargaQa(respostaOriginal(), agora)));
@@ -210,6 +221,14 @@ test('recarga: lista de abas do app, limpeza e gravação só na QA', () => {
   assert.deepEqual(porRange["'FALTANTES'!A1"], [['id', 'valor'], ['FALTANTES-1', true]]);
   // Pendências do envio ao Ploomes não sobem de novo pela homologação.
   assert.deepEqual(porRange["'HISTORICO_APP'!A1"].map((l) => l[4]), ['ploomes_status', 'COPIADO_QA', 'ENVIADO', 'ERRO']);
+  // WhatsApp copiado não sai de novo nem volta ao intérprete; e-mail com erro não é reinterpretado.
+  assert.deepEqual(porRange["'WHATSAPP_MENSAGENS'!A1"].map((l) => l.slice(0, 4)), [
+    ['id', 'status_envio', 'erro', 'interpretacao_status'],
+    ['m1', 'ERRO', 'Copiada da original no QA: não reenviada.', ''],
+    ['m2', 'ERRO', 'Copiada da original no QA: não reenviada.', ''],
+    ['m3', 'ENVIADA', '', 'ERRO'],
+    ['m4', '', '', 'OK']]);
+  assert.deepEqual(porRange["'EMAILS_PCP'!A1"], [['id', 'status', 'tentativas'], ['e1', 'ERRO', 3], ['e2', 'PENDENTE', 1], ['e3', 'ERRO', 3]]);
   assert.deepEqual(porRange["'QA_CONTROLE'!A1:B2"], [['copiado_em', 'abas'], ['2026-10-30T13:05:00.000Z', 17]]);
   // A resposta original não é alterada.
   assert.equal(respostaOriginal().valueRanges[4].values[1][4], 'PENDENTE');
@@ -226,6 +245,12 @@ test('recarga: recusa fora do modo QA, origem igual ao destino e leitura incompl
   curta.valueRanges.pop();
   assert.throws(() => c.requisicaoLimpezaQa(curta), /abas/);
   assert.throws(() => c.requisicaoRecargaQa(curta, Date.now()), /abas/);
+  // Ordem trocada: nunca grava uma aba por cima de outra.
+  const trocada = respostaOriginal();
+  [trocada.valueRanges[0], trocada.valueRanges[1]] = [trocada.valueRanges[1], trocada.valueRanges[0]];
+  assert.throws(() => c.requisicaoRecargaQa(trocada, Date.now()), /FALTANTES/);
+  // Aba com aspas no nome devolvida pela API ('CAIXAS GANHAS'!A1:Z9) casa.
+  assert.doesNotThrow(() => c.requisicaoRecargaQa(respostaOriginal(), Date.now()));
 });
 
 test('recarga (workflow gerado): só lê a original; nada grava nela', () => {
@@ -253,6 +278,8 @@ test('recarga (workflow gerado): só lê a original; nada grava nela', () => {
   assert.deepEqual(destinos('Montar Limpeza'), ['Limpar QA']);
   assert.deepEqual(destinos('Limpar QA'), ['Montar Recarga']);
   assert.deepEqual(destinos('Montar Recarga'), ['Gravar QA']);
+  // Leitura e gravação de tudo: timeout maior que os 30 s padrão.
+  for (const nome of ['Ler Original', 'Gravar QA']) assert.equal(w.nodes.find((x) => x.name === nome).parameters.options.timeout, 300000);
   for (const nome of ['Limpar QA', 'Gravar QA']) {
     const n = w.nodes.find((x) => x.name === nome);
     assert.equal(n.parameters.method, 'POST');

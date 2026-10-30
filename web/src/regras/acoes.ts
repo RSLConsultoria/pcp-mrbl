@@ -150,7 +150,8 @@ export function desfechoDoErro(e: unknown, acao?: Acao): DesfechoErro {
 export const SELO_PLOOMES: Record<StatusPloomes, string> = {
   ENVIADO: 'enviado ao Ploomes',
   PENDENTE: 'aguardando Ploomes',
-  ERRO: 'falhou no Ploomes'
+  ERRO: 'falhou no Ploomes',
+  COPIADO_QA: 'copiado da original (não sobe)'
 };
 
 // Do mais novo para o mais antigo (o board já manda assim; aqui é só garantia).
