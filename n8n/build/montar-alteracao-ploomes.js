@@ -4124,7 +4124,23 @@ function fecharPerguntasVencidasWhatsapp(mensagens, agora) {
 }
 
 // Corpo do sendText. A Evolution não guarda mensagens: a citação leva a original inteira.
+// Ambiente de QA (homologação): toda mensagem vai para o grupo de teste, com "[TESTE] "
+// no começo; a citação só fica se a mensagem citada é do próprio grupo de teste.
+var GRUPO_TESTE_WHATSAPP = '120363412994688161@g.us';
+var PREFIXO_TESTE_WHATSAPP = '[TESTE] ';
+
+function corpoWhatsappQa(corpo) {
+  var qa = { number: GRUPO_TESTE_WHATSAPP, text: PREFIXO_TESTE_WHATSAPP + corpo.text };
+  if (corpo.quoted && corpo.number === GRUPO_TESTE_WHATSAPP) qa.quoted = corpo.quoted;
+  return qa;
+}
+
 function corpoEnvioWhatsapp(selecionada, mensagens) {
+  var corpo = corpoEnvioWhatsappOriginal(selecionada, mensagens);
+  return MODO_QA ? corpoWhatsappQa(corpo) : corpo;
+}
+
+function corpoEnvioWhatsappOriginal(selecionada, mensagens) {
   selecionada = selecionada || {};
   var corpo = { number: texto(selecionada.grupo_jid), text: typeof selecionada.texto === 'string' ? selecionada.texto : '' };
   var linha = linhasWhatsappUnicas((mensagens || []).filter(function (m) { return m && texto(m.id) === texto(selecionada.id); }), false)[0] || {};
@@ -4244,7 +4260,9 @@ function horaSaoPaulo(quando) {
   }
 }
 
-var PREFIXO_PCP = /^\s*\[PCP · OS [^\]]*\]\s*/;
+// O registro do ambiente de QA (homologação) começa com "TESTE · " (PREFIXO_TESTE_QA).
+var PREFIXO_TESTE_QA = 'TESTE · ';
+var PREFIXO_PCP = /^\s*(?:TESTE · )?\[PCP · OS [^\]]*\]\s*/;
 
 function montarRegistroCompilado(grupo, contactId) {
   var linhas = grupo.linhas || [];
@@ -4255,7 +4273,7 @@ function montarRegistroCompilado(grupo, contactId) {
     var h = horaSaoPaulo(l.quando);
     return '• ' + (h ? h + ' ' : '') + texto(l.texto).replace(PREFIXO_PCP, '');
   });
-  reg.Content = '[PCP · OS ' + texto(grupo.os) + '] Atualizações do app PCP\n' + itens.join('\n');
+  reg.Content = (MODO_QA ? PREFIXO_TESTE_QA : '') + '[PCP · OS ' + texto(grupo.os) + '] Atualizações do app PCP\n' + itens.join('\n');
   var data = linhas.length ? linhas[linhas.length - 1].quando : '';
   var maisNova = null;
   linhas.forEach(function (l) {
@@ -5864,8 +5882,8 @@ var JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
 var MAX_TENTATIVAS = 5;
 var VALIDADE_CACHE_MS = 55 * 1000;
 var VALORES_ATIVO = { SIM: 1, S: 1, TRUE: 1, '1': 1 };
-var DEALS_PRODUCAO_EDITAVEIS = ['607612577'];  // TESTE: so o card de teste do funil Producao ate o go-live; vazio = todos.
-var DEALS_EDITAVEIS = ['607479158', '607493886', '607493902', '607520448'];  // vazio = todos. Até o go-live, só os cards de teste.
+var DEALS_PRODUCAO_EDITAVEIS = MODO_QA ? [] : ['607612577'];  // TESTE: so o card de teste do funil Producao ate o go-live; vazio = todos.
+var DEALS_EDITAVEIS = MODO_QA ? [] : ['607479158', '607493886', '607493902', '607520448'];  // vazio = todos. Até o go-live, só os cards de teste.
 var ACOES_F3_ATIVAS = true;  // false = recusa rapido todas as acoes de pedido/oficina (F3).
 var HASH_FICTICIO = 'pbkdf2$120000$00000000000000000000000000000000$' + '0'.repeat(64);
 
@@ -6499,6 +6517,9 @@ function respostaGroqAssistenteSemAviso(resposta) {
 // ===== adaptador: Montar Alteracao Ploomes =====
 // Converte a alteracao semantica do Processar Acao no PATCH oficial do Ploomes.
 // A planilha so pode ser gravada depois que esta requisicao tiver sucesso.
+// Ambiente de QA (homologação): nenhum campo do card muda no Ploomes; a ação grava só
+// na planilha QA e no histórico.
+if (MODO_QA) return [{ json: { gravar: false } }];
 var resultado = $('Processar Acao').first().json;
 var alteracao = resultado.status === 200 ? resultado.ploomes : null;
 if (!alteracao) return [{ json: { gravar: false } }];

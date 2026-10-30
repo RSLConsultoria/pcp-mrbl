@@ -85,7 +85,9 @@ function horaSaoPaulo(quando) {
   }
 }
 
-var PREFIXO_PCP = /^\s*\[PCP · OS [^\]]*\]\s*/;
+// O registro do ambiente de QA (homologação) começa com "TESTE · " (PREFIXO_TESTE_QA).
+var PREFIXO_TESTE_QA = 'TESTE · ';
+var PREFIXO_PCP = /^\s*(?:TESTE · )?\[PCP · OS [^\]]*\]\s*/;
 
 function montarRegistroCompilado(grupo, contactId) {
   var linhas = grupo.linhas || [];
@@ -96,7 +98,7 @@ function montarRegistroCompilado(grupo, contactId) {
     var h = horaSaoPaulo(l.quando);
     return '• ' + (h ? h + ' ' : '') + texto(l.texto).replace(PREFIXO_PCP, '');
   });
-  reg.Content = '[PCP · OS ' + texto(grupo.os) + '] Atualizações do app PCP\n' + itens.join('\n');
+  reg.Content = (MODO_QA ? PREFIXO_TESTE_QA : '') + '[PCP · OS ' + texto(grupo.os) + '] Atualizações do app PCP\n' + itens.join('\n');
   var data = linhas.length ? linhas[linhas.length - 1].quando : '';
   var maisNova = null;
   linhas.forEach(function (l) {

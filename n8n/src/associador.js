@@ -239,7 +239,23 @@ function fecharPerguntasVencidasWhatsapp(mensagens, agora) {
 }
 
 // Corpo do sendText. A Evolution não guarda mensagens: a citação leva a original inteira.
+// Ambiente de QA (homologação): toda mensagem vai para o grupo de teste, com "[TESTE] "
+// no começo; a citação só fica se a mensagem citada é do próprio grupo de teste.
+var GRUPO_TESTE_WHATSAPP = '120363412994688161@g.us';
+var PREFIXO_TESTE_WHATSAPP = '[TESTE] ';
+
+function corpoWhatsappQa(corpo) {
+  var qa = { number: GRUPO_TESTE_WHATSAPP, text: PREFIXO_TESTE_WHATSAPP + corpo.text };
+  if (corpo.quoted && corpo.number === GRUPO_TESTE_WHATSAPP) qa.quoted = corpo.quoted;
+  return qa;
+}
+
 function corpoEnvioWhatsapp(selecionada, mensagens) {
+  var corpo = corpoEnvioWhatsappOriginal(selecionada, mensagens);
+  return MODO_QA ? corpoWhatsappQa(corpo) : corpo;
+}
+
+function corpoEnvioWhatsappOriginal(selecionada, mensagens) {
   selecionada = selecionada || {};
   var corpo = { number: texto(selecionada.grupo_jid), text: typeof selecionada.texto === 'string' ? selecionada.texto : '' };
   var linha = linhasWhatsappUnicas((mensagens || []).filter(function (m) { return m && texto(m.id) === texto(selecionada.id); }), false)[0] || {};

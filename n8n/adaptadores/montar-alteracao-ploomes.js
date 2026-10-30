@@ -1,6 +1,9 @@
 // ===== adaptador: Montar Alteracao Ploomes =====
 // Converte a alteracao semantica do Processar Acao no PATCH oficial do Ploomes.
 // A planilha so pode ser gravada depois que esta requisicao tiver sucesso.
+// Ambiente de QA (homologação): nenhum campo do card muda no Ploomes; a ação grava só
+// na planilha QA e no histórico.
+if (MODO_QA) return [{ json: { gravar: false } }];
 var resultado = $('Processar Acao').first().json;
 var alteracao = resultado.status === 200 ? resultado.ploomes : null;
 if (!alteracao) return [{ json: { gravar: false } }];

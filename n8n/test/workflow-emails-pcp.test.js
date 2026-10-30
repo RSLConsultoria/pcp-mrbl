@@ -123,7 +123,8 @@ test('repositório público: nenhum endereço de e-mail além do remetente do Pl
   for (const arq of fs.readdirSync(path.join(RAIZ, 'workflows', 'json'))) {
     const txt = fs.readFileSync(path.join(RAIZ, 'workflows', 'json', arq), 'utf8');
     const enderecos = [...new Set((txt.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []))];
-    assert.deepEqual(enderecos.filter((e) => e !== 'noreply@ploomes.com'), [], arq);
+    // O JID do grupo de teste do WhatsApp (ambiente de QA) termina em @g.us: não é e-mail.
+    assert.deepEqual(enderecos.filter((e) => e !== 'noreply@ploomes.com' && !/@g\.us$/.test(e)), [], arq);
   }
   const src = fs.readFileSync(path.join(RAIZ, 'src', 'emailsPcp.js'), 'utf8');
   assert.ok(!/@[a-z0-9-]+\.com\.br/i.test(src));
