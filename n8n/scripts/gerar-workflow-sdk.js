@@ -4,11 +4,24 @@ const fs = require('fs');
 const path = require('path');
 
 const raiz = path.join(__dirname, '..');
-const lerBuild = (n) => JSON.stringify(fs.readFileSync(path.join(raiz, 'build', n + '.js'), 'utf8'));
+// Ambiente de QA (spec 2026-10-30): nos workflows de homologação (emQa) o texto de cada
+// Code node sai com MODO_QA = true e PLANILHA_ID = planilha QA (scripts/planilha-qa.js).
+let QA = false;
+const lerBuild = (n) => {
+  const txt = fs.readFileSync(path.join(raiz, 'build', n + '.js'), 'utf8');
+  return JSON.stringify(QA ? paraQa(txt, true) : txt);
+};
 
 // URLs do lote (batchGet) e id da planilha vem de src/planilhaLote.js.
 const { carregar } = require('../test/carregar');
-const lote = carregar();
+const loteProducao = carregar();
+// Planilha QA (marcador CONFIGURAR_PLANILHA_QA ou id real): scripts/planilha-qa.js.
+const { PLANILHA_QA_ID, idPlanilhaQaValido, paraQa } = require('./planilha-qa');
+if (!idPlanilhaQaValido(PLANILHA_QA_ID)) throw new Error('Id da planilha QA inválido.');
+if (PLANILHA_QA_ID === loteProducao.PLANILHA_ID) throw new Error('A planilha QA não pode ser a original.');
+const PLANILHA_ORIGINAL_ID = loteProducao.PLANILHA_ID;
+const loteQa = carregar({ qa: true });
+let lote = loteProducao;
 // Ids dos subworkflows (marcador CONFIGURAR_* ou id real): scripts/ids-subworkflows.js.
 const { IDS_SUBWORKFLOWS, idSubworkflowValido } = require('./ids-subworkflows');
 Object.keys(IDS_SUBWORKFLOWS).forEach((k) => { if (!idSubworkflowValido(IDS_SUBWORKFLOWS[k])) throw new Error('Id de subworkflow inválido: ' + k); });
@@ -17,7 +30,25 @@ const { ID_CREDENCIAL_GROQ, ID_CREDENCIAL_GMAIL, idCredencialValido } = require(
 if (!idCredencialValido(ID_CREDENCIAL_GMAIL)) throw new Error('Id de credencial inválido: GMAIL');
 if (!idCredencialValido(ID_CREDENCIAL_GROQ)) throw new Error('Id de credencial inválido: GROQ');
 const CRED_GROQ = "credentials: { groqApi: { id: '" + ID_CREDENCIAL_GROQ + "', name: 'WhatsPCPGroq' } },";
-const DOC = lote.PLANILHA_ID;
+let DOC = lote.PLANILHA_ID;
+
+// Gera um workflow de homologação: leituras e gravações na QA, Code nodes no modo QA,
+// Interpretar WhatsApp de homologação. O id da original não pode aparecer no resultado
+// (só a recarga do QA lê a original, e ela declara isso com leOriginal).
+const emQa = (gerar, leOriginal) => {
+  const antes = [lote, DOC, QA];
+  lote = loteQa; DOC = PLANILHA_QA_ID; QA = true;
+  try {
+    const txt = gerar();
+    if (!leOriginal && txt.includes(PLANILHA_ORIGINAL_ID)) throw new Error('Workflow de homologação com o id da planilha original.');
+    return txt;
+  } finally {
+    [lote, DOC, QA] = antes;
+  }
+};
+const idInterpretarWhatsapp = () => (QA ? IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP_HOMOLOG : IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP);
+// Id e nome do workflow: a cópia de homologação ganha "-homolog" e " (homolog)".
+const nomeWf = (id, nome) => (QA ? [id + '-homolog', nome + ' (homolog)'] : [id, nome]);
 const ORIGENS = 'https://rslconsultoria.github.io,http://localhost:5173,http://localhost:4173';
 
 
@@ -344,7 +375,10 @@ const chamarGroqAssistente = () => `const chamarGroq = node({
 
 RETRY = RETRY_API;
 const IMPORT_API = IMPORT.replace('ifElse, expr', 'ifElse, splitInBatches, nextBatch, expr');
-const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
+const gerarApi = (id, nomeApi, sufixo) => {
+  posAtual = POS;
+  RETRY = RETRY_API;
+  return IMPORT_API + [
   webhook('loginWebhook', 'Login', 'POST', 'pcp-login' + sufixo),
   sheets('lerUsuarios', 'Ler USUARIOS', 'USUARIOS', ''),
   code('processarLogin', 'Processar Login', 'processar-login'),
@@ -407,14 +441,14 @@ const gerarApi = (id, nomeWf, sufixo) => IMPORT_API + [
   'const pedirInterpretacao = ' + condicao('Pedir Interpretação?', "{{ !!$('Processar Acao').first().json.interpretar }}", 'boolean', 'true', "''")
     .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
   code('montarPedidoInterpretacao', 'Montar Pedido de Interpretação', 'montar-pedido-interpretacao'),
-  executarWorkflow('dispararInterpretacao', 'Disparar Interpretação', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, false, 'continueRegularOutput'),
+  executarWorkflow('dispararInterpretacao', 'Disparar Interpretação', idInterpretarWhatsapp(), false, 'continueRegularOutput'),
   code('montarErro', 'Montar Erro', 'montar-erro'),
   httpGoogle('gravarErro', 'Gravar Erro', 'POST', "expr('{{ $json.url }}')", true, "onError: 'continueRegularOutput',\n    ", ''),
   responder('responderErro', 'Responder Erro', "{{ $('Montar Erro').first().json.resposta }}", '{{ 500 }}', unico),
   responder('responderAcao', 'Responder Acao', "{{ $('Processar Acao').first().json.body }}", "{{ $('Processar Acao').first().json.status }}", unico)
 ].join('\n\n') + `
 
-export default workflow('${id}', '${nomeWf}', {
+export default workflow('${id}', '${nomeApi}', {
   timezone: 'America/Sao_Paulo',
   saveDataSuccessExecution: 'none',
   saveDataErrorExecution: 'none'
@@ -473,13 +507,16 @@ export default workflow('${id}', '${nomeWf}', {
       .onFalse(responderAcao)))
     .onFalse(responderPre));
 `;
+};
 
 const api = gerarApi('pcp-mrbl-api', 'PCP MRBL - API', '');
-const apiHomolog = gerarApi('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)', '-h');
+const apiHomolog = emQa(() => gerarApi('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)', '-h'));
 
-posAtual = POS_ENVIO;
-RETRY = '';
-const envio = IMPORT + [
+const gerarEnvio = () => {
+  posAtual = POS_ENVIO;
+  RETRY = '';
+  const [WID, WNOME] = nomeWf('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes');
+  return IMPORT + [
   `const agenda = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
   version: 1.3,
@@ -501,7 +538,7 @@ const envio = IMPORT + [
   escrever('gravarEnvio', 'Gravar Envio', 'update', 'HISTORICO_APP', ['id'])
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
+export default workflow('${WID}', '${WNOME}', {
   timezone: 'America/Sao_Paulo',
   saveDataSuccessExecution: 'none',
   saveDataErrorExecution: 'all'
@@ -512,6 +549,7 @@ export default workflow('pcp-mrbl-envio', 'PCP MRBL - Enviar ao Ploomes', {
   .add(lerHistorico)
   .to(selecionarEnvio.to(buscarContato).to(montarRegistro).to(criarRegistro).to(resultadoEnvio).to(gravarEnvio));
 `;
+};
 
 // GET paginado no Ploomes por $skip (100 por página, 700 ms entre páginas), com
 // 3 tentativas a cada 30 s (429/5xx) e saída de erro para o registro no ERROS_APP.
@@ -617,9 +655,11 @@ const syncProducao = IMPORT_API + [
               .to(nextBatch(loopEscritasProducao)))))))));
 `;
 
-posAtual = POS_WHATSAPP_SAIDA;
-RETRY = RETRY_API;
-const whatsappSaida = IMPORT + [
+const gerarWhatsappSaida = () => {
+  posAtual = POS_WHATSAPP_SAIDA;
+  RETRY = RETRY_API;
+  const [WID, WNOME] = nomeWf('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp');
+  return IMPORT + [
   `const agendaWhatsapp = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
   version: 1.3,
@@ -686,7 +726,7 @@ const whatsappSaida = IMPORT + [
   escrever('gravarResultadoWhatsapp', 'Gravar Resultado WhatsApp', 'update', 'WHATSAPP_MENSAGENS', ['id'])
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp', {
+export default workflow('${WID}', '${WNOME}', {
   timezone: 'America/Sao_Paulo',
   executionTimeout: 90,
   saveDataSuccessExecution: 'none',
@@ -700,11 +740,14 @@ export default workflow('pcp-mrbl-whatsapp-saida', 'PCP MRBL - Enviar WhatsApp',
       .onTrue(montarEnvioWhatsapp.to(enviarWhatsapp).to(resultadoWhatsapp).to(gravarResultadoWhatsapp))
       .onFalse(resultadoSemConexao.to(gravarResultadoWhatsapp)))))));
 `;
+};
 
-posAtual = POS_WHATSAPP_ENTRADA;
-RETRY = RETRY_API;
-const urlContextoWhatsapp = lote.urlLeitura(DOC, lote.LEITURAS_WHATSAPP_ENTRADA);
-const whatsappEntrada = IMPORT + [
+const urlContextoWhatsapp = () => lote.urlLeitura(DOC, lote.LEITURAS_WHATSAPP_ENTRADA);
+const gerarWhatsappEntrada = () => {
+  posAtual = POS_WHATSAPP_ENTRADA;
+  RETRY = RETRY_API;
+  const [WID, WNOME] = nomeWf('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsApp');
+  return IMPORT + [
   `const receberWhatsapp = trigger({
   type: 'n8n-nodes-base.webhook',
   version: 2.1,
@@ -712,7 +755,7 @@ const whatsappEntrada = IMPORT + [
     name: 'Receber WhatsApp',
     parameters: {
       httpMethod: 'POST',
-      path: 'pcp-whatsapp-entrada-CONFIGURAR_SEGREDO',
+      path: '${QA ? 'pcp-whatsapp-entrada-h-CONFIGURAR_SEGREDO' : 'pcp-whatsapp-entrada-CONFIGURAR_SEGREDO'}',
       responseMode: 'responseNode',
       options: {}
     },
@@ -720,7 +763,7 @@ const whatsappEntrada = IMPORT + [
   },
   output: [{ headers: {}, body: {} }]
 });`,
-  httpGoogle('lerContextoWhatsapp', 'Ler Contexto WhatsApp', 'GET', JSON.stringify(urlContextoWhatsapp), false, ERRO_SAIDA),
+  httpGoogle('lerContextoWhatsapp', 'Ler Contexto WhatsApp', 'GET', JSON.stringify(urlContextoWhatsapp()), false, ERRO_SAIDA),
   `const prepararEntradaWhatsapp = node({
   type: 'n8n-nodes-base.code',
   version: 2,
@@ -836,10 +879,10 @@ const whatsappEntrada = IMPORT + [
   'const interpretarAssociada = ' + condicao('Interpretar Associada?', "{{ !!$('Finalizar Associação').first().json.interpretar }}", 'boolean', 'true', "''")
     .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
   code('montarPedidoInterpretacaoEntrada', 'Montar Pedido de Interpretação (Entrada)', 'montar-pedido-interpretacao-entrada'),
-  executarWorkflow('dispararInterpretacaoEntrada', 'Disparar Interpretação', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, false, 'continueRegularOutput')
+  executarWorkflow('dispararInterpretacaoEntrada', 'Disparar Interpretação', idInterpretarWhatsapp(), false, 'continueRegularOutput')
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsApp', {
+export default workflow('${WID}', '${WNOME}', {
   timezone: 'America/Sao_Paulo',
   executionTimeout: 90,
   saveDataSuccessExecution: 'none',
@@ -877,13 +920,12 @@ export default workflow('pcp-mrbl-whatsapp-entrada', 'PCP MRBL - Receber WhatsAp
   .add(gravarAssociacao).to(interpretarAssociada)
   .add(interpretarAssociada.onTrue(montarPedidoInterpretacaoEntrada.to(dispararInterpretacaoEntrada)));
 `;
+};
 
 // Associacao manual (ajuste de 16/10): a API dispara este workflow sem esperar com
 // { mensagemId, dealId }. Ele le a planilha, monta o mesmo contexto da entrada, chama
 // o mesmo interprete (CONFIGURAR_INTERPRETE) e grava a sugestao PENDENTE com id
 // deterministico. Nunca responde nem envia ao grupo.
-posAtual = POS_INTERPRETAR;
-RETRY = RETRY_API;
 const codeComErro = (varName, nome, arq, saida) => `const ${varName} = node({
   type: 'n8n-nodes-base.code',
   version: 2,
@@ -895,7 +937,11 @@ const codeComErro = (varName, nome, arq, saida) => `const ${varName} = node({
   },
   output: [${saida}]
 });`;
-const interpretarWhatsapp = IMPORT + [
+const gerarInterpretarWhatsapp = () => {
+  posAtual = POS_INTERPRETAR;
+  RETRY = RETRY_API;
+  const [WID, WNOME] = nomeWf('pcp-mrbl-interpretar-whatsapp', 'PCP MRBL - Interpretar WhatsApp');
+  return IMPORT + [
   `const receberPedidoInterpretacao = trigger({
   type: 'n8n-nodes-base.executeWorkflowTrigger',
   version: 1.1,
@@ -906,7 +952,7 @@ const interpretarWhatsapp = IMPORT + [
   },
   output: [{ mensagemId: 'WA-R-ficticio', dealId: '700001' }]
 });`,
-  httpGoogle('lerContextoInterpretacao', 'Ler Contexto da Interpretação', 'GET', JSON.stringify(urlContextoWhatsapp), false, ERRO_SAIDA + unico),
+  httpGoogle('lerContextoInterpretacao', 'Ler Contexto da Interpretação', 'GET', JSON.stringify(urlContextoWhatsapp()), false, ERRO_SAIDA + unico),
   codeComErro('prepararInterpretacao', 'Preparar Interpretação', 'preparar-interpretacao-manual', '{ interpretar: false }'),
   'const deveInterpretar = ' + condicao('Deve Interpretar?', '{{ $json.interpretar }}', 'boolean', 'true', "''")
     .replace("operation: 'true' }", "operation: 'true', singleValue: true }") + ';',
@@ -923,7 +969,7 @@ const interpretarWhatsapp = IMPORT + [
     "onError: 'continueRegularOutput',\n    ", '')
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-interpretar-whatsapp', 'PCP MRBL - Interpretar WhatsApp', {
+export default workflow('${WID}', '${WNOME}', {
   timezone: 'America/Sao_Paulo',
   executionTimeout: 120,
   saveDataSuccessExecution: 'none',
@@ -944,6 +990,7 @@ export default workflow('pcp-mrbl-interpretar-whatsapp', 'PCP MRBL - Interpretar
   .add(temSugestaoManual.onTrue(
     gravarSugestaoManual.onError(montarErroInterpretacaoManual.to(registrarErroInterpretacaoManual))));
 `;
+};
 
 // Novas tentativas do interprete (16/10): a cada 15 min marca ERRO definitivo nas
 // mensagens que esgotaram as 5 tentativas, reserva (conta) a tentativa das vencidas
@@ -954,9 +1001,11 @@ const POS_RETENTAR = {};
   ['Gravar Tentativas', 3, 0], ['Selecionar Interpretações', 4, 0], ['Interpretar de Novo', 5, 0],
   ['Fechar Perguntas Vencidas', 2, 260], ['Gravar Perguntas Fechadas', 3, 260]]
   .forEach(([n, c, y]) => { POS_RETENTAR[n] = [c * DX, y]; });
-posAtual = POS_RETENTAR;
-RETRY = RETRY_API;
-const retentarInterpretacao = IMPORT + [
+const gerarRetentarInterpretacao = () => {
+  posAtual = POS_RETENTAR;
+  RETRY = RETRY_API;
+  const [WID, WNOME] = nomeWf('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar Interpretação');
+  return IMPORT + [
   `const agendaRetentar = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
   version: 1.3,
@@ -969,7 +1018,7 @@ const retentarInterpretacao = IMPORT + [
 });`,
   httpGoogle('lerPendentesInterpretacao', 'Ler Interpretações Pendentes', 'GET', JSON.stringify(lote.urlLeitura(DOC, lote.LEITURAS_RETENTAR_INTERPRETACAO)), false, unico),
   code('selecionarInterpretacoes', 'Selecionar Interpretações', 'selecionar-interpretacoes-pendentes'),
-  executarWorkflow('interpretarDeNovo', 'Interpretar de Novo', IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP, true, 'continueRegularOutput', 'each'),
+  executarWorkflow('interpretarDeNovo', 'Interpretar de Novo', idInterpretarWhatsapp(), true, 'continueRegularOutput', 'each'),
   code('marcarTentativas', 'Marcar Tentativas', 'marcar-tentativas-interpretacao'),
   // batchUpdate idempotente, com retry; se falhar, o workflow para sem disparar.
   httpGoogle('gravarTentativas', 'Gravar Tentativas', 'POST', "expr('{{ $json.url }}')", true),
@@ -979,7 +1028,7 @@ const retentarInterpretacao = IMPORT + [
     "onError: 'continueRegularOutput',\n    ", '')
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar Interpretação', {
+export default workflow('${WID}', '${WNOME}', {
   timezone: 'America/Sao_Paulo',
   executionTimeout: 840,
   saveDataSuccessExecution: 'none',
@@ -993,6 +1042,7 @@ export default workflow('pcp-mrbl-retentar-interpretacao', 'PCP MRBL - Retentar 
   .to(interpretarDeNovo)
   .add(lerPendentesInterpretacao).to(fecharPerguntasVencidas).to(gravarPerguntasFechadas);
 `;
+};
 
 // Médias de Previsão (19/10): todo dia às 3h lê os registros de etapa marcados no
 // Ploomes e os negócios dos funis PCP e Produção, calcula durações, filas e a
@@ -1106,9 +1156,11 @@ const POS_EMAILS = {};
   ['Montar Erro E-mails', 11, 260], ['Registrar Erro E-mails', 12, 260],
   ['Montar Aviso Limite Groq', 12, 520], ['Registrar Aviso Limite Groq', 13, 520]]
   .forEach(([n, c, y]) => { POS_EMAILS[n] = [c * DX, y]; });
-posAtual = POS_EMAILS;
-RETRY = RETRY_API;
-const lerEmailsPcp = IMPORT + [
+const gerarLerEmailsPcp = () => {
+  posAtual = POS_EMAILS;
+  RETRY = RETRY_API;
+  const [WID, WNOME] = nomeWf('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PCP');
+  return IMPORT + [
   `const agendaEmails = trigger({
   type: 'n8n-nodes-base.scheduleTrigger',
   version: 1.3,
@@ -1167,7 +1219,7 @@ const lerEmailsPcp = IMPORT + [
     "onError: 'continueRegularOutput',\n    ", '')
 ].join('\n\n') + `
 
-export default workflow('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PCP', {
+export default workflow('${WID}', '${WNOME}', {
   timezone: 'America/Sao_Paulo',
   executionTimeout: 600,
   saveDataSuccessExecution: 'none',
@@ -1191,6 +1243,7 @@ export default workflow('pcp-mrbl-ler-emails-pcp', 'PCP MRBL - Ler E-mails do PC
   .add(finalizarEmails).to(gravarInterpretacoes.onError(montarErroEmails.to(registrarErroEmails)))
   .add(interpretarEmail).to(montarAvisoLimiteGroqEmails).to(registrarAvisoLimiteGroqEmails);
 `;
+};
 
 // Subworkflow do intérprete dos e-mails (molde do intérprete do WhatsApp): recebe o
 // contexto, chama o Groq e devolve { emailId, interpretacao }. Só devolve JSON; nunca envia.
@@ -1248,26 +1301,29 @@ export default workflow('pcp-mrbl-interprete-email-pcp', 'PCP MRBL - Intérprete
   .to(devolverInterpretacaoEmail);
 `;
 
+// Produção (e go-live): na original. Homologação (ambiente de QA): cópias -homolog na QA.
+const ARQUIVOS_SDK = {
+  'pcp-emails': gerarLerEmailsPcp(),
+  'pcp-interprete-email': interpreteEmail,
+  'pcp-retentar-interpretacao': gerarRetentarInterpretacao(),
+  'pcp-interpretar-whatsapp': gerarInterpretarWhatsapp(),
+  'pcp-api': api,
+  'pcp-api-homolog': apiHomolog,
+  'pcp-envio': gerarEnvio(),
+  'pcp-medias-previsao': mediasPrevisao,
+  'pcp-producao-sync': syncProducao,
+  'pcp-whatsapp-saida': gerarWhatsappSaida(),
+  'pcp-whatsapp-entrada': gerarWhatsappEntrada(),
+  'pcp-envio-homolog': emQa(gerarEnvio),
+  'pcp-whatsapp-saida-homolog': emQa(gerarWhatsappSaida),
+  'pcp-whatsapp-entrada-homolog': emQa(gerarWhatsappEntrada),
+  'pcp-interpretar-whatsapp-homolog': emQa(gerarInterpretarWhatsapp),
+  'pcp-retentar-interpretacao-homolog': emQa(gerarRetentarInterpretacao),
+  'pcp-emails-homolog': emQa(gerarLerEmailsPcp)
+};
+
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-emails.sdk.js'), lerEmailsPcp);
-console.log('workflows/pcp-emails.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-interprete-email.sdk.js'), interpreteEmail);
-console.log('workflows/pcp-interprete-email.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-retentar-interpretacao.sdk.js'), retentarInterpretacao);
-console.log('workflows/pcp-retentar-interpretacao.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-interpretar-whatsapp.sdk.js'), interpretarWhatsapp);
-console.log('workflows/pcp-interpretar-whatsapp.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api.sdk.js'), api);
-console.log('workflows/pcp-api.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-api-homolog.sdk.js'), apiHomolog);
-console.log('workflows/pcp-api-homolog.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-envio.sdk.js'), envio);
-console.log('workflows/pcp-envio.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-medias-previsao.sdk.js'), mediasPrevisao);
-console.log('workflows/pcp-medias-previsao.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-producao-sync.sdk.js'), syncProducao);
-console.log('workflows/pcp-producao-sync.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-whatsapp-saida.sdk.js'), whatsappSaida);
-console.log('workflows/pcp-whatsapp-saida.sdk.js');
-fs.writeFileSync(path.join(raiz, 'workflows', 'pcp-whatsapp-entrada.sdk.js'), whatsappEntrada);
-console.log('workflows/pcp-whatsapp-entrada.sdk.js');
+Object.keys(ARQUIVOS_SDK).forEach((nome) => {
+  fs.writeFileSync(path.join(raiz, 'workflows', nome + '.sdk.js'), ARQUIVOS_SDK[nome]);
+  console.log('workflows/' + nome + '.sdk.js');
+});

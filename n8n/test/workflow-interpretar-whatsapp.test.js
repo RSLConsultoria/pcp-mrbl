@@ -144,7 +144,8 @@ for (const arq of ['pcp-api.sdk.js', 'pcp-api-homolog.sdk.js']) {
     assert.deepEqual(destinos(w, 'Disparar Interpretação'), ['Responder Acao']);
     const disparo = no(w, 'Disparar Interpretação');
     assert.equal(disparo.type, 'n8n-nodes-base.executeWorkflow');
-    assert.equal(disparo.parameters.workflowId.value, IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP);
+    // O homolog chama o Interpretar WhatsApp de homologação (ambiente de QA, 30/10).
+    assert.equal(disparo.parameters.workflowId.value, arq === 'pcp-api.sdk.js' ? IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP : IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP_HOMOLOG);
     assert.ok(idSubworkflowValido(disparo.parameters.workflowId.value));
     assert.equal(disparo.parameters.options.waitForSubWorkflow, false);
     // Falha no disparo não muda a resposta da associação já gravada.

@@ -7,13 +7,16 @@ const vm = require('vm');
 const ARQUIVOS = ['util.js', 'auth.js', 'montarCaixas.js', 'acoes.js', 'pedidos.js', 'previsao.js', 'producao.js', 'whatsapp.js', 'associador.js', 'envioPloomes.js', 'planilhaLote.js', 'peca.js', 'emailsPcp.js', 'api.js', 'assistente.js'];
 
 // Por padrao os testes rodam com DEALS_EDITAVEIS vazio (todos editaveis);
-// { real: true } mantem o valor de producao.
+// { real: true } mantem o valor de producao. { qa: true } carrega como os workflows de
+// homologacao (MODO_QA = true e PLANILHA_ID = planilha QA).
 function carregar(opcoes) {
   const ctx = vm.createContext({});
+  const qa = !!(opcoes && opcoes.qa);
   for (const f of ARQUIVOS) {
     const caminho = path.join(__dirname, '..', 'src', f);
     if (!fs.existsSync(caminho)) continue;
-    vm.runInContext(fs.readFileSync(caminho, 'utf8'), ctx, { filename: f });
+    const txt = fs.readFileSync(caminho, 'utf8');
+    vm.runInContext(qa ? require('../scripts/planilha-qa').paraQa(txt) : txt, ctx, { filename: f });
   }
   if (!(opcoes && opcoes.real)) ctx.DEALS_EDITAVEIS = [];
   return ctx;

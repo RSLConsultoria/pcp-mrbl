@@ -8,11 +8,15 @@
 // - ASSOCIADOR: subworkflow do associador por IA (22/10; mesma credencial Groq).
 // - INTERPRETE_EMAIL: "PCP MRBL - Intérprete E-mail do PCP (Groq)" (F5c), chamado pelo
 //   "PCP MRBL - Ler E-mails do PCP". Gerado em workflows/json/pcp-interprete-email.json.
+// - INTERPRETAR_WHATSAPP_HOMOLOG: "PCP MRBL - Interpretar WhatsApp (homolog)" (ambiente
+//   de QA, 30/10), chamado pela API homolog, pelo Receber e pelo Retentar de homologação;
+//   grava só na planilha QA. Gerado em workflows/json/pcp-interpretar-whatsapp-homolog.json.
 const IDS_SUBWORKFLOWS = {
   INTERPRETE: 'pTRkYh6xs7HGM7CM',
   INTERPRETAR_WHATSAPP: 'DijEYc4iDDU3oRJU',
   ASSOCIADOR: '5vCmNDx4CDXde3om',
-  INTERPRETE_EMAIL: 'BA7rcQw6cDhdEXjB'
+  INTERPRETE_EMAIL: 'BA7rcQw6cDhdEXjB',
+  INTERPRETAR_WHATSAPP_HOMOLOG: 'CONFIGURAR_INTERPRETAR_WHATSAPP_HOMOLOG'
 };
 
 function idSubworkflowValido(id) {

@@ -331,9 +331,18 @@ test('pcp-api-homolog.sdk.js: igual ao de producao, so nome, id e caminhos dos w
     assert.ok(prod.includes("path: '" + p + "'"));
     assert.ok(hom.includes("path: '" + p + "-h'"));
   }
+  // Ambiente de QA (30/10): o homolog usa a planilha QA, o modo QA nos Code nodes e o
+  // Interpretar WhatsApp de homologação; fora isso, é o mesmo workflow.
+  const { PLANILHA_QA_ID } = require('../scripts/planilha-qa');
+  const { IDS_SUBWORKFLOWS } = require('../scripts/ids-subworkflows');
+  const original = require('./carregar').carregar({ real: true }).PLANILHA_ID;
   const normal = hom
     .replace("workflow('pcp-mrbl-api-homolog', 'PCP MRBL - API (homolog)'", "workflow('pcp-mrbl-api', 'PCP MRBL - API'")
-    .replace(/path: '(pcp-\w+)-h'/g, "path: '$1'");
+    .replace(/path: '(pcp-\w+)-h'/g, "path: '$1'")
+    .split(PLANILHA_QA_ID).join(original)
+    .split('var MODO_QA = true;').join('var MODO_QA = false;')
+    .split(IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP_HOMOLOG).join(IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP)
+    .split('&ranges=%27QA_CONTROLE%27').join('');
   assert.equal(normal, prod);
 });
 

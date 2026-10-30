@@ -4348,6 +4348,11 @@ function resultadoEnvio(linha, resposta) {
 
 var URL_PLANILHAS = 'https://sheets.googleapis.com/v4/spreadsheets/';
 var PLANILHA_ID = '1OauQaEaK3qMwb4gjFAqpTUblnAaAWeFfE-brZNFY2ww';  // planilha do PCP MRBL
+// Ambiente de QA (spec 2026-10-30): o gerador troca as duas linhas acima/abaixo nos
+// workflows de homologação (MODO_QA = true e PLANILHA_ID = id da planilha QA, de
+// scripts/planilha-qa.js). No modo QA: allowlists vazias, nenhum campo gravado no
+// Ploomes, registro "TESTE · " e WhatsApp só no grupo de teste.
+var MODO_QA = false;
 
 // Abas lidas por ramo, na ordem do batchGet. { soCabecalho } le so a linha 1
 // (o ramo acao so precisa do cabecalho do HISTORICO_APP para o append).
