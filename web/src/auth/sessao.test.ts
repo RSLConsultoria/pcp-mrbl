@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { lerSessao, limparSessao, salvarSessao } from './sessao';
+import { chaveSessao, lerSessao, limparSessao, salvarSessao } from './sessao';
 
 const S = { token: 't', nome: 'Lucca', perfil: 'ADM', expiraEm: '2026-10-08T00:00:00.000Z' };
 const ANTES = Date.parse('2026-10-07T12:00:00.000Z');
@@ -25,5 +25,10 @@ describe('sessao', () => {
   it('conteúdo corrompido não quebra', () => {
     localStorage.setItem('pcp-mrbl.sessao', '{nao e json');
     expect(lerSessao(ANTES)).toBeNull();
+  });
+
+  it('o site de QA (/qa/) guarda a sessão em outra chave, para não derrubar o login de produção', () => {
+    expect(chaveSessao('/pcp-mrbl/')).toBe('pcp-mrbl.sessao');
+    expect(chaveSessao('/pcp-mrbl/qa/')).toBe('pcp-mrbl.qa.sessao');
   });
 });

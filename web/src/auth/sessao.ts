@@ -1,6 +1,12 @@
 import type { Sessao } from '../api/tipos';
 
-const CHAVE = 'pcp-mrbl.sessao';
+// O site de QA (/pcp-mrbl/qa/) fica na mesma origem da produção: chave própria para
+// um login não derrubar o outro.
+export function chaveSessao(base: string): string {
+  return base.endsWith('/qa/') ? 'pcp-mrbl.qa.sessao' : 'pcp-mrbl.sessao';
+}
+
+const CHAVE = chaveSessao(import.meta.env.BASE_URL);
 
 // localStorage pode lançar exceção (aba privada, bloqueio de dados do site).
 // Nesse caso a sessão vale só enquanto a aba estiver aberta.

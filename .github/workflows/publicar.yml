@@ -72,6 +72,22 @@ jobs:
           VITE_API_LOGIN: ${{ vars.VITE_API_LOGIN }}
           VITE_API_BOARD: ${{ vars.VITE_API_BOARD }}
           VITE_API_ACAO: ${{ vars.VITE_API_ACAO }}
+      # Site de QA em /pcp-mrbl/qa/: código da branch de QA ligado à homologação (webhooks -h).
+      - name: Baixar a branch de QA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.QA_BRANCH || 'f4-gantt-whatsapp' }}
+          path: qa
+      - run: npm ci
+        working-directory: qa/web
+      - name: Build do site de QA
+        run: npx tsc -b && npx vite build --base /pcp-mrbl/qa/
+        working-directory: qa/web
+        env:
+          VITE_API_LOGIN: ${{ vars.VITE_API_LOGIN }}-h
+          VITE_API_BOARD: ${{ vars.VITE_API_BOARD }}-h
+          VITE_API_ACAO: ${{ vars.VITE_API_ACAO }}-h
+      - run: cp -r qa/web/dist web/dist/qa
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
