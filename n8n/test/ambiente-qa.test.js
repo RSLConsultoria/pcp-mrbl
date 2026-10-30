@@ -106,7 +106,8 @@ function rodarCode(arq, nome, nodes, entrada) {
   const itens = (l) => (l || []).map((json) => ({ json }));
   const ctx = vm.createContext({
     $: (nomeNode) => ({ first: () => itens(nodes[nomeNode])[0], all: () => itens(nodes[nomeNode]) }),
-    $input: { all: () => itens(entrada), first: () => itens(entrada)[0] }
+    $input: { all: () => itens(entrada), first: () => itens(entrada)[0] },
+    $getWorkflowStaticData: () => ({})
   });
   return JSON.parse(JSON.stringify(vm.runInContext('(function () {\n' + n.parameters.jsCode + '\n})()', ctx)));
 }
@@ -257,4 +258,30 @@ test('recarga (workflow gerado): só lê a original; nada grava nela', () => {
     assert.equal(n.parameters.method, 'POST');
     assert.equal(n.parameters.url, '={{ $json.url }}');
   }
+});
+
+// ---- Faixa do site (tarefa 4): o board da API homolog traz qa.copiadoEm ----
+test('board: só o modo QA lê a QA_CONTROLE e manda qa.copiadoEm', () => {
+  const prod = carregar();
+  const qa = carregar({ qa: true });
+  assert.ok(!JSON.stringify(prod.LEITURAS_BOARD).includes('QA_CONTROLE'));
+  assert.equal(qa.LEITURAS_BOARD[qa.LEITURAS_BOARD.length - 1], 'QA_CONTROLE');
+  const controle = [{ row_number: 2, copiado_em: '2026-10-30T13:05:00.000Z', abas: 17 }];
+  const agora = Date.parse('2026-10-30T14:00:00.000Z');
+  assert.ok(!('qa' in prod.montarRespostaBoard({}, [], [], agora, { qaControle: controle }).body));
+  assert.deepEqual(JSON.parse(JSON.stringify(qa.montarRespostaBoard({}, [], [], agora, { qaControle: controle }).body.qa)),
+    { copiadoEm: '2026-10-30T13:05:00.000Z' });
+  assert.deepEqual(JSON.parse(JSON.stringify(qa.montarRespostaBoard({}, [], [], agora, {}).body.qa)), { copiadoEm: '' });
+
+  // No workflow gerado: o Montar Board da homolog lê a aba do lote; o de produção não tem a aba.
+  assert.ok(!wf('pcp-api.json').nodes.find((n) => n.name === 'Ler Planilha').parameters.url.includes('QA_CONTROLE'));
+  assert.ok(wf('pcp-api-homolog.json').nodes.find((n) => n.name === 'Ler Planilha').parameters.url.includes("ranges='QA_CONTROLE'"));
+  const resposta = { valueRanges: qa.LEITURAS_BOARD.map((l) => {
+    const aba = typeof l === 'string' ? l : l.aba;
+    return aba === 'QA_CONTROLE'
+      ? { range: "'QA_CONTROLE'!A1:B2", values: [['copiado_em', 'abas'], ['2026-10-30T13:05:00.000Z', 17]] }
+      : { range: "'" + aba + "'!A1:Z1" };
+  }) };
+  const board = rodarCode('pcp-api-homolog.json', 'Montar Board', { 'Ler Planilha': [resposta] }, []);
+  assert.deepEqual(board[0].json.body.qa, { copiadoEm: '2026-10-30T13:05:00.000Z' });
 });

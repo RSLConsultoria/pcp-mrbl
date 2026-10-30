@@ -49,6 +49,8 @@ const ACAO_HISTORICO_PRODUCAO = {
   enviar_whatsapp: 'WHATSAPP_ENFILEIRAR', reenviar_whatsapp: 'WHATSAPP_REENFILEIRAR'
 };
 const ATRASO_MS = Number(process.env.MOCK_ATRASO_MS) || 0;
+// MOCK_QA=1 imita a API homolog do ambiente de QA: o board traz qa.copiadoEm (faixa no topo).
+const COPIADO_QA = process.env.MOCK_QA ? new Date(Date.now() - 2 * 3600 * 1000).toISOString() : '';
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const agoraIso = () => new Date().toISOString();
 const diaIso = (deslocDias = 0) => new Date(Date.now() + deslocDias * 86_400_000).toISOString().slice(0, 10);
@@ -319,6 +321,7 @@ function montarBoard() {
     dealsProducaoEditaveis: estado.dealsProducaoEditaveis,
     oficinas: estado.oficinas,
     previsaoSemHistorico: estado.previsaoSemHistorico,
+    ...(COPIADO_QA ? { qa: { copiadoEm: COPIADO_QA } } : {}),
     // Como o servidor (emailsPcpBoard): pendentes e as decididas nos últimos 7 dias, mais novas primeiro.
     emailsPcp: estado.emailsPcp
       .filter((e) => e.status === 'PENDENTE' || (e.decididoEm && agora - Date.parse(e.decididoEm) <= 7 * 86_400_000))

@@ -127,6 +127,12 @@ function nomesAtivos(linhas) {
   return out.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
 }
 
+// QA_CONTROLE (gravada pela recarga): copiado_em da primeira linha; vazio se não houver.
+function qaCopiadoEm(linhas) {
+  var l = (linhas || [])[0];
+  return l ? texto(l.copiado_em) : '';
+}
+
 function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   extras = extras || {};
   var r = montarCaixas(faltantes, ganhas, new Date(agora), extras);
@@ -153,6 +159,8 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     // E-mails do PCP (F5c): sugestões pendentes e as decididas nos últimos 7 dias.
     emailsPcp: emailsPcpBoard(extras.emailsPcp, agora)
   };
+  // Ambiente de QA (só a API homolog): a faixa do site mostra a data da última recarga.
+  if (MODO_QA) corpo.qa = { copiadoEm: qaCopiadoEm(extras.qaControle) };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
 }

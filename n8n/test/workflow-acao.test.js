@@ -342,7 +342,7 @@ test('pcp-api-homolog.sdk.js: igual ao de producao, so nome, id e caminhos dos w
     .split(PLANILHA_QA_ID).join(original)
     .split('var MODO_QA = true;').join('var MODO_QA = false;')
     .split(IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP_HOMOLOG).join(IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP)
-    .split('&ranges=%27QA_CONTROLE%27').join('');
+    .split("&ranges='QA_CONTROLE'").join('');
   assert.equal(normal, prod);
 });
 

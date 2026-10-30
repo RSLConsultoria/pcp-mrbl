@@ -17,6 +17,7 @@ var extras = {
   whatsappMensagens: abas['WHATSAPP_MENSAGENS'],
   whatsappSugestoes: abas['WHATSAPP_SUGESTOES'],
   previsaoMedias: abas['PREVISAO_MEDIAS'],
-  emailsPcp: abas['EMAILS_PCP']
+  emailsPcp: abas['EMAILS_PCP'],
+  qaControle: abas['QA_CONTROLE']
 };
 return [{ json: montarRespostaBoard(estado, abas['FALTANTES'], abas['CAIXAS GANHAS'], Date.now(), extras) }];

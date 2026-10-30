@@ -188,6 +188,7 @@ export interface Board {
   previsaoSemHistorico?: boolean; // PREVISAO_MEDIAS ainda vazia: a previsão usa o fallback (duração 1, fila 0)
   anotacoes?: AnotacaoPeca[]; // anotações da Visão da peça (qualquer card), cruzadas pela OS
   emailsPcp?: EmailPcp[]; // F5c: sugestões dos e-mails do PCP (pendentes e decididas nos últimos 7 dias)
+  qa?: { copiadoEm: string }; // só a API homolog (ambiente de QA): data ISO da última recarga da planilha QA
 }
 
 // Corpo do POST /pcp-acao.

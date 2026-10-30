@@ -22,7 +22,10 @@ var MODO_QA = false;
 // EMAILS_PCP (F5c) idem: crie a aba com o cabecalho antes de publicar a API.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
   'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
-  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS', 'EMAILS_PCP'];
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS', 'EMAILS_PCP']
+  // Ambiente de QA: a aba de controle da recarga (data da cópia) entra só na homologação
+  // e precisa existir na planilha QA.
+  .concat(MODO_QA ? ['QA_CONTROLE'] : []);
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'EMAILS_PCP',
   { aba: 'HISTORICO_APP', soCabecalho: true }];

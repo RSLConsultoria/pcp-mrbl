@@ -6,6 +6,7 @@ import { AvisoProvider, useAviso } from './componentes/Aviso';
 import { FaixaEmailsPcp } from './componentes/FaixaEmailsPcp';
 import { FaixaInsights } from './componentes/FaixaInsights';
 import { FaixaOffline } from './componentes/FaixaOffline';
+import { FaixaQa } from './componentes/FaixaQa';
 import { Legenda, LegendaProducao } from './componentes/Legenda';
 import { Navbar } from './componentes/Navbar';
 import { AcoesPedidos } from './componentes/pedidos/AcoesPedidos';
@@ -102,6 +103,7 @@ function Quadro({ sessao, aoExpirar, onSair }: { sessao: Sessao; aoExpirar: () =
   return (
     <div className={assistente ? 'moldura moldura--assistente' : 'moldura'}>
     <div className="app">
+      {board?.qa && <FaixaQa copiadoEm={board.qa.copiadoEm} />}
       <Navbar nome={sessao.nome} geradoEm={board?.geradoEm} salvando={salvando} tela={tela} onTela={irPara} onSair={onSair}
         assistenteAberto={assistente} onAssistente={board ? () => setAssistente((a) => !a) : undefined} />
       {board && <FaixaInsights board={board} agora={hoje} onOficina={abrirOficina} />}

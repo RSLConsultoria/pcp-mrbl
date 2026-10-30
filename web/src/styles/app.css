@@ -50,6 +50,7 @@
 .legenda i { width: 10px; height: 10px; border-radius: 2px; }
 
 /* Faixa de conexão */
+.faixa-qa { flex: none; padding: 6px 16px; background: #5B2A86; color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-align: center; }
 .faixa-offline { flex: none; padding: 10px 24px; background: #FFF6DD; border-bottom: 1px solid #EDD48A; color: #6B4E00; font-size: 13.5px; }
 
 /* Quadro */

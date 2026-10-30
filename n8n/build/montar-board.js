@@ -4380,7 +4380,10 @@ var MODO_QA = false;
 // EMAILS_PCP (F5c) idem: crie a aba com o cabecalho antes de publicar a API.
 var LEITURAS_BOARD = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'HISTORICO_APP', 'USUARIOS',
   'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS',
-  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS', 'EMAILS_PCP'];
+  'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS', 'EMAILS_PCP']
+  // Ambiente de QA: a aba de controle da recarga (data da cópia) entra só na homologação
+  // e precisa existir na planilha QA.
+  .concat(MODO_QA ? ['QA_CONTROLE'] : []);
 var LEITURAS_ACAO = ['FALTANTES', 'CAIXAS_PCP', 'CAIXAS GANHAS', 'PEDIDOS', 'PEDIDOS_ITENS', 'ETAPAS_PEDIDO',
   'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS', 'WHATSAPP_SUGESTOES', 'EMAILS_PCP',
   { aba: 'HISTORICO_APP', soCabecalho: true }];
@@ -6070,6 +6073,12 @@ function nomesAtivos(linhas) {
   return out.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
 }
 
+// QA_CONTROLE (gravada pela recarga): copiado_em da primeira linha; vazio se não houver.
+function qaCopiadoEm(linhas) {
+  var l = (linhas || [])[0];
+  return l ? texto(l.copiado_em) : '';
+}
+
 function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
   extras = extras || {};
   var r = montarCaixas(faltantes, ganhas, new Date(agora), extras);
@@ -6096,6 +6105,8 @@ function montarRespostaBoard(estado, faltantes, ganhas, agora, extras) {
     // E-mails do PCP (F5c): sugestões pendentes e as decididas nos últimos 7 dias.
     emailsPcp: emailsPcpBoard(extras.emailsPcp, agora)
   };
+  // Ambiente de QA (só a API homolog): a faixa do site mostra a data da última recarga.
+  if (MODO_QA) corpo.qa = { copiadoEm: qaCopiadoEm(extras.qaControle) };
   estado.board = { corpo: corpo, guardadoEm: agora };
   return { status: 200, body: corpo };
 }
@@ -6602,6 +6613,7 @@ var extras = {
   whatsappMensagens: abas['WHATSAPP_MENSAGENS'],
   whatsappSugestoes: abas['WHATSAPP_SUGESTOES'],
   previsaoMedias: abas['PREVISAO_MEDIAS'],
-  emailsPcp: abas['EMAILS_PCP']
+  emailsPcp: abas['EMAILS_PCP'],
+  qaControle: abas['QA_CONTROLE']
 };
 return [{ json: montarRespostaBoard(estado, abas['FALTANTES'], abas['CAIXAS GANHAS'], Date.now(), extras) }];
