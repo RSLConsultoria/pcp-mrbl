@@ -169,3 +169,92 @@ test('modo QA: WhatsApp sempre no grupo de teste, com "[TESTE] " e sem citação
   assert.equal(hom2[0].json.corpo.number, GRUPO_TESTE);
   assert.equal(hom2[0].json.corpo.quoted.key.remoteJid, GRUPO_TESTE);
 });
+
+// ---- Utilitário - Recarregar QA (tarefa 3) ----
+const ABAS_RECARGA = ['FALTANTES', 'CAIXAS GANHAS', 'CAIXAS_PCP', 'USUARIOS', 'HISTORICO_APP', 'PEDIDOS', 'PEDIDOS_ITENS',
+  'ETAPAS_PEDIDO', 'FORNECEDORES', 'RESPONSAVEIS', 'ERROS_APP', 'PRODUCAO', 'OFICINAS', 'WHATSAPP_MENSAGENS',
+  'WHATSAPP_SUGESTOES', 'PREVISAO_MEDIAS', 'EMAILS_PCP'];
+const ORIGEM_FICTICIA = 'ORIGEM_FICTICIA_1234567890abcdef';
+function respostaOriginal() {
+  return {
+    spreadsheetId: ORIGEM_FICTICIA,
+    valueRanges: ABAS_RECARGA.map((aba) => {
+      if (aba === 'HISTORICO_APP') {
+        return { range: "'HISTORICO_APP'!A1:F4", values: [['id', 'quando', 'deal_id', 'texto', 'ploomes_status', 'ploomes_id'],
+          ['h1', '30/10/2026 10:00', 700001, 'Ana deu baixa', 'PENDENTE', ''],
+          ['h2', '30/10/2026 10:01', 700001, 'Ana anotou', 'ENVIADO', 42],
+          ['h3', '30/10/2026 10:02', 700002, 'Bia', 'ERRO', '']] };
+      }
+      if (aba === 'FORNECEDORES') return { range: "'FORNECEDORES'!A1:Z1000" };
+      return { range: "'" + aba + "'!A1:B2", values: [['id', 'valor'], [aba + '-1', true]] };
+    })
+  };
+}
+
+test('recarga: lista de abas do app, limpeza e gravação só na QA', () => {
+  const c = carregar({ qa: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(c.ABAS_RECARGA_QA)), ABAS_RECARGA);
+  const limpar = c.requisicaoLimpezaQa(respostaOriginal());
+  assert.equal(limpar.url, 'https://sheets.googleapis.com/v4/spreadsheets/' + PLANILHA_QA_ID + '/values:batchClear');
+  assert.deepEqual(JSON.parse(JSON.stringify(limpar.body.ranges)), ABAS_RECARGA.map((a) => "'" + a + "'"));
+
+  const agora = Date.parse('2026-10-30T13:05:00.000Z');
+  const gravar = JSON.parse(JSON.stringify(c.requisicaoRecargaQa(respostaOriginal(), agora)));
+  assert.equal(gravar.url, 'https://sheets.googleapis.com/v4/spreadsheets/' + PLANILHA_QA_ID + '/values:batchUpdate');
+  assert.equal(gravar.body.valueInputOption, 'RAW');
+  const porRange = {};
+  gravar.body.data.forEach((d) => { porRange[d.range] = d.values; });
+  // Aba vazia na original não entra (a limpeza já a deixou vazia).
+  assert.ok(!("'FORNECEDORES'!A1" in porRange));
+  assert.deepEqual(porRange["'FALTANTES'!A1"], [['id', 'valor'], ['FALTANTES-1', true]]);
+  // Pendências do envio ao Ploomes não sobem de novo pela homologação.
+  assert.deepEqual(porRange["'HISTORICO_APP'!A1"].map((l) => l[4]), ['ploomes_status', 'COPIADO_QA', 'ENVIADO', 'ERRO']);
+  assert.deepEqual(porRange["'QA_CONTROLE'!A1:B2"], [['copiado_em', 'abas'], ['2026-10-30T13:05:00.000Z', 17]]);
+  // A resposta original não é alterada.
+  assert.equal(respostaOriginal().valueRanges[4].values[1][4], 'PENDENTE');
+});
+
+test('recarga: recusa fora do modo QA, origem igual ao destino e leitura incompleta', () => {
+  assert.throws(() => carregar().requisicaoLimpezaQa(respostaOriginal()), /modo QA/);
+  assert.throws(() => carregar().requisicaoRecargaQa(respostaOriginal(), Date.now()), /modo QA/);
+  const c = carregar({ qa: true });
+  const mesma = Object.assign(respostaOriginal(), { spreadsheetId: PLANILHA_QA_ID });
+  assert.throws(() => c.requisicaoLimpezaQa(mesma), /original/);
+  assert.throws(() => c.requisicaoRecargaQa(mesma, Date.now()), /original/);
+  const curta = respostaOriginal();
+  curta.valueRanges.pop();
+  assert.throws(() => c.requisicaoLimpezaQa(curta), /abas/);
+  assert.throws(() => c.requisicaoRecargaQa(curta, Date.now()), /abas/);
+});
+
+test('recarga (workflow gerado): só lê a original; nada grava nela', () => {
+  const w = wf('pcp-recarregar-qa.json');
+  assert.equal(w.name, 'Utilitário - Recarregar QA (manual)');
+  assert.equal(w.nodes.filter((n) => n.type === 'n8n-nodes-base.manualTrigger').length, 1);
+  assert.ok(!w.nodes.some((n) => /webhook|scheduleTrigger/.test(n.type)), 'só roda à mão');
+  const comOriginal = w.nodes.filter((n) => JSON.stringify(n).includes(ORIGINAL));
+  assert.deepEqual(comOriginal.map((n) => n.name), ['Ler Original']);
+  const ler = comOriginal[0];
+  assert.equal(ler.parameters.method, 'GET');
+  assert.ok(ler.parameters.url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/' + ORIGINAL + '/values:batchGet?'));
+  assert.ok(!ler.parameters.sendBody);
+  ABAS_RECARGA.forEach((a) => assert.ok(ler.parameters.url.includes('ranges=' + encodeURIComponent("'" + a + "'")), a));
+  for (const n of codeNodes(w)) assert.ok(n.parameters.jsCode.includes('var MODO_QA = true;'), n.name);
+  // As gravações saem dos Code nodes: URL na QA, montada no próprio workflow gerado.
+  const limpar = rodarCode('pcp-recarregar-qa.json', 'Montar Limpeza', { 'Ler Original': [respostaOriginal()] }, []);
+  const gravar = rodarCode('pcp-recarregar-qa.json', 'Montar Recarga', { 'Ler Original': [respostaOriginal()] }, []);
+  for (const r of [limpar[0].json, gravar[0].json]) {
+    assert.ok(r.url.includes(PLANILHA_QA_ID));
+    assert.ok(!JSON.stringify(r).includes(ORIGINAL));
+  }
+  const destinos = (de) => ((w.connections[de] || {}).main || []).flat().map((c) => c.node);
+  assert.deepEqual(destinos('Ler Original'), ['Montar Limpeza']);
+  assert.deepEqual(destinos('Montar Limpeza'), ['Limpar QA']);
+  assert.deepEqual(destinos('Limpar QA'), ['Montar Recarga']);
+  assert.deepEqual(destinos('Montar Recarga'), ['Gravar QA']);
+  for (const nome of ['Limpar QA', 'Gravar QA']) {
+    const n = w.nodes.find((x) => x.name === nome);
+    assert.equal(n.parameters.method, 'POST');
+    assert.equal(n.parameters.url, '={{ $json.url }}');
+  }
+});

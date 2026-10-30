@@ -1301,6 +1301,47 @@ export default workflow('pcp-mrbl-interprete-email-pcp', 'PCP MRBL - Intérprete
   .to(devolverInterpretacaoEmail);
 `;
 
+// Utilitário - Recarregar QA (manual), ambiente de QA (spec 2026-10-30): lê as abas do app
+// na original (GET values:batchGet, só leitura; o único node com o id da original) e, na
+// QA, limpa (values:batchClear) e regrava (values:batchUpdate, RAW) as mesmas abas e a
+// QA_CONTROLE. As duas gravações são idempotentes (retry ok) e usam a URL montada pelos
+// Code nodes no modo QA, que só conhecem a QA.
+const POS_RECARGA_QA = {};
+[['Executar', 0, 0], ['Ler Original', 1, 0], ['Montar Limpeza', 2, 0], ['Limpar QA', 3, 0],
+  ['Montar Recarga', 4, 0], ['Gravar QA', 5, 0]]
+  .forEach(([n, c, y]) => { POS_RECARGA_QA[n] = [c * DX, y]; });
+const gerarRecargaQa = () => {
+  posAtual = POS_RECARGA_QA;
+  RETRY = RETRY_API;
+  return IMPORT + [
+    `const executarRecarga = trigger({
+  type: 'n8n-nodes-base.manualTrigger',
+  version: 1,
+  config: { name: 'Executar', parameters: {}, position: ${posicao('Executar')} },
+  output: [{}]
+});`,
+    httpGoogle('lerOriginal', 'Ler Original', 'GET', JSON.stringify(lote.urlLeitura(PLANILHA_ORIGINAL_ID, lote.ABAS_RECARGA_QA)), false),
+    code('montarLimpezaQa', 'Montar Limpeza', 'montar-limpeza-qa'),
+    httpGoogle('limparQa', 'Limpar QA', 'POST', "expr('{{ $json.url }}')", true),
+    code('montarRecargaQa', 'Montar Recarga', 'montar-recarga-qa'),
+    httpGoogle('gravarQa', 'Gravar QA', 'POST', "expr('{{ $json.url }}')", true)
+  ].join('\n\n') + `
+
+export default workflow('pcp-mrbl-recarregar-qa', 'Utilitário - Recarregar QA (manual)', {
+  timezone: 'America/Sao_Paulo',
+  executionTimeout: 600,
+  saveDataSuccessExecution: 'none',
+  saveDataErrorExecution: 'none'
+})
+  .add(executarRecarga)
+  .to(lerOriginal)
+  .to(montarLimpezaQa)
+  .to(limparQa)
+  .to(montarRecargaQa)
+  .to(gravarQa);
+`;
+};
+
 // Produção (e go-live): na original. Homologação (ambiente de QA): cópias -homolog na QA.
 const ARQUIVOS_SDK = {
   'pcp-emails': gerarLerEmailsPcp(),
@@ -1319,7 +1360,8 @@ const ARQUIVOS_SDK = {
   'pcp-whatsapp-entrada-homolog': emQa(gerarWhatsappEntrada),
   'pcp-interpretar-whatsapp-homolog': emQa(gerarInterpretarWhatsapp),
   'pcp-retentar-interpretacao-homolog': emQa(gerarRetentarInterpretacao),
-  'pcp-emails-homolog': emQa(gerarLerEmailsPcp)
+  'pcp-emails-homolog': emQa(gerarLerEmailsPcp),
+  'pcp-recarregar-qa': emQa(gerarRecargaQa, true)
 };
 
 fs.mkdirSync(path.join(raiz, 'workflows'), { recursive: true });

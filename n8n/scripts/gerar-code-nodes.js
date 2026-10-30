@@ -60,7 +60,9 @@ const NODES = {
   'validar-assistente': 'Validar Assistente',
   'montar-resposta-assistente': 'Montar Resposta do Assistente',
   'montar-aviso-limite-groq-assistente': 'Montar Aviso Limite Groq',
-  'montar-aviso-limite-groq-emails-pcp': 'Montar Aviso Limite Groq (E-mails)'
+  'montar-aviso-limite-groq-emails-pcp': 'Montar Aviso Limite Groq (E-mails)',
+  'montar-limpeza-qa': 'Montar Limpeza (Recarregar QA)',
+  'montar-recarga-qa': 'Montar Recarga (Recarregar QA)'
 };
 
 const corpo = ARQUIVOS
