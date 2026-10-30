@@ -6,6 +6,46 @@ Esta release leva junto: leitura/gravação em lote, registro compilado no Ploom
 
 Siga na ordem. Cada item de planilha é "confira e, se faltar, faça".
 
+## Ambiente de QA com dados reais (30/10)
+
+Spec: `docs/superpowers/specs/2026-10-30-ambiente-qa-dados-reais-design.md`. Plano: `docs/superpowers/plans/2026-10-30-ambiente-qa-dados-reais.md`. A homologação passa a ler e gravar **só na planilha "PCP MRBL - QA"**; a original só é lida pela recarga. A produção (API `WpuXpcSa5oGiEkTm`, Enviar ao Ploomes `z9misKW25YTuDhJ6`, syncs Faltantes/Produção/Médias) **não muda**: os arquivos dela continuam saindo do gerador com o mesmo comportamento (o código só ganha `MODO_QA`, falso na produção).
+
+**Como funciona no código.** O id da QA fica num lugar só: `PLANILHA_QA_ID` em `n8n/scripts/planilha-qa.js` (não é segredo; o marcador `CONFIGURAR_PLANILHA_QA` também é aceito). O gerador monta os workflows de homologação com o texto dos Code nodes no **modo QA** (`MODO_QA = true` e `PLANILHA_ID` = QA; ver `src/planilhaLote.js`) e com todas as leituras na QA; o build falha se o id da original aparecer em algum deles. No modo QA:
+- **Allowlists vazias** (`DEALS_EDITAVEIS`, `DEALS_PRODUCAO_EDITAVEIS`, `DEALS_PERMITIDOS`): toda OS é editável no QA. A produção mantém as listas de teste até o go-live.
+- **Campos do Ploomes não mudam**: o Montar Alteracao Ploomes devolve `gravar: false`; a ação grava só na planilha QA e no histórico.
+- **Registro de interação** com o título `TESTE · [PCP · OS x] Atualizações do app PCP` (mesmo agrupamento de 10 min). As pendências que vieram da original na recarga ficam `COPIADO_QA` e não sobem.
+- **WhatsApp** sempre no grupo de teste (`120363412994688161@g.us`), com `[TESTE] ` no começo do texto; a citação só fica se a mensagem citada é do próprio grupo de teste.
+- **Board** com `qa: { copiadoEm }` (lido da aba `QA_CONTROLE`): o site mostra a faixa fixa "AMBIENTE DE QA · dados copiados em dd/mm hh:mm · nada altera a planilha original". No simulador local: `MOCK_QA=1`.
+
+**Arquivos gerados** (`workflows/json/`):
+
+| Arquivo | Workflow no n8n | Situação |
+|---|---|---|
+| `pcp-api-homolog.json` | PCP MRBL - API (homolog) `dI2NUYzxfApYM8iA` | existente; passa para a QA |
+| `pcp-interpretar-whatsapp-homolog.json` | PCP MRBL - Interpretar WhatsApp (homolog) | **novo** (subworkflow; id em `IDS_SUBWORKFLOWS.INTERPRETAR_WHATSAPP_HOMOLOG`) |
+| `pcp-envio-homolog.json` | PCP MRBL - Enviar ao Ploomes (homolog) | **novo** (a cada 2 min) |
+| `pcp-whatsapp-saida-homolog.json` | PCP MRBL - Enviar WhatsApp (homolog) | **novo** (a cada 2 min) |
+| `pcp-whatsapp-entrada-homolog.json` | PCP MRBL - Receber WhatsApp (homolog) | **novo** (webhook `pcp-whatsapp-entrada-h-CONFIGURAR_SEGREDO`) |
+| `pcp-retentar-interpretacao-homolog.json` | PCP MRBL - Retentar Interpretação (homolog) | **novo** (a cada 15 min) |
+| `pcp-emails-homolog.json` | PCP MRBL - Ler E-mails do PCP (homolog) | **novo** (a cada 10 min; Gmail só leitura) |
+| `pcp-recarregar-qa.json` | Utilitário - Recarregar QA (manual) | **novo** (gatilho manual) |
+
+Os arquivos sem `-homolog` (`pcp-whatsapp-*`, `pcp-interpretar-whatsapp`, `pcp-retentar-interpretacao`, `pcp-emails`, `pcp-envio`) são a versão do go-live, na original. Os subworkflows de modelo (Intérprete WhatsApp, Associador, Intérprete E-mail) não tocam a planilha e servem aos dois.
+
+**Publicação (com o ok do dono; anote o `versionId` de tudo que já existe antes):**
+1. **Planilha QA.** Já criada pelo dono (id em `PLANILHA_QA_ID` desde 30/10). Confira que ela está compartilhada com a conta de serviço da credencial `Google Sheets - MRBL` como editora e crie nela a aba **`QA_CONTROLE`** (pode ficar vazia; a recarga grava `A1:B2`). Sem essa aba, o board da homolog dá 400. Se o id mudar: troque em `n8n/scripts/planilha-qa.js`, rode `npm test && npm run build`, commite e faça o push.
+2. **Recarga.** Crie o **Utilitário - Recarregar QA (manual)** com `pcp-recarregar-qa.json` do commit fixado (fica inativo; só roda pelo botão "Execute workflow"). Rode uma vez e confira na QA: as abas do app iguais às da original, `QA_CONTROLE!A2` com a data da carga, `HISTORICO_APP` sem `PENDENTE` (viraram `COPIADO_QA`). Na original, nada muda (confira o histórico de versões da planilha).
+3. **Interpretar WhatsApp (homolog).** Crie com `pcp-interpretar-whatsapp-homolog.json` e publique. Ponha o id dele em `INTERPRETAR_WHATSAPP_HOMOLOG` (`n8n/scripts/ids-subworkflows.js`, no lugar de `CONFIGURAR_INTERPRETAR_WHATSAPP_HOMOLOG`), rode `npm test && npm run build`, commite e faça o push; os passos seguintes usam este commit. Antes disso, a associação manual na homolog só não dispara a interpretação (o resto funciona).
+4. **Pare os de hoje que gravam na original por causa da homologação:** desative o **Enviar WhatsApp** (`otnIf27pfRMjy4Zj`), o **Receber WhatsApp** (`on1aUkF944tU63UU`), o **Retentar Interpretação** (`jJhDxA8gHMmWe5J2`) e o **Ler E-mails do PCP**. Eles só existem para a homologação até o go-live; ativos, a original continuaria recebendo mensagens, tentativas e e-mails (e o Groq contaria em dobro). O **Interpretar WhatsApp** de hoje (`DijEYc4iDDU3oRJU`) fica: é chamado pela API de produção. **Não mexa** na API de produção, no Enviar ao Ploomes, no Sincronizar Produção (`zU8fDi73mYtJt60t`), nas Médias de Previsão (`TO9nJFMJK4pE0RQ1`) nem no Sync Faltantes (`s4mbblVXykIvkA8M`).
+5. **Crie e ative as cópias de homologação**, nesta ordem: Enviar ao Ploomes (homolog), Enviar WhatsApp (homolog), Retentar Interpretação (homolog), Ler E-mails do PCP (homolog) (reaplique o domínio no node **Config**) e Receber WhatsApp (homolog) (troque `CONFIGURAR_SEGREDO` por um caminho secreto novo, fora do repositório, e faça o telefonista encaminhar para ele no lugar do caminho de hoje; reaplique o caminho depois de cada deploy).
+6. **API homolog** (`dI2NUYzxfApYM8iA`): publique `pcp-api-homolog.json` do mesmo commit pelo **Utilitario - Deploy PCP (manual)**. Confira pelo site local apontado para o homolog (`VITE_API_*` terminando em `-h`): a faixa roxa de QA aparece com a data da carga.
+7. **Testes do dono** com OS reais (qualquer OS edita). Confira depois: a original não mudou (histórico de versões), o Ploomes só ganhou registros que começam com "TESTE · " e nenhum campo de card mudou, e o WhatsApp só falou no grupo de teste, com "[TESTE]".
+8. **Carga atualizada:** quando o dono pedir, rode de novo o Recarregar QA. Ele apaga o que os testes gravaram nas abas do app da QA e copia a original de novo (a "FALTANTES (Painel)" fica como estava na cópia).
+
+**Rollback:** desative as cópias `-homolog` (e volte o telefonista ao caminho de hoje), volte o API homolog ao `versionId` anotado (ele volta a usar a original, com as allowlists de teste) e reative os workflows desativados no passo 4. A planilha QA e o utilitário podem ficar: não tocam a original.
+
+**Go-live:** os arquivos sem `-homolog` são os que vão ao ar (na original); depois dele, desative as cópias `-homolog`.
+
 ## Preparação da F4 — ainda não executar na planilha real
 
 Esta seção documenta o contrato já implementado e testado localmente para o Gantt e o intérprete silencioso. Ela **não autoriza criação de abas, deploy ou conexão com grupos reais**. Esses passos só entram na homologação da F4 depois da demonstração local e do aceite do dono.
@@ -207,7 +247,7 @@ Nodes hoje:
 - **Ação**: Acao → Pre Validar Acao → Pre OK? → Ler Planilha Acao (`values:batchGet` de FALTANTES, CAIXAS_PCP, CAIXAS GANHAS, PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, PRODUCAO, OFICINAS, WHATSAPP_MENSAGENS, WHATSAPP_SUGESTOES e o cabeçalho do HISTORICO_APP) → Processar Acao → Acao OK? → Montar Alteracao Ploomes → Tem Alteracao Ploomes?. Quando houver alteração de produção, o workflow faz o PATCH do negócio e só libera a planilha depois de resposta 2xx; se o Ploomes falhar, responde 502 e não grava localmente. Depois segue por Montar Escritas → Tem Escritas? → Loop Escritas (1 requisição por vez) → Repetir? → Gravar Lote (batchUpdate, retry 3×) ou Gravar Anexo (append, sem retry: repetir um append que deu certo duplicaria linhas) → de volta ao Loop; ao terminar, Limpar Cache → Pedir Interpretação? → (associação manual de texto sem sugestão) Montar Pedido de Interpretação → Disparar Interpretação (sem esperar) → Responder Acao; (demais ações) → Responder Acao. Saída de erro do Gravar Lote/Gravar Anexo → Montar Erro → Gravar Erro (append na ERROS_APP, sem retry) → Responder Erro (500).
 - Ordem das gravações (`src/planilhaLote.js`): cabeçalhos novos → appends (PEDIDOS, PEDIDOS_ITENS, ETAPAS_PEDIDO, CAIXAS_PCP, FALTANTES; começam logo depois da última linha com dados lida, OVERWRITE) → um batchUpdate → append no HISTORICO_APP (INSERT_ROWS).
 
-**Homolog:** "PCP MRBL - API (homolog)" (`workflows/json/pcp-api-homolog.json`) é o mesmo workflow com webhooks `pcp-login-h`, `pcp-board-h`, `pcp-peca-h`, `pcp-acao-h`. Usa a **mesma planilha**: edição só no card de teste, e cuidado com o que é global (ETAPAS_PEDIDO).
+**Homolog:** "PCP MRBL - API (homolog)" (`workflows/json/pcp-api-homolog.json`) é o mesmo workflow com webhooks `pcp-login-h`, `pcp-board-h`, `pcp-peca-h`, `pcp-acao-h`. Desde o ambiente de QA (30/10) usa a **planilha QA** no modo QA (seção "Ambiente de QA com dados reais"); a versão anterior, ainda no ar até a publicação, usa a mesma planilha da produção: edição só no card de teste, e cuidado com o que é global (ETAPAS_PEDIDO).
 
 **Card de teste do funil Produção (F4):** deal `607612577` (card fictício criado pelo dono). É o único em `DEALS_PRODUCAO_EDITAVEIS` (`src/api.js`), que libera a edição de produção e o envio de WhatsApp da F4; não há outra allowlist de WhatsApp. No go-live esvazie a lista (`[]` = todos).
 

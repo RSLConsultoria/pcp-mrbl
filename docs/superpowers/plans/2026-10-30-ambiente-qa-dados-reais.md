@@ -7,7 +7,7 @@ Spec: `docs/superpowers/specs/2026-10-30-ambiente-qa-dados-reais-design.md` (fon
 - Repositório público: só dados fictícios nos testes. O id da planilha QA não é segredo.
 - `n8n/src` e `n8n/adaptadores`: ES5 puro. Depois de mexer: `cd n8n && npm test && npm run build` e commitar `n8n/build`, `n8n/workflows/*.sdk.js`, `n8n/workflows/json/*.json`.
 - Nada é publicado no n8n, na planilha, no Ploomes, no Gmail, no WhatsApp ou no Groq nesta entrega.
-- A produção não muda: `pcp-api.json`, `pcp-envio.json`, `pcp-producao-sync.json`, `pcp-medias-previsao.json` e os demais arquivos de hoje saem iguais (byte a byte) do gerador.
+- A produção não muda: `pcp-api.json`, `pcp-envio.json`, `pcp-producao-sync.json`, `pcp-medias-previsao.json` e os demais arquivos de hoje saem do gerador com o mesmo comportamento (o código ganha `MODO_QA`, falso na produção; estrutura, nodes e URLs iguais).
 
 ## Decisões de desenho (além do spec)
 - **Um lugar só para o id da QA:** `n8n/scripts/planilha-qa.js` (`PLANILHA_QA_ID`, marcador `CONFIGURAR_PLANILHA_QA` aceito, como `credenciais.js`). O gerador recusa id inválido e recusa QA igual à original.
